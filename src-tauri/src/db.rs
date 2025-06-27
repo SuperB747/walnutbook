@@ -7,7 +7,8 @@ use std::env;
 
 /// Helper: get path to SQLite database
 fn get_db_path(_app: &AppHandle) -> PathBuf {
-  env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join("superbudget.db")
+  // Create the database file inside the src-tauri folder under project root
+  PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src-tauri/superbudget.db")
 }
 
 /// Initialize database schema if not exists
@@ -58,6 +59,21 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
   if count == 0 {
     for name in &["Salary", "Business Income", "Investment", "Food & Dining", "Housing", "Transportation", "Shopping", "Entertainment", "Healthcare", "Education", "Insurance", "Utilities", "Other"] {
       conn.execute("INSERT INTO categories (name) VALUES (?1)", params![name])?;
+    }
+  }
+  // Insert initial accounts if empty
+  let account_count: i64 = conn.query_row("SELECT COUNT(*) FROM accounts", [], |r| r.get(0))?;
+  if account_count == 0 {
+    let default_accounts = [
+      ("Checking", "checking"),
+      ("Savings", "savings"),
+      ("Credit Card", "credit"),
+    ];
+    for (name, acc_type) in default_accounts {
+      conn.execute(
+        "INSERT INTO accounts (name, type, balance) VALUES (?1, ?2, 0)",
+        params![name, acc_type],
+      )?;
     }
   }
   Ok(())

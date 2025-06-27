@@ -77,6 +77,8 @@ const rendererConfig = {
   output: {
     filename: 'renderer.js',
     path: path.resolve(__dirname, 'build'),
+    globalObject: 'window',
+    publicPath: '/',
   },
   devServer: {
     static: {
@@ -118,6 +120,9 @@ const rendererConfig = {
         { from: 'src/sql-wasm.wasm', to: '.' },
       ],
     }),
+    new webpack.DefinePlugin({
+      global: 'window',
+    }),
     new webpack.ProvidePlugin({
       Buffer: ['buffer', 'Buffer'],
       process: 'process/browser',
@@ -139,4 +144,9 @@ const preloadConfig = {
   },
 };
 
-module.exports = [mainConfig, rendererConfig, preloadConfig]; 
+// Only compile renderer config when running webpack-dev-server to reduce memory usage
+if (process.env.WEBPACK_SERVE) {
+  module.exports = rendererConfig;
+} else {
+  module.exports = rendererConfig;
+} 

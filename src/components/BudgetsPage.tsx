@@ -20,6 +20,7 @@ import BudgetList from './BudgetList';
 import BudgetForm from './BudgetForm';
 import { Budget, Transaction } from '../db';
 import { enCA } from 'date-fns/locale';
+import { invoke } from '@tauri-apps/api/core';
 
 const BudgetsPage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -41,7 +42,7 @@ const BudgetsPage: React.FC = () => {
 
   const loadBudgets = async () => {
     try {
-      const result = await window.electron.invoke('getBudgets', selectedMonth);
+      const result = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
       setBudgets(result);
     } catch (error) {
       console.error('Failed to load budgets:', error);
@@ -55,7 +56,7 @@ const BudgetsPage: React.FC = () => {
 
   const loadTransactions = async () => {
     try {
-      const result = await window.electron.invoke('getTransactions');
+      const result = await invoke<Transaction[]>('get_transactions');
       setTransactions(result);
     } catch (error) {
       console.error('Failed to load transactions:', error);
@@ -84,10 +85,11 @@ const BudgetsPage: React.FC = () => {
 
   const handleSaveBudget = async (budgetData: Partial<Budget>) => {
     try {
-      await window.electron.invoke('setBudget', {
-        ...budgetData,
-        month: selectedMonth,
-      });
+      if (selectedBudget) {
+        await invoke<Budget[]>('update_budget', { budget: { id: selectedBudget.id, category: budgetData.category!, amount: budgetData.amount!, month: selectedMonth, notes: budgetData.notes } });
+      } else {
+        await invoke<Budget[]>('add_budget', { category: budgetData.category!, amount: budgetData.amount!, month: selectedMonth, notes: budgetData.notes });
+      }
       await loadBudgets();
       setIsFormOpen(false);
       setSnackbar({

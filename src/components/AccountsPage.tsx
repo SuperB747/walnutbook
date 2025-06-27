@@ -4,6 +4,7 @@ import { Add as AddIcon } from '@mui/icons-material';
 import AccountList from './AccountList';
 import AccountForm from './AccountForm';
 import { Account } from '../db';
+import { invoke } from '@tauri-apps/api/core';
 
 const AccountsPage: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -21,7 +22,7 @@ const AccountsPage: React.FC = () => {
 
   const loadAccounts = async () => {
     try {
-      const result = await window.electron.invoke('getAccounts');
+      const result = await invoke('get_accounts') as Account[];
       setAccounts(result);
     } catch (error) {
       console.error('Failed to load accounts:', error);
@@ -55,7 +56,7 @@ const AccountsPage: React.FC = () => {
   const handleDeleteAccount = async (accountId: number) => {
     if (window.confirm('Are you sure you want to delete this account?')) {
       try {
-        await window.electron.invoke('deleteAccount', accountId);
+        await invoke('delete_account', { id: accountId });
         await loadAccounts();
         setSnackbar({
           open: true,
@@ -76,12 +77,18 @@ const AccountsPage: React.FC = () => {
   const handleSaveAccount = async (accountData: Partial<Account>) => {
     try {
       if (selectedAccount) {
-        await window.electron.invoke('updateAccount', {
-          ...accountData,
-          id: selectedAccount.id,
+        await invoke('update_account', {
+          account: {
+            id: selectedAccount.id,
+            name: accountData.name!,
+            type: accountData.type!,
+          }
         });
       } else {
-        await window.electron.invoke('createAccount', accountData);
+        await invoke<Account[]>('create_account', {
+          name: accountData.name!,
+          accountType: accountData.type!,
+        });
       }
       await loadAccounts();
       setIsFormOpen(false);
