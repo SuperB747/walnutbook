@@ -27,14 +27,19 @@ const AccountsPage: React.FC = () => {
       console.error('Failed to load accounts:', error);
       setSnackbar({
         open: true,
-        message: '계좌 목록을 불러오는데 실패했습니다.',
+        message: 'Failed to load accounts.',
         severity: 'error',
       });
     }
   };
 
   useEffect(() => {
+    // Initial load
     loadAccounts();
+    // Reload whenever accountsUpdated event is fired
+    const handler = () => loadAccounts();
+    window.addEventListener('accountsUpdated', handler);
+    return () => window.removeEventListener('accountsUpdated', handler);
   }, []);
 
   const handleAddAccount = () => {
@@ -48,20 +53,20 @@ const AccountsPage: React.FC = () => {
   };
 
   const handleDeleteAccount = async (accountId: number) => {
-    if (window.confirm('정말로 이 계좌를 삭제하시겠습니까?')) {
+    if (window.confirm('Are you sure you want to delete this account?')) {
       try {
         await window.electron.invoke('deleteAccount', accountId);
         await loadAccounts();
         setSnackbar({
           open: true,
-          message: '계좌가 삭제되었습니다.',
+          message: 'Account deleted successfully.',
           severity: 'success',
         });
       } catch (error) {
         console.error('Failed to delete account:', error);
         setSnackbar({
           open: true,
-          message: '계좌 삭제에 실패했습니다.',
+          message: 'Failed to delete account.',
           severity: 'error',
         });
       }
@@ -82,14 +87,14 @@ const AccountsPage: React.FC = () => {
       setIsFormOpen(false);
       setSnackbar({
         open: true,
-        message: `계좌가 ${selectedAccount ? '수정' : '추가'}되었습니다.`,
+        message: `Account ${selectedAccount ? 'updated' : 'added'} successfully.`,
         severity: 'success',
       });
     } catch (error) {
       console.error('Failed to save account:', error);
       setSnackbar({
         open: true,
-        message: `계좌 ${selectedAccount ? '수정' : '추가'}에 실패했습니다.`,
+        message: `Failed to ${selectedAccount ? 'update' : 'add'} account.`,
         severity: 'error',
       });
     }
@@ -109,14 +114,14 @@ const AccountsPage: React.FC = () => {
             startIcon={<AddIcon />}
             onClick={handleAddAccount}
           >
-            새 계좌 추가
+            Add New Account
           </Button>
         </Box>
 
         <AccountList
           accounts={accounts}
-          onEditAccount={handleEditAccount}
-          onDeleteAccount={handleDeleteAccount}
+          onEdit={handleEditAccount}
+          onDelete={handleDeleteAccount}
         />
 
         <AccountForm

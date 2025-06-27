@@ -2,7 +2,6 @@ interface Account {
   id: number;
   name: string;
   type: string;
-  category: string;
   balance: number;
   created_at: string;
 }
@@ -85,6 +84,63 @@ declare global {
       invoke(channel: string, ...args: any[]): Promise<any>;
     };
   }
+}
+
+declare module 'qif2json' {
+  interface QIFTransaction {
+    date: Date;
+    amount: number;
+    payee: string;
+    category?: string;
+    memo?: string;
+  }
+
+  interface QIFData {
+    transactions: QIFTransaction[];
+  }
+
+  export function parse(content: string): QIFData;
+}
+
+declare module 'ofx' {
+  interface OFXTransaction {
+    DTPOSTED: string;
+    TRNAMT: string;
+    NAME?: string;
+    MEMO?: string;
+  }
+
+  interface OFXData {
+    OFX: {
+      BANKMSGSRSV1: {
+        STMTTRNRS: {
+          STMTRS: {
+            BANKTRANLIST: {
+              STMTTRN: OFXTransaction[];
+            };
+          };
+        };
+      };
+    };
+  }
+
+  export function parse(content: string): OFXData;
+}
+
+interface CategoryRule {
+  id: number;
+  pattern: string;
+  category: string;
+  created_at: string;
+}
+
+interface Budget {
+  id: number;
+  category: string;
+  amount: number;
+  month: string;
+  notes?: string;
+  created_at: string;
 }
 
 export {}; 

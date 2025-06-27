@@ -19,8 +19,7 @@ import { ko } from 'date-fns/locale';
 import BudgetList from './BudgetList';
 import BudgetForm from './BudgetForm';
 import { Budget, Transaction } from '../db';
-
-const { ipcRenderer } = window.electron;
+import { enCA } from 'date-fns/locale';
 
 const BudgetsPage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -42,13 +41,13 @@ const BudgetsPage: React.FC = () => {
 
   const loadBudgets = async () => {
     try {
-      const result = await ipcRenderer.invoke('getBudgets', selectedMonth);
+      const result = await window.electron.invoke('getBudgets', selectedMonth);
       setBudgets(result);
     } catch (error) {
       console.error('Failed to load budgets:', error);
       setSnackbar({
         open: true,
-        message: '예산 정보를 불러오는데 실패했습니다.',
+        message: 'Failed to load budget information.',
         severity: 'error',
       });
     }
@@ -56,13 +55,13 @@ const BudgetsPage: React.FC = () => {
 
   const loadTransactions = async () => {
     try {
-      const result = await ipcRenderer.invoke('getTransactions');
+      const result = await window.electron.invoke('getTransactions');
       setTransactions(result);
     } catch (error) {
       console.error('Failed to load transactions:', error);
       setSnackbar({
         open: true,
-        message: '거래 내역을 불러오는데 실패했습니다.',
+        message: 'Failed to load transactions.',
         severity: 'error',
       });
     }
@@ -85,7 +84,7 @@ const BudgetsPage: React.FC = () => {
 
   const handleSaveBudget = async (budgetData: Partial<Budget>) => {
     try {
-      await ipcRenderer.invoke('setBudget', {
+      await window.electron.invoke('setBudget', {
         ...budgetData,
         month: selectedMonth,
       });
@@ -93,14 +92,14 @@ const BudgetsPage: React.FC = () => {
       setIsFormOpen(false);
       setSnackbar({
         open: true,
-        message: `예산이 ${selectedBudget ? '수정' : '설정'}되었습니다.`,
+        message: `Budget ${selectedBudget ? 'updated' : 'set'} successfully.`,
         severity: 'success',
       });
     } catch (error) {
       console.error('Failed to save budget:', error);
       setSnackbar({
         open: true,
-        message: `예산 ${selectedBudget ? '수정' : '설정'}에 실패했습니다.`,
+        message: `Failed to ${selectedBudget ? 'update' : 'set'} budget.`,
         severity: 'error',
       });
     }
@@ -130,9 +129,9 @@ const BudgetsPage: React.FC = () => {
   const progress = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ko-KR', {
+    return new Intl.NumberFormat('en-CA', {
       style: 'currency',
-      currency: 'KRW',
+      currency: 'CAD',
     }).format(amount);
   };
 
@@ -140,10 +139,10 @@ const BudgetsPage: React.FC = () => {
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ko}>
+          <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enCA}>
             <DatePicker
               views={['year', 'month']}
-              label="월 선택"
+              label="Select Month"
               value={selectedDate}
               onChange={(newValue) => newValue && setSelectedDate(newValue)}
               sx={{ width: 200 }}
@@ -156,7 +155,7 @@ const BudgetsPage: React.FC = () => {
             startIcon={<AddIcon />}
             onClick={handleAddBudget}
           >
-            새 예산 설정
+            New Budget
           </Button>
         </Box>
 
@@ -165,7 +164,7 @@ const BudgetsPage: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography color="textSecondary" gutterBottom>
-                  총 예산
+                  Total Budget
                 </Typography>
                 <Typography variant="h5" component="div">
                   {formatCurrency(totalBudget)}
@@ -177,7 +176,7 @@ const BudgetsPage: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography color="textSecondary" gutterBottom>
-                  총 지출
+                  Total Spent
                 </Typography>
                 <Typography variant="h5" component="div" color="error">
                   {formatCurrency(totalSpent)}
@@ -189,7 +188,7 @@ const BudgetsPage: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography color="textSecondary" gutterBottom>
-                  남은 예산
+                  Remaining Budget
                 </Typography>
                 <Typography
                   variant="h5"

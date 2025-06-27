@@ -1,109 +1,84 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
   IconButton,
   Typography,
-  Paper,
   Box,
-  Chip,
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import {
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+} from '@mui/icons-material';
 import { Account } from '../db';
 
-interface AccountListProps {
+export interface AccountListProps {
   accounts: Account[];
-  onEditAccount: (account: Account) => void;
-  onDeleteAccount: (accountId: number) => void;
+  onEdit: (account: Account) => void;
+  onDelete: (id: number) => Promise<void>;
 }
+
+// Helper: format numbers as CAD currency with comma separators
+const formatCurrency = (amount: number): string => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(amount);
 
 const AccountList: React.FC<AccountListProps> = ({
   accounts,
-  onEditAccount,
-  onDeleteAccount,
+  onEdit,
+  onDelete,
 }) => {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ko-KR', {
-      style: 'currency',
-      currency: 'KRW',
-    }).format(amount);
-  };
-
-  const getAccountTypeColor = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'checking':
-        return 'primary';
-      case 'savings':
-        return 'success';
-      case 'credit':
-        return 'error';
-      case 'investment':
-        return 'warning';
-      default:
-        return 'default';
-    }
-  };
+  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
 
   return (
-    <Paper elevation={2}>
-      <Box p={2}>
-        <Typography variant="h6" gutterBottom>
-          계좌 목록
+    <Box>
+      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6">Accounts</Typography>
+        <Typography variant="h6">
+          Total Balance: {formatCurrency(totalBalance)}
         </Typography>
-        <List>
-          {accounts.map((account) => (
-            <ListItem key={account.id} divider>
-              <ListItemText
-                primary={
-                  <Box display="flex" alignItems="center" gap={1}>
-                    <Typography variant="subtitle1">{account.name}</Typography>
-                    <Chip
-                      label={account.type}
-                      size="small"
-                      color={getAccountTypeColor(account.type) as any}
-                    />
-                  </Box>
-                }
-                secondary={
-                  <>
-                    <Typography
-                      component="span"
-                      variant="body2"
-                      color="text.primary"
-                    >
-                      {formatCurrency(account.balance)}
-                    </Typography>
-                    <br />
-                    <Typography component="span" variant="body2" color="text.secondary">
-                      {account.category}
-                    </Typography>
-                  </>
-                }
-              />
-              <ListItemSecondaryAction>
-                <IconButton
-                  edge="end"
-                  aria-label="edit"
-                  onClick={() => onEditAccount(account)}
-                  sx={{ mr: 1 }}
-                >
-                  <EditIcon />
-                </IconButton>
-                <IconButton
-                  edge="end"
-                  aria-label="delete"
-                  onClick={() => onDeleteAccount(account.id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </ListItemSecondaryAction>
-            </ListItem>
-          ))}
-        </List>
       </Box>
-    </Paper>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Name</TableCell>
+              <TableCell>Type</TableCell>
+              <TableCell align="right">Balance</TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {accounts.map((account) => (
+              <TableRow key={account.id}>
+                <TableCell>{account.name}</TableCell>
+                <TableCell>{account.type}</TableCell>
+                <TableCell align="right">
+                  {formatCurrency(account.balance)}
+                </TableCell>
+                <TableCell align="right">
+                  <IconButton
+                    size="small"
+                    onClick={() => onEdit(account)}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    onClick={() => onDelete(account.id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
   );
 };
 

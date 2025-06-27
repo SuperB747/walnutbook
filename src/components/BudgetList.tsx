@@ -29,9 +29,9 @@ const BudgetList: React.FC<BudgetListProps> = ({
   month,
 }) => {
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ko-KR', {
+    return new Intl.NumberFormat('en-CA', {
       style: 'currency',
-      currency: 'KRW',
+      currency: 'CAD',
     }).format(amount);
   };
 
@@ -58,12 +58,12 @@ const BudgetList: React.FC<BudgetListProps> = ({
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell>카테고리</TableCell>
-            <TableCell align="right">예산</TableCell>
-            <TableCell align="right">지출</TableCell>
-            <TableCell align="right">남은 금액</TableCell>
-            <TableCell>진행률</TableCell>
-            <TableCell align="right">작업</TableCell>
+            <TableCell>Category</TableCell>
+            <TableCell align="right">Budget</TableCell>
+            <TableCell align="right">Spent</TableCell>
+            <TableCell align="right">Remaining</TableCell>
+            <TableCell>Progress</TableCell>
+            <TableCell align="right">Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -125,7 +125,7 @@ const BudgetList: React.FC<BudgetListProps> = ({
             <TableRow>
               <TableCell colSpan={6} align="center">
                 <Typography variant="body1" color="text.secondary" sx={{ py: 2 }}>
-                  설정된 예산이 없습니다.
+                  No budgets set for this month.
                 </Typography>
               </TableCell>
             </TableRow>
