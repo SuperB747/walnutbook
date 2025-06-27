@@ -77,11 +77,13 @@ const AccountsPage: React.FC = () => {
   const handleSaveAccount = async (accountData: Partial<Account>) => {
     try {
       if (selectedAccount) {
-        await invoke('update_account', {
+        await invoke<Account[]>('update_account', {
           account: {
             id: selectedAccount.id,
             name: accountData.name!,
             type: accountData.type!,
+            balance: selectedAccount.balance,
+            created_at: selectedAccount.created_at,
           }
         });
       } else {

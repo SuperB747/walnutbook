@@ -7,8 +7,8 @@ use std::env;
 
 /// Helper: get path to SQLite database
 fn get_db_path(_app: &AppHandle) -> PathBuf {
-  // Create the database file inside the src-tauri folder under project root
-  PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src-tauri/superbudget.db")
+  // Create the database file in the src-tauri project folder
+  PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("superbudget.db")
 }
 
 /// Initialize database schema if not exists
