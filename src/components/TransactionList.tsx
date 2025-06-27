@@ -19,6 +19,7 @@ import {
   Checkbox,
   ListItemText,
   OutlinedInput,
+  Button,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -56,6 +57,21 @@ const TransactionList: React.FC<TransactionListProps> = ({
     start: '',
     end: '',
   });
+  // Selected transaction IDs for bulk operations
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  // Bulk operation handlers
+  const handleBulkDelete = async () => {
+    for (const id of selectedIds) {
+      await onDelete(id);
+    }
+    setSelectedIds([]);
+  };
+  const handleBulkMarkCleared = async () => {
+    for (const id of selectedIds) {
+      await onStatusChange(id, 'cleared');
+    }
+    setSelectedIds([]);
+  };
 
   // 모든 고유 카테고리 추출
   const uniqueCategories = useMemo(() => {
@@ -263,10 +279,33 @@ const TransactionList: React.FC<TransactionListProps> = ({
         </Box>
       </Box>
 
+      {/* Bulk action buttons */}
+      <Box sx={{ display: 'flex', gap: 1, p: 1 }}>
+        <Button variant="outlined" disabled={selectedIds.length === 0} onClick={handleBulkDelete}>
+          Delete Selected
+        </Button>
+        <Button variant="outlined" disabled={selectedIds.length === 0} onClick={handleBulkMarkCleared}>
+          Mark Cleared
+        </Button>
+      </Box>
+
       <TableContainer component={Paper} elevation={2}>
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox
+                  indeterminate={selectedIds.length > 0 && selectedIds.length < filteredTransactions.length}
+                  checked={filteredTransactions.length > 0 && selectedIds.length === filteredTransactions.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(filteredTransactions.map((t) => t.id));
+                    } else {
+                      setSelectedIds([]);
+                    }
+                  }}
+                />
+              </TableCell>
               <TableCell>Date</TableCell>
               <TableCell>Account</TableCell>
               <TableCell>Payee</TableCell>
@@ -290,6 +329,17 @@ const TransactionList: React.FC<TransactionListProps> = ({
             ) : (
               filteredTransactions.map((transaction) => (
                 <TableRow key={transaction.id}>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selectedIds.includes(transaction.id)}
+                      onChange={(e) => {
+                        const id = transaction.id;
+                        setSelectedIds((prev) =>
+                          e.target.checked ? [...prev, id] : prev.filter((i) => i !== id)
+                        );
+                      }}
+                    />
+                  </TableCell>
                   <TableCell>{format(new Date(transaction.date), 'yyyy-MM-dd')}</TableCell>
                   <TableCell>{getAccountName(transaction.account_id)}</TableCell>
                   <TableCell>{transaction.payee}</TableCell>

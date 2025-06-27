@@ -21,6 +21,7 @@ import TransactionSummary from './TransactionSummary';
 import ImportExportDialog from './ImportExportDialog';
 import AutoCategoryRules from './AutoCategoryRules';
 import { Transaction, Account, CategoryRule } from '../db';
+import { invoke } from '@tauri-apps/api/core';
 
 interface SnackbarState {
   open: boolean;
@@ -53,7 +54,7 @@ const TransactionsPage: React.FC = () => {
 
   const loadTransactions = async (): Promise<void> => {
     try {
-      const transactionList = await window.electron.invoke('getTransactions');
+      const transactionList = (await invoke('get_transactions')) as Transaction[];
       setTransactions(transactionList);
     } catch (error) {
       console.error('Failed to load transactions:', error);
@@ -63,7 +64,7 @@ const TransactionsPage: React.FC = () => {
 
   const loadAccounts = async (): Promise<void> => {
     try {
-      const accountList = await window.electron.invoke('getAccounts');
+      const accountList = (await invoke('get_accounts')) as Account[];
       setAccounts(accountList);
     } catch (error) {
       console.error('Failed to load accounts:', error);
@@ -73,7 +74,7 @@ const TransactionsPage: React.FC = () => {
 
   const loadCategoryRules = async (): Promise<void> => {
     try {
-      const rules = await window.electron.invoke('getCategoryRules');
+      const rules = (await invoke('get_category_rules')) as CategoryRule[];
       setCategoryRules(rules);
     } catch (error) {
       console.error('Failed to load category rules:', error);
@@ -83,7 +84,7 @@ const TransactionsPage: React.FC = () => {
 
   const loadCategories = async (): Promise<void> => {
     try {
-      const categoryList = await window.electron.invoke('getCategories');
+      const categoryList = (await invoke('get_categories')) as string[];
       const allCategories = Array.from(new Set([...categoryList, 'Uncategorized']));
       setCategories(allCategories);
     } catch (error) {
@@ -95,9 +96,9 @@ const TransactionsPage: React.FC = () => {
   const handleTransactionSave = async (transaction: Partial<Transaction>): Promise<void> => {
     try {
       if (selectedTransaction) {
-        await window.electron.invoke('updateTransaction', { ...selectedTransaction, ...transaction });
+        await invoke('update_transaction', { transaction: { ...selectedTransaction, ...transaction } });
       } else {
-        await window.electron.invoke('createTransaction', transaction);
+        await invoke('create_transaction', { transaction });
       }
       await loadTransactions();
       setFormOpen(false);
@@ -111,7 +112,7 @@ const TransactionsPage: React.FC = () => {
 
   const handleTransactionDelete = async (id: number): Promise<void> => {
     try {
-      await window.electron.invoke('deleteTransaction', id);
+      await invoke('delete_transaction', { id });
       await loadTransactions();
       showSnackbar('Transaction deleted successfully', 'success');
     } catch (error) {
@@ -122,7 +123,7 @@ const TransactionsPage: React.FC = () => {
 
   const handleBulkEdit = async (updates: { field: string; value: any; transactionIds: number[] }): Promise<void> => {
     try {
-      await window.electron.invoke('bulkUpdateTransactions', updates);
+      await invoke('bulk_update_transactions', { updates });
       await loadTransactions();
       setBulkEditOpen(false);
       showSnackbar('Transactions updated successfully', 'success');
@@ -134,7 +135,7 @@ const TransactionsPage: React.FC = () => {
 
   const handleImport = async (transactions: Partial<Transaction>[]): Promise<void> => {
     try {
-      await window.electron.invoke('importTransactions', transactions);
+      await invoke('import_transactions', { transactions });
       await loadTransactions();
       await loadAccounts();
       window.dispatchEvent(new Event('accountsUpdated'));
@@ -212,7 +213,7 @@ const TransactionsPage: React.FC = () => {
           try {
             const tx = transactions.find(t => t.id === id);
             if (tx) {
-              await window.electron.invoke('updateTransaction', { ...tx, category: newCategory });
+              await invoke('update_transaction', { ...tx, category: newCategory });
               await loadTransactions();
               showSnackbar('Category updated', 'success');
             }
@@ -225,7 +226,7 @@ const TransactionsPage: React.FC = () => {
           try {
             const tx = transactions.find(t => t.id === id);
             if (tx) {
-              await window.electron.invoke('updateTransaction', { ...tx, status: newStatus });
+              await invoke('update_transaction', { ...tx, status: newStatus });
               await loadTransactions();
               showSnackbar('Status updated', 'success');
             }

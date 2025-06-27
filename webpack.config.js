@@ -78,6 +78,14 @@ const rendererConfig = {
     filename: 'renderer.js',
     path: path.resolve(__dirname, 'build'),
   },
+  devServer: {
+    static: {
+      directory: path.resolve(__dirname, 'build'),
+    },
+    compress: true,
+    hot: true,
+    port: 3000,
+  },
   module: {
     rules: [
       {
