@@ -1,0 +1,46 @@
+{
+  "name": "superbudget",
+  "version": "1.0.0",
+  "description": "Personal budget management application",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "webpack --config webpack.config.js --progress",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron .",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@electron-forge/cli": "^7.2.0",
+    "@electron-forge/maker-deb": "^7.2.0",
+    "@electron-forge/maker-rpm": "^7.2.0",
+    "@electron-forge/maker-squirrel": "^7.2.0",
+    "@electron-forge/maker-zip": "^7.2.0",
+    "@types/lowdb": "^1.0.12",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@types/sql.js": "^1.4.9",
+    "copy-webpack-plugin": "^13.0.0",
+    "electron": "^28.1.4",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.3",
+    "webpack": "^5.99.9",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.15.5",
+    "@mui/material": "^5.15.5",
+    "@mui/x-date-pickers": "^6.19.0",
+    "@types/node": "^24.0.4",
+    "date-fns": "^2.30.0",
+    "electron-squirrel-startup": "^1.0.1",
+    "lowdb": "^1.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "sql.js": "^1.8.0"
+  }
+}
