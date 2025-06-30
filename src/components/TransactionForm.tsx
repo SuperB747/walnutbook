@@ -56,6 +56,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [allCategories, setAllCategories] = useState<FullCategory[]>([]);
+  const [amountInputValue, setAmountInputValue] = useState<string>('');
 
   // Load all categories with type when dialog opens
   const loadCategoriesFull = async () => {
@@ -83,6 +84,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         ...transaction,
         date: format(new Date(transaction.date), 'yyyy-MM-dd'),
       });
+      setAmountInputValue(transaction.amount?.toString() || '');
     } else {
       setFormData({
         date: format(new Date(), 'yyyy-MM-dd'),
@@ -93,6 +95,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         notes: '',
         account_id: accounts[0]?.id,
       });
+      setAmountInputValue('');
     }
     setErrors({});
   }, [transaction, accounts]);
@@ -125,6 +128,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   ) => {
     const { name, value } = e.target;
     let updates: Partial<Transaction> = { [name]: value };
+
+    // Handle account_id conversion from string to number
+    if (name === 'account_id') {
+      updates.account_id = parseInt(value, 10);
+    }
 
     if (name === 'type') {
       // Reset category when type changes
@@ -181,17 +189,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(amount);
-  };
-
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/[^0-9.]/g, '');
-    const amount = parseFloat(value) || undefined;
-    setFormData(prev => ({ ...prev, amount }));
-
-    // Clear error when field is edited
-    if (errors.amount) {
-      setErrors(prev => ({ ...prev, amount: '' }));
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -356,17 +353,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <TextField
                   name="amount"
                   label="Amount"
-                  value={formData.amount !== undefined ? formData.amount : ''}
-                  onChange={handleAmountChange}
-                  onBlur={() => {
-                    if (formData.amount !== undefined) {
-                      const formatted = formatAmount(formData.amount);
-                      const el = document.querySelector('input[name="amount"]') as HTMLInputElement;
-                      if (el) el.value = formatted;
+                  value={amountInputValue}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setAmountInputValue(value);
+                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                      const amount = value === '' ? undefined : parseFloat(value);
+                      setFormData(prev => ({ ...prev, amount }));
+                      if (errors.amount) {
+                        setErrors(prev => ({ ...prev, amount: '' }));
+                      }
                     }
-                  }}
-                  onFocus={(e) => {
-                    e.target.value = formData.amount?.toString() || '';
                   }}
                   fullWidth
                   required
@@ -374,7 +371,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   helperText={errors.amount}
                   inputProps={{
                     inputMode: 'decimal',
-                    pattern: '[0-9]*[.]?[0-9]*'
+                    step: '0.01',
+                    min: '0'
                   }}
                 />
               </Grid>
