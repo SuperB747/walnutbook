@@ -213,7 +213,34 @@ const TransactionList: React.FC<TransactionListProps> = ({
             onChange={(e) => setSearchTerm(e.target.value)}
             sx={{ flexGrow: 1 }}
           />
-          
+
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Account</InputLabel>
+            <Select
+              multiple
+              value={selectedAccounts}
+              onChange={(e) => setSelectedAccounts(
+                typeof e.target.value === 'string' ? e.target.value.split(',').map(Number) : e.target.value
+              )}
+              input={<OutlinedInput label="Account" />}
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {selected.map((value) => (
+                    <Chip key={value} label={getAccountName(value)} size="small" />
+                  ))}
+                </Box>
+              )}
+              MenuProps={{ MenuListProps: { dense: true } }}
+            >
+              {accounts.map((account) => (
+                <MenuItem key={account.id} value={account.id} dense>
+                  <Checkbox checked={selectedAccounts.indexOf(account.id) > -1} />
+                  <ListItemText primary={account.name} />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
           <FormControl size="small" sx={{ minWidth: 120 }}>
             <InputLabel>Type</InputLabel>
             <Select
@@ -263,33 +290,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
                 <MenuItem key={category} value={category} dense>
                   <Checkbox checked={selectedCategories.indexOf(category) > -1} size="small" />
                   <ListItemText primary={category} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Account</InputLabel>
-            <Select
-              multiple
-              value={selectedAccounts}
-              onChange={(e) => setSelectedAccounts(
-                typeof e.target.value === 'string' ? e.target.value.split(',').map(Number) : e.target.value
-              )}
-              input={<OutlinedInput label="Account" />}
-              renderValue={(selected) => (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {selected.map((value) => (
-                    <Chip key={value} label={getAccountName(value)} size="small" />
-                  ))}
-                </Box>
-              )}
-              MenuProps={{ MenuListProps: { dense: true } }}
-            >
-              {accounts.map((account) => (
-                <MenuItem key={account.id} value={account.id} dense>
-                  <Checkbox checked={selectedAccounts.indexOf(account.id) > -1} />
-                  <ListItemText primary={account.name} />
                 </MenuItem>
               ))}
             </Select>

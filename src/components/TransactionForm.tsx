@@ -19,6 +19,8 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import { Transaction, Account, TransactionType } from '../db';
 import { format } from 'date-fns';
+import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
 export interface TransactionFormProps {
   open: boolean;
@@ -57,6 +59,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [allCategories, setAllCategories] = useState<FullCategory[]>([]);
   const [toAccountId, setToAccountId] = useState<number | undefined>(undefined);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   // Load all categories with type when dialog opens
   const loadCategoriesFull = async () => {
@@ -238,24 +241,88 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
             <Grid container spacing={2}>
               <Grid item xs={12}>
-                <TextField
-                  name="date"
-                  label="Date"
-                  type="date"
-                  value={formData.date}
-                  onChange={handleChange}
-                  fullWidth
-                  required
-                  error={!!errors.date}
-                  helperText={errors.date}
-                  InputLabelProps={{ shrink: true }}
-                />
+                <LocalizationProvider dateAdapter={AdapterDateFns}>
+                  <DatePicker
+                    label="Date"
+                    value={formData.date ? new Date(formData.date) : null}
+                    onChange={(newDate) => {
+                      if (newDate) {
+                        setFormData(prev => ({ ...prev, date: format(newDate, 'yyyy-MM-dd') }));
+                        setErrors(prev => ({ ...prev, date: '' }));
+                      }
+                      setDatePickerOpen(false);
+                    }}
+                    open={datePickerOpen}
+                    onOpen={() => setDatePickerOpen(true)}
+                    onClose={() => setDatePickerOpen(false)}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        required: true,
+                        error: !!errors.date,
+                        helperText: errors.date,
+                        InputLabelProps: { shrink: true },
+                        onClick: () => setDatePickerOpen(true),
+                        inputProps: { readOnly: true },
+                      }
+                    }}
+                    openTo="day"
+                    disableFuture={false}
+                  />
+                </LocalizationProvider>
+              </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth required error={!!errors.type}>
+                  <InputLabel>Type</InputLabel>
+                  <Select
+                    name="type"
+                    value={formData.type || ''}
+                    onChange={handleChange}
+                    label="Type"
+                  >
+                    <MenuItem value="expense">
+                      <Chip 
+                        label="Expense" 
+                        size="small" 
+                        color="error" 
+                        sx={{ minWidth: 80 }}
+                      />
+                    </MenuItem>
+                    <MenuItem value="income">
+                      <Chip 
+                        label="Income" 
+                        size="small" 
+                        color="success" 
+                        sx={{ minWidth: 80 }}
+                      />
+                    </MenuItem>
+                    <MenuItem value="transfer">
+                      <Chip 
+                        label="Transfer" 
+                        size="small" 
+                        color="info" 
+                        sx={{ minWidth: 80 }}
+                      />
+                    </MenuItem>
+                    <MenuItem value="adjust">
+                      <Chip 
+                        label="Adjust" 
+                        size="small" 
+                        color={formData.type === 'adjust' && Number(formData.amount) < 0 ? 'error' : 'info'}
+                        sx={{ minWidth: 80 }}
+                      />
+                    </MenuItem>
+                  </Select>
+                  {errors.type && (
+                    <FormHelperText>{errors.type}</FormHelperText>
+                  )}
+                </FormControl>
               </Grid>
               <Grid item xs={12}>
                 {formData.type === 'transfer' ? (
                   <TextField
                     fullWidth
-                    label="Transfer Description"
+                    label="Description"
                     name="payee"
                     value={formData.payee}
                     onChange={handlePayeeChange}
@@ -267,7 +334,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 ) : (
                   <TextField
                     fullWidth
-                    label="Payee"
+                    label="Description"
                     name="payee"
                     value={formData.payee}
                     onChange={handlePayeeChange}
@@ -320,53 +387,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   </FormControl>
                 </Grid>
               )}
-              <Grid item xs={12}>
-                <FormControl fullWidth required error={!!errors.type}>
-                  <InputLabel>Type</InputLabel>
-                  <Select
-                    name="type"
-                    value={formData.type || ''}
-                    onChange={handleChange}
-                    label="Type"
-                  >
-                    <MenuItem value="expense">
-                      <Chip 
-                        label="Expense" 
-                        size="small" 
-                        color="error" 
-                        sx={{ minWidth: 80 }}
-                      />
-                    </MenuItem>
-                    <MenuItem value="income">
-                      <Chip 
-                        label="Income" 
-                        size="small" 
-                        color="success" 
-                        sx={{ minWidth: 80 }}
-                      />
-                    </MenuItem>
-                    <MenuItem value="transfer">
-                      <Chip 
-                        label="Transfer" 
-                        size="small" 
-                        color="info" 
-                        sx={{ minWidth: 80 }}
-                      />
-                    </MenuItem>
-                    <MenuItem value="adjust">
-                      <Chip 
-                        label="Adjust" 
-                        size="small" 
-                        color={formData.type === 'adjust' && Number(formData.amount) < 0 ? 'error' : 'info'}
-                        sx={{ minWidth: 80 }}
-                      />
-                    </MenuItem>
-                  </Select>
-                  {errors.type && (
-                    <FormHelperText>{errors.type}</FormHelperText>
-                  )}
-                </FormControl>
-              </Grid>
               {formData.type !== 'transfer' && formData.type !== 'adjust' && (
                 <Grid item xs={12}>
                   <FormControl fullWidth required error={!!errors.category}>
