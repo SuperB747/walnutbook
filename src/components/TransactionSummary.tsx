@@ -6,6 +6,8 @@ import {
   Grid,
   Divider,
   TextField,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Chart as ChartJS,
@@ -20,8 +22,6 @@ import {
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { Transaction, TransactionType } from '../db';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import enUS from 'date-fns/locale/en-US';
 
 ChartJS.register(
@@ -247,6 +247,33 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     return summary;
   };
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const years = Array.from({ length: 20 }, (_, i) => 2020 + i);
+  const months = [
+    { value: '01', label: 'January' },
+    { value: '02', label: 'February' },
+    { value: '03', label: 'March' },
+    { value: '04', label: 'April' },
+    { value: '05', label: 'May' },
+    { value: '06', label: 'June' },
+    { value: '07', label: 'July' },
+    { value: '08', label: 'August' },
+    { value: '09', label: 'September' },
+    { value: '10', label: 'October' },
+    { value: '11', label: 'November' },
+    { value: '12', label: 'December' },
+  ];
+  const [year, setYear] = React.useState(selectedMonth.slice(0, 4));
+  const [month, setMonth] = React.useState(selectedMonth.slice(5, 7));
+  React.useEffect(() => {
+    setYear(selectedMonth.slice(0, 4));
+    setMonth(selectedMonth.slice(5, 7));
+  }, [selectedMonth]);
+  const handleMonthChange = (newYear: string, newMonth: string) => {
+    onMonthChange(`${newYear}-${newMonth}`);
+  };
+
   return (
     <Box sx={{ mb: 2 }}>
       <Grid container spacing={3}>
@@ -257,24 +284,34 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
               <Typography variant="h6" gutterBottom>
                 Summary
               </Typography>
-              <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enUS}>
-                <DatePicker
-                  views={['year', 'month']}
-                  label="Month"
-                  minDate={new Date('2000-01-01')}
-                  maxDate={new Date('2100-12-31')}
-                  value={selectedMonth ? new Date(selectedMonth + '-01') : null}
-                  onChange={(date) => {
-                    if (date) onMonthChange(format(date, 'yyyy-MM'));
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Select
+                  value={year}
+                  size="small"
+                  onChange={e => {
+                    setYear(e.target.value);
+                    handleMonthChange(e.target.value, month);
                   }}
-                  slotProps={{
-                    textField: {
-                      size: 'small',
-                      sx: { width: 160 }
-                    }
+                  sx={{ width: 90 }}
+                >
+                  {years.map(y => (
+                    <MenuItem key={y} value={String(y)}>{y}</MenuItem>
+                  ))}
+                </Select>
+                <Select
+                  value={month}
+                  size="small"
+                  onChange={e => {
+                    setMonth(e.target.value);
+                    handleMonthChange(year, e.target.value);
                   }}
-                />
-              </LocalizationProvider>
+                  sx={{ width: 120 }}
+                >
+                  {months.map(m => (
+                    <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
+                  ))}
+                </Select>
+              </Box>
             </Box>
             <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle1" color="success.main">

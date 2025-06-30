@@ -88,7 +88,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
         setFullCategories(res as FullCategory[]);
       })
       .catch(err => console.error('Failed to load full categories:', err));
-  }, []);
+  }, [categories]);
 
   // Bulk operation handlers
   const handleBulkDelete = async () => {

@@ -17,7 +17,9 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
     try {
       // Determine Desktop path
       const desktop = await desktopDir();
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
       const savePath = `${desktop}/superbudget_backup_${timestamp}.db`;
       // Invoke Rust to copy the DB file to Desktop
       await invoke('backup_database', { savePath });
