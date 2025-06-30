@@ -44,9 +44,23 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
 
   // 수입/지출 합계 계산
   const totals = useMemo(() => {
+    const reimbursements = {
+      grocery: 0,
+      utility: 0,
+      exercise: 0
+    };
+
     return transactionsToSummarize.reduce(
       (acc, transaction) => {
         if (transaction.type === 'income') {
+          // Handle reimbursements specially
+          if (transaction.category === 'Reimbursement [G]') {
+            reimbursements.grocery += transaction.amount;
+          } else if (transaction.category === 'Reimbursement [U]') {
+            reimbursements.utility += transaction.amount;
+          } else if (transaction.category === 'Reimbursement [E]') {
+            reimbursements.exercise += transaction.amount;
+          }
           acc.income += transaction.amount;
         } else if (transaction.type === 'expense') {
           acc.expense += transaction.amount;
@@ -59,10 +73,45 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
 
   // 카테고리별 지출 계산
   const categoryExpenses = useMemo(() => {
+    const reimbursements = {
+      grocery: 0,
+      utility: 0,
+      exercise: 0
+    };
+
+    // First pass: calculate reimbursements
+    transactionsToSummarize.forEach(transaction => {
+      if (transaction.type === 'income') {
+        if (transaction.category === 'Reimbursement [G]') {
+          reimbursements.grocery += transaction.amount;
+        } else if (transaction.category === 'Reimbursement [U]') {
+          reimbursements.utility += transaction.amount;
+        } else if (transaction.category === 'Reimbursement [E]') {
+          reimbursements.exercise += transaction.amount;
+        }
+      }
+    });
+
+    // Second pass: calculate expenses with reimbursements subtracted
     const expenses = transactionsToSummarize
       .filter(t => t.type === 'expense')
       .reduce((acc, transaction) => {
-        acc[transaction.category] = (acc[transaction.category] || 0) + transaction.amount;
+        let amount = transaction.amount;
+        // Subtract reimbursements from corresponding categories
+        if (transaction.category === 'Grocery') {
+          amount = Math.max(0, amount - reimbursements.grocery);
+          reimbursements.grocery = Math.max(0, reimbursements.grocery - transaction.amount);
+        } else if (transaction.category === 'Utility') {
+          amount = Math.max(0, amount - reimbursements.utility);
+          reimbursements.utility = Math.max(0, reimbursements.utility - transaction.amount);
+        } else if (transaction.category === 'Exercise') {
+          amount = Math.max(0, amount - reimbursements.exercise);
+          reimbursements.exercise = Math.max(0, reimbursements.exercise - transaction.amount);
+        }
+        
+        if (amount > 0) {
+          acc[transaction.category] = (acc[transaction.category] || 0) + amount;
+        }
         return acc;
       }, {} as Record<string, number>);
 

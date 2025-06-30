@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -15,6 +15,7 @@ import {
   Grid,
   SelectChangeEvent,
 } from '@mui/material';
+import { invoke } from '@tauri-apps/api/core';
 import { Transaction, Account, TransactionType } from '../db';
 import { format } from 'date-fns';
 
@@ -45,7 +46,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [formData, setFormData] = useState<Partial<Transaction>>({
     date: format(new Date(), 'yyyy-MM-dd'),
     type: 'expense' as TransactionType,
-    amount: 0,
+    amount: undefined,
     payee: '',
     category: '',
     notes: '',
@@ -58,13 +59,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   // Load all categories with type when dialog opens
   const loadCategoriesFull = async () => {
     try {
-      const result = await window.electron.invoke('get_categories_full');
-      setAllCategories(result as FullCategory[]);
+      const result = await invoke<FullCategory[]>('get_categories_full');
+      console.log('Loaded categories:', result);
+      setAllCategories(result);
     } catch (e) {
       console.error('Failed to load categories:', e);
     }
   };
-  useEffect(() => { if (open) loadCategoriesFull(); }, [open]);
+
+  useEffect(() => { 
+    if (open) {
+      loadCategoriesFull();
+    }
+  }, [open]);
 
   useEffect(() => {
     if (transaction) {
@@ -76,7 +83,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       setFormData({
         date: format(new Date(), 'yyyy-MM-dd'),
         type: 'expense' as TransactionType,
-        amount: 0,
+        amount: undefined,
         payee: '',
         category: '',
         notes: '',
@@ -113,10 +120,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent
   ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'amount' ? parseFloat(value) || 0 : value,
-    }));
+    
+    // Clear category when type changes
+    if (name === 'type') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value as TransactionType,
+        category: '', // Reset category when type changes
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: name === 'amount' ? parseFloat(value) || 0 : value,
+      }));
+    }
 
     // Clear error when field is edited
     if (errors[name]) {
@@ -133,7 +150,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     if (payee && !transaction) {
       try {
-        const category = await window.electron.invoke('findMatchingCategory', payee);
+        const category = await invoke<string>('find_matching_category', { payee });
         if (category) {
           setFormData(prev => ({ ...prev, category }));
         }
@@ -143,12 +160,42 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   };
 
+  const formatAmount = (amount: number | undefined): string => {
+    if (amount === undefined) return '';
+    return new Intl.NumberFormat('en-CA', {
+      style: 'currency',
+      currency: 'CAD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/[^0-9.]/g, '');
+    const amount = parseFloat(value) || undefined;
+    setFormData(prev => ({ ...prev, amount }));
+
+    // Clear error when field is edited
+    if (errors.amount) {
+      setErrors(prev => ({ ...prev, amount: '' }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
       await onSave(formData);
     }
   };
+
+  // Filter categories based on selected type
+  const filteredCategories = useMemo(() => {
+    const filtered = allCategories
+      .filter(cat => cat.type === formData.type)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    console.log('Filtered categories for type:', formData.type, filtered);
+    return filtered;
+  }, [allCategories, formData.type]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -161,125 +208,146 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <Grid container spacing={2}>
               <Grid item xs={12}>
                 <TextField
+                  name="date"
+                  label="Date"
+                  type="date"
+                  value={formData.date}
+                  onChange={handleChange}
+                  fullWidth
+                  required
+                  error={!!errors.date}
+                  helperText={errors.date}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
                   fullWidth
                   label="Payee"
+                  name="payee"
                   value={formData.payee}
                   onChange={handlePayeeChange}
                   required
+                  error={!!errors.payee}
+                  helperText={errors.payee}
                 />
               </Grid>
               <Grid item xs={12}>
-            <TextField
-              name="date"
-                  label="Date"
-              type="date"
-              value={formData.date}
-              onChange={handleChange}
-              fullWidth
-              required
-              error={!!errors.date}
-              helperText={errors.date}
-              InputLabelProps={{ shrink: true }}
-            />
-              </Grid>
-              <Grid item xs={12}>
-            <FormControl fullWidth required error={!!errors.account_id}>
+                <FormControl fullWidth required error={!!errors.account_id}>
                   <InputLabel>Account</InputLabel>
-              <Select
-                name="account_id"
+                  <Select
+                    name="account_id"
                     value={formData.account_id?.toString() || ''}
-                onChange={handleChange}
+                    onChange={handleChange}
                     label="Account"
-              >
-                {accounts.map((account) => (
+                  >
+                    {accounts.map((account) => (
                       <MenuItem key={account.id} value={account.id.toString()}>
-                    {account.name}
-                  </MenuItem>
-                ))}
-              </Select>
-              {errors.account_id && (
-                <FormHelperText>{errors.account_id}</FormHelperText>
-              )}
-            </FormControl>
+                        {account.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {errors.account_id && (
+                    <FormHelperText>{errors.account_id}</FormHelperText>
+                  )}
+                </FormControl>
               </Grid>
               <Grid item xs={12}>
-            <FormControl fullWidth required error={!!errors.category}>
-                  <InputLabel>Category</InputLabel>
-              <Select
-                name="category"
-                    value={formData.category || ''}
-                onChange={handleChange}
-                    label="Category"
-              >
-                    <MenuItem value="">
-                      <em>None</em>
-                    </MenuItem>
-                    {allCategories
-                      .filter(c => c.type === formData.type)
-                      .map(c => (
-                        <MenuItem key={c.name} value={c.name}>
-                          {c.name}
-                  </MenuItem>
-                ))}
-              </Select>
-              {errors.category && (
-                <FormHelperText>{errors.category}</FormHelperText>
-              )}
-            </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-            <TextField
-              name="amount"
-                  label="Amount"
-              type="number"
-              value={formData.amount}
-              onChange={handleChange}
-              fullWidth
-              required
-              error={!!errors.amount}
-              helperText={errors.amount}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required error={!!errors.type}>
                   <InputLabel>Type</InputLabel>
-              <Select
-                name="type"
-                    value={formData.type || 'expense'}
-                onChange={handleChange}
+                  <Select
+                    name="type"
+                    value={formData.type || ''}
+                    onChange={handleChange}
                     label="Type"
-              >
+                  >
                     <MenuItem value="expense">Expense</MenuItem>
                     <MenuItem value="income">Income</MenuItem>
-                    <MenuItem value="transfer">Transfer</MenuItem>
-              </Select>
-            </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-            <TextField
-              name="notes"
-                  label="Notes"
-              value={formData.notes}
-              onChange={handleChange}
-              fullWidth
-              multiline
-                  rows={3}
-            />
-              </Grid>
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    name="status"
-                    value={formData.status || 'uncleared'}
-                    onChange={handleChange}
-                    label="Status"
-                  >
-                    <MenuItem value="cleared">Cleared</MenuItem>
-                    <MenuItem value="uncleared">Uncleared</MenuItem>
-                    <MenuItem value="reconciled">Reconciled</MenuItem>
                   </Select>
+                  {errors.type && (
+                    <FormHelperText>{errors.type}</FormHelperText>
+                  )}
                 </FormControl>
+              </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth required error={!!errors.category}>
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    name="category"
+                    value={formData.category || ''}
+                    onChange={handleChange}
+                    label="Category"
+                    MenuProps={{
+                      PaperProps: {
+                        style: {
+                          maxHeight: 300
+                        }
+                      },
+                      slotProps: {
+                        paper: {
+                          style: {
+                            zIndex: 9999
+                          }
+                        }
+                      }
+                    }}
+                  >
+                    <MenuItem value="">
+                      <em>Select a category</em>
+                    </MenuItem>
+                    {filteredCategories.map(category => (
+                      <MenuItem key={category.id} value={category.name}>
+                        {category.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {errors.category && (
+                    <FormHelperText>{errors.category}</FormHelperText>
+                  )}
+                </FormControl>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  name="amount"
+                  label="Amount"
+                  value={formData.amount !== undefined ? formData.amount : ''}
+                  onChange={handleAmountChange}
+                  onBlur={() => {
+                    if (formData.amount !== undefined) {
+                      const formatted = formatAmount(formData.amount);
+                      const el = document.querySelector('input[name="amount"]') as HTMLInputElement;
+                      if (el) el.value = formatted;
+                    }
+                  }}
+                  onFocus={(e) => {
+                    e.target.value = formData.amount?.toString() || '';
+                  }}
+                  fullWidth
+                  required
+                  error={!!errors.amount}
+                  helperText={errors.amount}
+                  inputProps={{
+                    inputMode: 'decimal',
+                    pattern: '[0-9]*[.]?[0-9]*'
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  name="notes"
+                  label="Notes"
+                  value={formData.notes || ''}
+                  onChange={handleChange}
+                  fullWidth
+                  multiline
+                  rows={2}
+                  sx={{
+                    '& .MuiFormLabel-root': {
+                      backgroundColor: 'background.paper',
+                      px: 0.5,
+                    }
+                  }}
+                />
               </Grid>
             </Grid>
           </Box>
@@ -287,7 +355,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         <DialogActions>
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="contained" color="primary">
-            Save
+            {transaction ? 'Save Changes' : 'Add Transaction'}
           </Button>
         </DialogActions>
       </form>
