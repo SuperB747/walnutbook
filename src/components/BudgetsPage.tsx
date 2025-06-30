@@ -10,9 +10,10 @@ import {
   Typography,
   Grid,
   LinearProgress,
+  Select,
+  MenuItem,
 } from '@mui/material';
-import { Add as AddIcon } from '@mui/icons-material';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { Add as AddIcon, History as HistoryIcon } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ko } from 'date-fns/locale';
@@ -21,9 +22,29 @@ import BudgetForm from './BudgetForm';
 import { Budget, Transaction } from '../db';
 import { enCA } from 'date-fns/locale';
 import { invoke } from '@tauri-apps/api/core';
+import { subMonths, format as formatDateFns } from 'date-fns';
 
 const BudgetsPage: React.FC = () => {
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const years = Array.from({ length: 20 }, (_, i) => 2020 + i);
+  const months = [
+    { value: '01', label: 'January' },
+    { value: '02', label: 'February' },
+    { value: '03', label: 'March' },
+    { value: '04', label: 'April' },
+    { value: '05', label: 'May' },
+    { value: '06', label: 'June' },
+    { value: '07', label: 'July' },
+    { value: '08', label: 'August' },
+    { value: '09', label: 'September' },
+    { value: '10', label: 'October' },
+    { value: '11', label: 'November' },
+    { value: '12', label: 'December' },
+  ];
+  const [year, setYear] = useState(String(now.getFullYear()));
+  const [month, setMonth] = useState((now.getMonth() + 1).toString().padStart(2, '0'));
+  const selectedMonth = `${year}-${month}`;
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -31,14 +52,12 @@ const BudgetsPage: React.FC = () => {
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
-    severity: 'success' | 'error';
+    severity: 'success' | 'error' | 'info';
   }>({
     open: false,
     message: '',
     severity: 'success',
   });
-
-  const selectedMonth = selectedDate.toISOString().slice(0, 7); // YYYY-MM
 
   const loadBudgets = async () => {
     try {
@@ -137,28 +156,76 @@ const BudgetsPage: React.FC = () => {
     }).format(amount);
   };
 
+  const handleImportLastMonth = async () => {
+    try {
+      const prevMonthDate = subMonths(new Date(`${year}-${month}-01`), 1);
+      const prevMonth = formatDateFns(prevMonthDate, 'yyyy-MM');
+      const prevBudgets = await invoke<Budget[]>('get_budgets', { month: prevMonth });
+      if (!prevBudgets.length) {
+        setSnackbar({ open: true, message: "No budgets found for last month.", severity: 'info' });
+        return;
+      }
+      const existingCategories = new Set(budgets.map(b => b.category));
+      const toImport = prevBudgets.filter(b => !existingCategories.has(b.category));
+      if (!toImport.length) {
+        setSnackbar({ open: true, message: "All last month's budgets already exist.", severity: 'info' });
+        return;
+      }
+      for (const b of toImport) {
+        await invoke('add_budget', { category: b.category, amount: b.amount, month: selectedMonth, notes: b.notes });
+      }
+      await loadBudgets();
+      setSnackbar({ open: true, message: `Imported ${toImport.length} budget(s) from last month.`, severity: 'success' });
+    } catch (error) {
+      setSnackbar({ open: true, message: 'Failed to import last month\'s budget.', severity: 'error' });
+    }
+  };
+
   return (
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enCA}>
-            <DatePicker
-              views={['year', 'month']}
-              label="Select Month"
-              value={selectedDate}
-              onChange={(newValue) => newValue && setSelectedDate(newValue)}
-              sx={{ width: 200 }}
-            />
-          </LocalizationProvider>
-
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={handleAddBudget}
-          >
-            New Budget
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Select
+              value={year}
+              size="small"
+              onChange={e => setYear(e.target.value)}
+              sx={{ width: 90 }}
+            >
+              {years.map(y => (
+                <MenuItem key={y} value={String(y)}>{y}</MenuItem>
+              ))}
+            </Select>
+            <Select
+              value={month}
+              size="small"
+              onChange={e => setMonth(e.target.value)}
+              sx={{ width: 120 }}
+            >
+              {months.map(m => (
+                <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
+              ))}
+            </Select>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={handleAddBudget}
+            >
+              New Budget
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<HistoryIcon />}
+              onClick={handleImportLastMonth}
+              sx={{ minWidth: 200 }}
+            >
+              Import Last Month's Budget
+            </Button>
+          </Box>
         </Box>
 
         <Grid container spacing={3} sx={{ mb: 3 }}>
