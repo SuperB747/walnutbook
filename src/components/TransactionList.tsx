@@ -38,7 +38,6 @@ export interface TransactionListProps {
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: number) => Promise<void>;
   onCategoryChange: (id: number, category: string) => Promise<void>;
-  onStatusChange: (id: number, status: Transaction['status']) => Promise<void>;
   onDescriptionChange?: (id: number, description: string) => Promise<void>;
   initialSelectedIds?: number[];
 }
@@ -50,7 +49,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
   onEdit,
   onDelete,
   onCategoryChange,
-  onStatusChange,
   onDescriptionChange,
   initialSelectedIds = [],
 }) => {
@@ -96,12 +94,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
   const handleBulkDelete = async () => {
     for (const id of selectedIds) {
       await onDelete(id);
-    }
-    setSelectedIds([]);
-  };
-  const handleBulkMarkCleared = async () => {
-    for (const id of selectedIds) {
-      await onStatusChange(id, 'cleared');
     }
     setSelectedIds([]);
   };
@@ -168,17 +160,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'cleared':
-        return 'success';
-      case 'reconciled':
-        return 'info';
-      default:
-        return 'warning';
-    }
-  };
-
   const getAccountName = (accountId: number): string => {
     const account = accounts.find(a => a.id === accountId);
     return account ? account.name : 'Unknown Account';
@@ -194,19 +175,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
         return 'Transfer';
       default:
         return type;
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'cleared':
-        return 'Cleared';
-      case 'reconciled':
-        return 'Reconciled';
-      case 'uncleared':
-        return 'Uncleared';
-      default:
-        return status;
     }
   };
 
@@ -332,9 +300,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
         <Button variant="outlined" disabled={selectedIds.length === 0} onClick={handleBulkDelete}>
           Delete Selected
         </Button>
-        <Button variant="outlined" disabled={selectedIds.length === 0} onClick={handleBulkMarkCleared}>
-          Mark Cleared
-        </Button>
       </Box>
 
       <TableContainer component={Paper} elevation={2} sx={{ width: '100%' }}>
@@ -360,14 +325,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
               <TableCell sx={{ width: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>Category</TableCell>
               <TableCell sx={{ width: 100, whiteSpace: 'nowrap' }}>Amount</TableCell>
               <TableCell sx={{ width: 100, whiteSpace: 'nowrap' }}>Type</TableCell>
-              <TableCell sx={{ width: 80, whiteSpace: 'nowrap' }}>Status</TableCell>
               <TableCell align="right" sx={{ width: 100, whiteSpace: 'nowrap' }}>Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
             {filteredTransactions.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={9} align="center">
+              <TableCell colSpan={8} align="center">
                 <Typography variant="body1" color="text.secondary" sx={{ py: 2 }}>
                     No transactions found
                 </Typography>
@@ -483,14 +447,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       }
                     />
                   </TableCell>
-                  <TableCell sx={{ width: 80, whiteSpace: 'nowrap', px: 1 }}>
-                    {/* Clear/Unclear toggle */}
-                    <Checkbox
-                      checked={transaction.status === 'cleared'}
-                      onChange={(e) => onStatusChange(transaction.id, e.target.checked ? 'cleared' : 'uncleared')}
-                      color="primary"
-                  />
-                </TableCell>
                   <TableCell align="right" sx={{ width: 100, whiteSpace: 'nowrap' }}>
                   <IconButton
                     size="small"

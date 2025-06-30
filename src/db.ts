@@ -14,7 +14,6 @@ export interface Transaction {
   amount: number;
   payee: string;
   notes?: string;
-  status: 'cleared' | 'uncleared' | 'reconciled';
   created_at: string;
 }
 
@@ -64,7 +63,6 @@ const SCHEMA = `
     amount REAL NOT NULL,
     payee TEXT NOT NULL,
     notes TEXT,
-    status TEXT NOT NULL DEFAULT 'uncleared',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts (id)
   );
@@ -151,13 +149,8 @@ export async function initializeDatabase(): Promise<void> {
     // Create tables
     db.exec(SCHEMA);
     
-    // Migration: ensure transactions table has a status column
-    const cols = db.prepare("PRAGMA table_info(transactions)").all() as { name: string }[];
-    if (!cols.some(c => c.name === 'status')) {
-      db.prepare("ALTER TABLE transactions ADD COLUMN status TEXT NOT NULL DEFAULT 'uncleared'").run();
-  }
-
     // Migration: ensure transactions table has a created_at column
+    const cols = db.prepare("PRAGMA table_info(transactions)").all() as { name: string }[];
     if (!cols.some(c => c.name === 'created_at')) {
       db.prepare("ALTER TABLE transactions ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP").run();
     }
@@ -254,7 +247,7 @@ export async function updateTransaction(transaction: Transaction): Promise<void>
     db.transaction(() => {
       db.prepare(`
         UPDATE transactions 
-        SET date = ?, account_id = ?, type = ?, category = ?, amount = ?, payee = ?, notes = ?, status = ?
+        SET date = ?, account_id = ?, type = ?, category = ?, amount = ?, payee = ?, notes = ?
         WHERE id = ?
       `).run(
         transaction.date,
@@ -264,7 +257,6 @@ export async function updateTransaction(transaction: Transaction): Promise<void>
         transaction.amount,
         transaction.payee,
         transaction.notes || '',
-        transaction.status,
         transaction.id
       );
 
@@ -448,8 +440,8 @@ export async function importTransactions(transactions: Partial<Transaction>[]): 
       // Use only the existing columns; created_at will default if present
       const stmt = db.prepare(`
         INSERT INTO transactions (
-          date, account_id, type, category, amount, payee, notes, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          date, account_id, type, category, amount, payee, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
       `);
 
       transactions.forEach(transaction => {
@@ -464,8 +456,7 @@ export async function importTransactions(transactions: Partial<Transaction>[]): 
           transaction.category || 'Uncategorized',
           transaction.amount,
           transaction.payee || 'Unknown',
-          transaction.notes || '',
-          transaction.status || 'uncleared'
+          transaction.notes || ''
         );
         // Update account balance for imported transaction
         const balanceChange = transaction.type === 'expense' ? -transaction.amount : transaction.amount;

@@ -279,19 +279,6 @@ const TransactionsPage: React.FC = () => {
             showSnackbar('Failed to update category', 'error');
           }
         }}
-        onStatusChange={async (id, newStatus) => {
-          try {
-            const tx = transactions.find(t => t.id === id);
-            if (tx) {
-              await invoke('update_transaction', { transaction: { ...tx, status: newStatus } });
-              await loadTransactions();
-              showSnackbar('Status updated', 'success');
-            }
-          } catch (error) {
-            console.error('Failed to update status:', error);
-            showSnackbar('Failed to update status', 'error');
-          }
-        }}
         onDescriptionChange={handleDescriptionChange}
         initialSelectedIds={importedIds}
         />

@@ -330,8 +330,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       payee: transaction.payee,
       category: transaction.category || '',
       notes: transaction.notes || '',
-      account_id: selectedAccount || 0,
-      status: 'uncleared'
+      account_id: selectedAccount || 0
     };
   };
 
@@ -400,7 +399,6 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
           payee: t.payee,
           category: t.category,
           notes: t.notes,
-          status: 'uncleared',      // set default status for import
           account_id: selectedAccount
         }));
       await onImport(validTransactions);
@@ -596,6 +594,18 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const createTransactionFromParsed = (transaction: ParsedTransaction): Partial<Transaction> => {
+    return {
+      date: transaction.date!,
+      type: transaction.type,
+      amount: transaction.amount,
+      payee: transaction.payee,
+      category: transaction.category || '',
+      notes: transaction.notes || '',
+      account_id: selectedAccount || 0
+    };
   };
 
   return (

@@ -15,7 +15,6 @@ interface Transaction {
   amount: number;
   type: 'income' | 'expense' | 'transfer';
   notes?: string;
-  status: 'cleared' | 'uncleared' | 'reconciled';
   created_at: string;
 }
 

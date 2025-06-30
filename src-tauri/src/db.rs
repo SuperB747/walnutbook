@@ -44,7 +44,6 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
       amount REAL NOT NULL,
       payee TEXT NOT NULL,
       notes TEXT,
-      status TEXT NOT NULL DEFAULT 'uncleared',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS category_rules (
@@ -140,7 +139,6 @@ pub struct Transaction {
   pub amount: f64,
   pub payee: String,
   pub notes: Option<String>,
-  pub status: String,
   #[serde(default)]
   pub created_at: String,
 }
@@ -227,7 +225,7 @@ pub fn get_transactions(app: AppHandle) -> Result<Vec<Transaction>, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, date, account_id, type, category, amount, payee, notes, status, created_at FROM transactions ORDER BY date DESC")
+        .prepare("SELECT id, date, account_id, type, category, amount, payee, notes, created_at FROM transactions ORDER BY date DESC")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| {
@@ -240,8 +238,7 @@ pub fn get_transactions(app: AppHandle) -> Result<Vec<Transaction>, String> {
                 amount: row.get(5)?,
                 payee: row.get(6)?,
                 notes: row.get(7)?,
-                status: row.get(8)?,
-                created_at: row.get(9)?,
+                created_at: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -298,7 +295,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let net = new_effect - old_effect;
     // Update transaction record
     conn.execute(
-        "UPDATE transactions SET date = ?1, account_id = ?2, type = ?3, category = ?4, amount = ?5, payee = ?6, notes = ?7, status = ?8 WHERE id = ?9",
+        "UPDATE transactions SET date = ?1, account_id = ?2, type = ?3, category = ?4, amount = ?5, payee = ?6, notes = ?7 WHERE id = ?8",
         params![
             transaction.date,
             transaction.account_id,
@@ -307,7 +304,6 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             transaction.amount,
             transaction.payee,
             transaction.notes.clone().unwrap_or_default(),
-            transaction.status,
             transaction.id
         ],
     ).map_err(|e| e.to_string())?;
@@ -351,12 +347,12 @@ pub fn bulk_update_transactions(app: AppHandle, updates: Vec<(i64, Value)>) -> R
         let path = get_db_path(&app);
         let conn = Connection::open(path).map_err(|e| e.to_string())?;
         let existing: Transaction = conn.query_row(
-            "SELECT id, date, account_id, type, category, amount, payee, notes, status, created_at FROM transactions WHERE id = ?1",
+            "SELECT id, date, account_id, type, category, amount, payee, notes, created_at FROM transactions WHERE id = ?1",
             params![id],
             |row| Ok(Transaction {
                 id: row.get(0)?, date: row.get(1)?, account_id: row.get(2)?,
                 transaction_type: row.get(3)?, category: row.get(4)?, amount: row.get(5)?,
-                payee: row.get(6)?, notes: row.get(7)?, status: row.get(8)?, created_at: row.get(9)?,
+                payee: row.get(6)?, notes: row.get(7)?, created_at: row.get(8)?,
             }),
         ).map_err(|e| e.to_string())?;
         // Merge partial changes
@@ -368,7 +364,6 @@ pub fn bulk_update_transactions(app: AppHandle, updates: Vec<(i64, Value)>) -> R
         if let Some(v) = changes.get("amount").and_then(|v| v.as_f64()) { updated.amount = v; }
         if let Some(v) = changes.get("payee").and_then(|v| v.as_str()) { updated.payee = v.to_string(); }
         if let Some(v) = changes.get("notes").and_then(|v| v.as_str()) { updated.notes = Some(v.to_string()); }
-        if let Some(v) = changes.get("status").and_then(|v| v.as_str()) { updated.status = v.to_string(); }
         // Apply update
         update_transaction(app.clone(), updated)?;
     }
@@ -452,8 +447,8 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
         }
         // Insert new transaction
         tx.execute(
-            "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![t.date, t.account_id, t.transaction_type, t.category, t.amount, t.payee, t.notes.clone().unwrap_or_default(), t.status],
+            "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![t.date, t.account_id, t.transaction_type, t.category, t.amount, t.payee, t.notes.clone().unwrap_or_default()],
         ).map_err(|e| e.to_string())?;
         let change = if t.transaction_type == "expense" { -t.amount } else { t.amount };
         tx.execute(
