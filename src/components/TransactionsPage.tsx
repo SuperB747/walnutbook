@@ -71,7 +71,7 @@ const TransactionsPage: React.FC = () => {
 
   const loadTransactions = async (): Promise<void> => {
     try {
-      const transactionList = (await invoke('get_transactions')) as Transaction[];
+      const transactionList = await invoke('get_transactions') as Transaction[];
       setTransactions(transactionList);
     } catch (error) {
       console.error('Failed to load transactions:', error);
@@ -81,7 +81,7 @@ const TransactionsPage: React.FC = () => {
 
   const loadAccounts = async (): Promise<void> => {
     try {
-      const accountList = (await invoke('get_accounts')) as Account[];
+      const accountList = await invoke('get_accounts') as Account[];
       setAccounts(accountList);
     } catch (error) {
       console.error('Failed to load accounts:', error);
@@ -91,7 +91,7 @@ const TransactionsPage: React.FC = () => {
 
   const loadCategoryRules = async (): Promise<void> => {
     try {
-      const rules = (await invoke('get_category_rules')) as CategoryRule[];
+      const rules = await invoke('get_category_rules') as CategoryRule[];
       setCategoryRules(rules);
     } catch (error) {
       console.error('Failed to load category rules:', error);
@@ -101,10 +101,10 @@ const TransactionsPage: React.FC = () => {
 
   const loadCategories = async (): Promise<void> => {
     try {
-      const categoryList = (await invoke('get_categories')) as string[];
+      const categoryList = await invoke('get_categories') as string[];
       const allCategories = Array.from(new Set([...categoryList, 'Uncategorized']));
       setCategories(allCategories);
-      } catch (error) {
+    } catch (error) {
       console.error('Failed to load categories:', error);
       showSnackbar('Failed to load categories', 'error');
     }

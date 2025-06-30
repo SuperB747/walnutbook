@@ -1,17 +1,16 @@
 use rusqlite::{Connection, params, Result};
 use std::path::PathBuf;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use serde::{Serialize, Deserialize};
 use serde_json::{Value, json};
 use std::env;
 use std::fs;
-use tauri_api::path::data_dir;
 use std::collections::HashSet;
 
 /// Helper: get path to SQLite database
-fn get_db_path(_app: &AppHandle) -> PathBuf {
+fn get_db_path(app: &AppHandle) -> PathBuf {
   // Use OS-specific user data directory to avoid dev watch restarts
-  let mut path = data_dir().unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+  let mut path = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
   path.push("superbudget");
   fs::create_dir_all(&path).expect("Failed to create app data directory");
   path.push("superbudget.db");
@@ -623,8 +622,18 @@ pub fn delete_category(app: AppHandle, id: i64) -> Result<Vec<Category>, String>
 // Commands for backing up and restoring the entire database
 #[tauri::command]
 pub fn backup_database(app: AppHandle, save_path: String) -> Result<(), String> {
-  let db_path = get_db_path(&app);
-  std::fs::copy(&db_path, &save_path).map(|_| ()).map_err(|e| e.to_string())
+    let db_path = get_db_path(&app);
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    let mut dest = rusqlite::Connection::open(&save_path).map_err(|e| e.to_string())?;
+    {
+        let backup = rusqlite::backup::Backup::new(&conn, &mut dest).map_err(|e| e.to_string())?;
+        backup.step(-1).map_err(|e| e.to_string())?;
+        // backup은 여기서 drop됨
+    }
+    match dest.close() {
+        Ok(_) => Ok(()),
+        Err((_, e)) => Err(format!("Failed to close backup DB: {}", e)),
+    }
 }
 
 #[tauri::command]
@@ -644,5 +653,22 @@ pub fn export_database(app: AppHandle) -> Result<Vec<u8>, String> {
 #[tauri::command]
 pub fn import_database(app: AppHandle, data: Vec<u8>) -> Result<(), String> {
   let db_path = get_db_path(&app);
-  std::fs::write(&db_path, data).map_err(|e| e.to_string())
+  // 파일 쓰기 전 권한 체크 (cross-platform)
+  match std::fs::metadata(&db_path) {
+    Ok(meta) => {
+      if meta.permissions().readonly() {
+        return Err("Database file is read-only. Please check permissions.".to_string());
+      }
+    },
+    Err(e) => {
+      println!("[import_database] metadata error: {}", e);
+    }
+  }
+  match std::fs::write(&db_path, data) {
+    Ok(_) => Ok(()),
+    Err(e) => {
+      println!("[import_database] write error: {}", e);
+      Err(format!("Failed to write database file: {}", e))
+    }
+  }
 } 

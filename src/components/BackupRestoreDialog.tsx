@@ -30,7 +30,6 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
 
   const handleRestore = () => {
     setStatus({ message: 'Selecting backup file...', error: false });
-    // HTML file picker fallback with cancel detection
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.db';
@@ -57,11 +56,14 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
         setStatus({ message: 'Restore failed: ' + String(e), error: true });
       }
     };
+    // onFocus를 약간 지연시켜 race condition 방지
     const onFocus = () => {
-      if (!done) {
-        cleanup();
-        setStatus({ message: 'Restore cancelled', error: true });
-      }
+      setTimeout(() => {
+        if (!done) {
+          cleanup();
+          setStatus({ message: 'Restore cancelled', error: true });
+        }
+      }, 200);
     };
     input.addEventListener('change', onChange);
     window.addEventListener('focus', onFocus);
