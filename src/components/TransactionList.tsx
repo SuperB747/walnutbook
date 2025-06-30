@@ -21,6 +21,11 @@ import {
   ListItemText,
   OutlinedInput,
   Button,
+  Popover,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -72,6 +77,12 @@ const TransactionList: React.FC<TransactionListProps> = ({
   const [fullCategories, setFullCategories] = useState<FullCategory[]>([]);
   const [editDescriptionId, setEditDescriptionId] = useState<number | null>(null);
   const [editDescriptionValue, setEditDescriptionValue] = useState<string>('');
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    type: 'single' | 'bulk' | null;
+    targetId?: number;
+    anchorPosition?: { top: number; left: number };
+  }>({ open: false, type: null });
 
   // Pre-select newly imported transactions
   useEffect(() => {
@@ -91,12 +102,33 @@ const TransactionList: React.FC<TransactionListProps> = ({
   }, [categories]);
 
   // Bulk operation handlers
-  const handleBulkDelete = async () => {
-    for (const id of selectedIds) {
-      await onDelete(id);
-    }
-    setSelectedIds([]);
+  const handleBulkDelete = async (event?: React.MouseEvent) => {
+    setConfirmDialog({
+      open: true,
+      type: 'bulk',
+      anchorPosition: event ? { top: event.clientY, left: event.clientX } : undefined
+    });
   };
+  const handleSingleDelete = (id: number, event: React.MouseEvent) => {
+    setConfirmDialog({
+      open: true,
+      type: 'single',
+      targetId: id,
+      anchorPosition: { top: event.clientY, left: event.clientX }
+    });
+  };
+  const handleConfirm = async () => {
+    if (confirmDialog.type === 'single' && confirmDialog.targetId !== undefined) {
+      await onDelete(confirmDialog.targetId);
+    } else if (confirmDialog.type === 'bulk') {
+      for (const id of selectedIds) {
+        await onDelete(id);
+      }
+      setSelectedIds([]);
+    }
+    setConfirmDialog({ open: false, type: null });
+  };
+  const handleCancel = () => setConfirmDialog({ open: false, type: null });
 
   // 모든 고유 카테고리 추출
   const uniqueCategories = useMemo(() => {
@@ -341,7 +373,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
       {/* Bulk action buttons */}
       <Box sx={{ display: 'flex', gap: 1, p: 0.5 }}>
-        <Button variant="outlined" disabled={selectedIds.length === 0} onClick={handleBulkDelete}>
+        <Button variant="outlined" disabled={selectedIds.length === 0} onClick={(e) => handleBulkDelete(e)}>
           Delete Selected
         </Button>
       </Box>
@@ -522,7 +554,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   </IconButton>
                   <IconButton
                     size="small"
-                      onClick={() => onDelete(transaction.id)}
+                      onClick={(e) => handleSingleDelete(transaction.id, e)}
                   >
                     <DeleteIcon />
                   </IconButton>
@@ -533,6 +565,33 @@ const TransactionList: React.FC<TransactionListProps> = ({
         </TableBody>
       </Table>
     </TableContainer>
+
+    {/* Confirm Delete Dialog/Popover */}
+    <Popover
+      open={confirmDialog.open}
+      anchorReference="anchorPosition"
+      anchorPosition={confirmDialog.anchorPosition}
+      onClose={handleCancel}
+      PaperProps={{ sx: { p: 2, minWidth: 260 } }}
+      disableRestoreFocus
+    >
+      <DialogTitle sx={{ fontWeight: 600, pb: 1 }}>
+        {confirmDialog.type === 'single'
+          ? 'Delete Transaction'
+          : `Delete ${selectedIds.length} Transactions`}
+      </DialogTitle>
+      <DialogContent sx={{ pb: 1 }}>
+        <Typography>
+          {confirmDialog.type === 'single'
+            ? 'Are you sure you want to delete this transaction?'
+            : `Are you sure you want to delete the selected ${selectedIds.length} transactions?`}
+        </Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleCancel} color="inherit">Cancel</Button>
+        <Button onClick={handleConfirm} color="error" variant="contained">Delete</Button>
+      </DialogActions>
+    </Popover>
     </>
   );
 };
