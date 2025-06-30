@@ -20,6 +20,9 @@ import {
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { Transaction, TransactionType } from '../db';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
+import enUS from 'date-fns/locale/en-US';
 
 ChartJS.register(
   CategoryScale,
@@ -254,15 +257,24 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
               <Typography variant="h6" gutterBottom>
                 Summary
               </Typography>
-              <TextField
-                label="Month"
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => onMonthChange(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                size="small"
-                sx={{ width: 120 }}
-              />
+              <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enUS}>
+                <DatePicker
+                  views={['year', 'month']}
+                  label="Month"
+                  minDate={new Date('2000-01-01')}
+                  maxDate={new Date('2100-12-31')}
+                  value={selectedMonth ? new Date(selectedMonth + '-01') : null}
+                  onChange={(date) => {
+                    if (date) onMonthChange(format(date, 'yyyy-MM'));
+                  }}
+                  slotProps={{
+                    textField: {
+                      size: 'small',
+                      sx: { width: 160 }
+                    }
+                  }}
+                />
+              </LocalizationProvider>
             </Box>
             <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle1" color="success.main">
