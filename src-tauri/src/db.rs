@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use std::env;
 use std::fs;
 use tauri_api::path::data_dir;
+use std::collections::HashSet;
 
 /// Helper: get path to SQLite database
 fn get_db_path(_app: &AppHandle) -> PathBuf {
@@ -412,6 +413,23 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
     let path = get_db_path(&app);
     let mut conn = Connection::open(path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
+    // Preload existing transaction keys (date, amount in cents, payee) in a scoped block
+    let existing_keys: HashSet<(String, i64, String)> = {
+        let mut stmt = tx.prepare("SELECT date, amount, payee FROM transactions").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            let date: String = row.get(0)?;
+            let amt: f64 = row.get(1)?;
+            let payee: String = row.get(2)?;
+            let cents = (amt * 100.0).round() as i64;
+            Ok((date, cents, payee))
+        }).map_err(|e| e.to_string())?;
+        let mut set = HashSet::new();
+        for entry in rows {
+            let key = entry.map_err(|e| e.to_string())?;
+            set.insert(key);
+        }
+        set
+    };
     for mut t in transactions {
         if t.date.is_empty() { return Err("Missing date".into()); }
         // Auto-fill category from existing transactions matching description
@@ -424,13 +442,10 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
                 t.category = existing_cat;
             }
         }
-        // Skip duplicates based on date and amount
-        let dup_count: i64 = tx.query_row(
-            "SELECT COUNT(*) FROM transactions WHERE date = ?1 AND amount = ?2",
-            params![t.date, t.amount],
-            |row| row.get(0)
-        ).map_err(|e| e.to_string())?;
-        if dup_count > 0 {
+        // Skip duplicates only if matching a pre-existing record (date, amount, payee)
+        let cents = (t.amount * 100.0).round() as i64;
+        let key = (t.date.clone(), cents, t.payee.clone());
+        if existing_keys.contains(&key) {
             continue;
         }
         // Insert new transaction
@@ -438,7 +453,6 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
             "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![t.date, t.account_id, t.transaction_type, t.category, t.amount, t.payee, t.notes.clone().unwrap_or_default(), t.status],
         ).map_err(|e| e.to_string())?;
-        // Update account balance
         let change = if t.transaction_type == "expense" { -t.amount } else { t.amount };
         tx.execute(
             "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",

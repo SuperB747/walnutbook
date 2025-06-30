@@ -15,6 +15,13 @@ import {
 } from '@mui/material';
 import { Account, AccountType } from '../db';
 
+// Helper: format numbers as CAD currency with two decimal places, treating near-zero as zero
+const formatCurrency = (amount: number): string => {
+  // Avoid '-$0.00' for negative zero or tiny values
+  const value = Math.abs(amount) < 0.005 ? 0 : amount;
+  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', minimumFractionDigits: 2 }).format(value);
+};
+
 export interface AccountFormProps {
   open: boolean;
   onClose: () => void;
@@ -98,11 +105,11 @@ const AccountForm: React.FC<AccountFormProps> = ({
             </FormControl>
 
             <TextField
-              fullWidth
-              label="Balance"
-              name="balance"
-              value={new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(formData.balance || 0)}
-              disabled
+            fullWidth
+            label="Balance"
+            value={formatCurrency(formData.balance || 0)}
+            InputProps={{ readOnly: true }}
+            disabled
             />
           </Box>
         </DialogContent>
