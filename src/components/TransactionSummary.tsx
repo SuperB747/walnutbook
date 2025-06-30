@@ -386,7 +386,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                     },
                     {
                       label: 'Expenses',
-                      data: monthlyTrends.expense,
+                      data: monthlyTrends.expense.map(e => Math.abs(e)),
                       backgroundColor: 'rgba(255, 99, 132, 0.5)',
                       borderColor: 'rgb(255, 99, 132)',
                       borderWidth: 1,
