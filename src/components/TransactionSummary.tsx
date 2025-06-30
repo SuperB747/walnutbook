@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -41,9 +41,46 @@ interface TransactionSummaryProps {
   onMonthChange: (month: string) => void;
 }
 
+// 50가지 지브리 스타일 색상 팔레트 (형광색 없음)
+const ghibliColors = [
+  '#6A8D73', '#A7C7E7', '#E6B89C', '#B4656F', '#F6E2B3',
+  '#7A9D96', '#C3B299', '#A26769', '#D4A5A5', '#6C4F77',
+  '#B6C9A9', '#8C8A93', '#F7C59F', '#A3C6C4', '#7B6D8D',
+  '#E2CFC3', '#A9A9A9', '#C9BBCF', '#B7B5E4', '#8B7E74',
+  '#8E9AAF', '#B8B8D1', '#D6C6B9', '#FAE3D9', '#B5EAD7',
+  '#C7CEEA', '#FFDAC1', '#FFB7B2', '#FF9AA2', '#B5EAD7',
+  '#E2F0CB', '#BFD8B8', '#B8B8FF', '#B2F7EF', '#B2A4FF',
+  '#B5B2FF', '#B2B2B2', '#B2D7FF', '#B2FFC2', '#B2FFF7',
+  '#B2E2FF', '#B2B2E2', '#B2C2FF', '#B2D2FF', '#B2E2C2',
+  '#B2F2D2', '#B2E2B2', '#B2D2B2', '#B2C2B2', '#B2B2C2'
+];
+
 const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactions, allTransactions, selectedMonth, onMonthChange }) => {
   // Transactions for summary and category calculations
   const transactionsToSummarize = monthTransactions;
+
+  // 전체 카테고리 목록을 추출하여 고정된 색상 매핑 생성
+  const allCategories = useMemo(() => {
+    const categories = new Set<string>();
+    allTransactions.forEach(transaction => {
+      if (transaction.category) {
+        categories.add(transaction.category);
+      }
+    });
+    // Uncategorized를 명시적으로 추가
+    categories.add('Uncategorized');
+    return Array.from(categories).sort();
+  }, [allTransactions]);
+
+  // 카테고리별 고유 색상 함수
+  const getCategoryColor = useCallback((category: string) => {
+    // Uncategorized는 밝은 회색으로 고정
+    if (category === 'Uncategorized') {
+      return '#E0E0E0';
+    }
+    const idx = allCategories.indexOf(category);
+    return ghibliColors[idx % ghibliColors.length];
+  }, [allCategories]);
 
   // 수입/지출 합계 계산
   const totals = useMemo(() => {
@@ -76,62 +113,30 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
 
   // 카테고리별 지출 계산
   const categoryExpenses = useMemo(() => {
-    const reimbursements = {
-      grocery: 0,
-      utility: 0,
-      exercise: 0
-    };
-
-    // First pass: calculate reimbursements
-    transactionsToSummarize.forEach(transaction => {
-      if (transaction.type === 'income') {
-        if (transaction.category === 'Reimbursement [G]') {
-          reimbursements.grocery += transaction.amount;
-        } else if (transaction.category === 'Reimbursement [U]') {
-          reimbursements.utility += transaction.amount;
-        } else if (transaction.category === 'Reimbursement [E]') {
-          reimbursements.exercise += transaction.amount;
-        }
-      }
-    });
-
-    // Second pass: calculate expenses with reimbursements subtracted
-    const expenses = transactionsToSummarize
-      .filter(t => t.type === 'expense')
-      .reduce((acc, transaction) => {
-        let amount = transaction.amount;
-        const category = transaction.category || 'Uncategorized';
-        
-        // Subtract reimbursements from corresponding categories
-        if (category === 'Grocery') {
-          amount = Math.max(0, amount - reimbursements.grocery);
-          reimbursements.grocery = Math.max(0, reimbursements.grocery - transaction.amount);
-        } else if (category === 'Utility') {
-          amount = Math.max(0, amount - reimbursements.utility);
-          reimbursements.utility = Math.max(0, reimbursements.utility - transaction.amount);
-        } else if (category === 'Exercise') {
-          amount = Math.max(0, amount - reimbursements.exercise);
-          reimbursements.exercise = Math.max(0, reimbursements.exercise - transaction.amount);
-        }
-        
-        if (amount > 0) {
-          acc[category] = (acc[category] || 0) + amount;
-        }
-        return acc;
-      }, {} as Record<string, number>);
-
-    // 상위 6개 카테고리 선택 (나머지는 'Others'로 통합)
-    const sortedCategories = Object.entries(expenses)
-      .sort(([, a], [, b]) => b - a);
+    // 선택된 월의 expense 거래만 필터링
+    const monthExpenses = transactionsToSummarize.filter(t => t.type === 'expense');
     
-    const top6 = sortedCategories.slice(0, 6);
-    const others = sortedCategories.slice(6).reduce((sum, [, amount]) => sum + amount, 0);
+    console.log('Selected month:', selectedMonth);
+    console.log('Month expenses:', monthExpenses);
+    
+    // 카테고리별 지출 합계 계산
+    const expensesByCategory = monthExpenses.reduce((acc, transaction) => {
+      const category = transaction.category || 'Uncategorized';
+      acc[category] = (acc[category] || 0) + transaction.amount;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    console.log('Expenses by category:', expensesByCategory);
+    
+    // 금액 순으로 정렬
+    const sortedCategories = Object.entries(expensesByCategory)
+      .sort(([, a], [, b]) => b - a);
 
     return {
-      labels: [...top6.map(([category]) => category), others > 0 ? 'Others' : null].filter(Boolean),
-      data: [...top6.map(([, amount]) => amount), others > 0 ? others : null].filter(Boolean),
+      labels: sortedCategories.map(([category]) => category),
+      data: sortedCategories.map(([, amount]) => amount),
     };
-  }, [transactionsToSummarize]);
+  }, [transactionsToSummarize, selectedMonth]);
 
   // 월별 트렌드 계산
   const monthlyTrends = useMemo(() => {
@@ -178,38 +183,6 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       style: 'currency',
       currency: 'CAD',
     }).format(amount);
-  };
-
-  // 카테고리별 색상 매핑
-  const getCategoryColor = (category: string): string => {
-    const colorMap: Record<string, string> = {
-      'Food & Dining': '#FF6384',
-      'Housing': '#36A2EB', 
-      'Transportation': '#FFCE56',
-      'Shopping': '#4BC0C0',
-      'Entertainment': '#9966FF',
-      'Healthcare': '#FF9F40',
-      'Education': '#FF6384',
-      'Insurance': '#36A2EB',
-      'Utilities': '#FFCE56',
-      'Other': '#C9CBCF',
-      'Salary': '#4BC0C0',
-      'Business Income': '#9966FF',
-      'Investment': '#FF9F40',
-      'Reimbursement [G]': '#FF6384',
-      'Reimbursement [U]': '#FFCE56',
-      'Reimbursement [E]': '#4BC0C0',
-      'Grocery': '#FF6384',
-      'Utility': '#FFCE56',
-      'Exercise': '#4BC0C0',
-      'Add': '#4BC0C0',
-      'Subtract': '#FF6384',
-      'Transfer In': '#36A2EB',
-      'Transfer Out': '#9966FF',
-      'Uncategorized': '#C9CBCF',
-    };
-    
-    return colorMap[category] || '#C9CBCF'; // 기본값은 회색
   };
 
   const calculateSummary = () => {
@@ -274,6 +247,12 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     onMonthChange(`${newYear}-${newMonth}`);
   };
 
+  // 범례 분할
+  const allLabels = categoryExpenses.labels.filter((label): label is string => label !== null);
+  const mid = Math.ceil(allLabels.length / 2);
+  const leftLegend = allLabels.slice(0, mid);
+  const rightLegend = allLabels.slice(mid);
+
   return (
     <Box sx={{ mb: 2 }}>
       <Grid container spacing={3}>
@@ -334,30 +313,55 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
             <Typography variant="h6" gutterBottom>
               Expenses by Category
             </Typography>
-            <Box sx={{ height: 200, display: 'flex', justifyContent: 'center' }}>
-              <Doughnut
-                data={{
-                  labels: categoryExpenses.labels,
-                  datasets: [
-                    {
-                      data: categoryExpenses.data,
-                      backgroundColor: categoryExpenses.labels
-                        .filter((label): label is string => label !== null)
-                        .map(label => getCategoryColor(label)),
-                    },
-                  ],
-                }}
-                options={{
-                  plugins: {
-                    legend: {
-                      position: 'bottom',
-                      labels: {
-                        boxWidth: 12,
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {/* 왼쪽 범례 */}
+              <Box sx={{ minWidth: 120, mr: 2 }}>
+                {leftLegend.map((label) => (
+                  <Box key={label} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <Box sx={{ width: 12, height: 12, bgcolor: getCategoryColor(label), mr: 1, borderRadius: '2px' }} />
+                    <Typography variant="body2" noWrap>{label}</Typography>
+                  </Box>
+                ))}
+              </Box>
+              {/* 도넛 그래프 */}
+              <Box sx={{ width: 180, height: 180 }}>
+                <Doughnut
+                  data={{
+                    labels: categoryExpenses.labels,
+                    datasets: [
+                      {
+                        data: categoryExpenses.data,
+                        backgroundColor: categoryExpenses.labels
+                          .filter((label): label is string => label !== null)
+                          .map(label => getCategoryColor(label)),
                       },
+                    ],
+                  }}
+                  options={{
+                    plugins: {
+                      legend: { display: false },
+                      tooltip: {
+                        callbacks: {
+                          label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed;
+                            return `${label}: ${formatCurrency(value)}`;
+                          }
+                        }
+                      }
                     },
-                  },
-                }}
-              />
+                  }}
+                />
+              </Box>
+              {/* 오른쪽 범례 */}
+              <Box sx={{ minWidth: 120, ml: 2 }}>
+                {rightLegend.map((label) => (
+                  <Box key={label} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <Box sx={{ width: 12, height: 12, bgcolor: getCategoryColor(label), mr: 1, borderRadius: '2px' }} />
+                    <Typography variant="body2" noWrap>{label}</Typography>
+                  </Box>
+                ))}
+              </Box>
             </Box>
           </Paper>
         </Grid>
