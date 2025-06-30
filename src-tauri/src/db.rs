@@ -99,6 +99,8 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
       ("Insurance", "expense"),
       ("Utilities", "expense"),
       ("Other", "expense"),
+      ("Add", "adjust"),
+      ("Subtract", "adjust"),
     ];
     for (name, cat_type) in initial_categories {
       conn.execute("INSERT INTO categories (name, type) VALUES (?1, ?2)", params![name, cat_type])?;

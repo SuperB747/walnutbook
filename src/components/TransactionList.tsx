@@ -66,7 +66,11 @@ const TransactionList: React.FC<TransactionListProps> = ({
   // Selected transaction IDs for bulk operations
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   // Full categories with type info for filtering
-  interface FullCategory { id: number; name: string; type: 'income' | 'expense'; }
+  interface FullCategory { 
+    id: number; 
+    name: string; 
+    type: 'income' | 'expense' | 'adjust'; 
+  }
   const [fullCategories, setFullCategories] = useState<FullCategory[]>([]);
   const [editDescriptionId, setEditDescriptionId] = useState<number | null>(null);
   const [editDescriptionValue, setEditDescriptionValue] = useState<string>('');
@@ -81,7 +85,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
   // Load full categories for inline dropdown filtering
   useEffect(() => {
     invoke('get_categories_full')
-      .then(res => setFullCategories(res as FullCategory[]))
+      .then(res => {
+        console.log('Loaded full categories:', res);
+        setFullCategories(res as FullCategory[]);
+      })
       .catch(err => console.error('Failed to load full categories:', err));
   }, []);
 
@@ -435,7 +442,12 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       }}
                     >
                       {fullCategories
-                        .filter(c => c.type === transaction.type)
+                        .filter(c => {
+                          if (transaction.type === 'adjust') {
+                            return c.type === 'adjust';
+                          }
+                          return c.type === transaction.type;
+                        })
                         .map(c => (
                           <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
                         ))}
@@ -445,23 +457,32 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     </Select>
                   </TableCell>
                   <TableCell sx={{ width: 100, whiteSpace: 'nowrap', px: 1 }}>
-                  <Typography
+                    <Typography
                       sx={{ fontSize: '0.9rem' }}
-                    color={transaction.type === 'expense' ? 'error' : 'success'}
-                  >
-                    {formatCurrency(transaction.amount)}
-                  </Typography>
-                </TableCell>
+                      color={
+                        transaction.type === 'expense' ? 'error' :
+                        transaction.type === 'income' ? 'success' :
+                        transaction.type === 'adjust' && transaction.category === 'Subtract' ? 'error' :
+                        transaction.type === 'adjust' && transaction.category === 'Add' ? 'success' :
+                        'info'
+                      }
+                    >
+                      {formatCurrency(transaction.amount)}
+                    </Typography>
+                  </TableCell>
                   <TableCell sx={{ width: 100, whiteSpace: 'nowrap', px: 1 }}>
-                  <Chip
+                    <Chip
                       label={transaction.type}
-                    size="small"
+                      size="small"
                       color={
                         transaction.type === 'income' ? 'success' :
-                        transaction.type === 'expense' ? 'error' : 'info'
+                        transaction.type === 'expense' ? 'error' :
+                        transaction.type === 'adjust' && transaction.category === 'Subtract' ? 'error' :
+                        transaction.type === 'adjust' && transaction.category === 'Add' ? 'success' :
+                        'info'
                       }
-                  />
-                </TableCell>
+                    />
+                  </TableCell>
                   <TableCell sx={{ width: 80, whiteSpace: 'nowrap', px: 1 }}>
                     {/* Clear/Unclear toggle */}
                     <Checkbox

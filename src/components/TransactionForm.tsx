@@ -14,6 +14,7 @@ import {
   FormHelperText,
   Grid,
   SelectChangeEvent,
+  Chip,
 } from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
 import { Transaction, Account, TransactionType } from '../db';
@@ -32,7 +33,7 @@ export interface TransactionFormProps {
 interface FullCategory {
   id: number;
   name: string;
-  type: 'income' | 'expense';
+  type: 'income' | 'expense' | 'adjust' | 'transfer';
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
@@ -45,7 +46,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 }) => {
   const [formData, setFormData] = useState<Partial<Transaction>>({
     date: format(new Date(), 'yyyy-MM-dd'),
-    type: 'expense' as TransactionType,
+    type: transaction?.type || 'expense' as TransactionType,
     amount: undefined,
     payee: '',
     category: '',
@@ -59,9 +60,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   // Load all categories with type when dialog opens
   const loadCategoriesFull = async () => {
     try {
+      console.log('Loading categories...');
       const result = await invoke<FullCategory[]>('get_categories_full');
       console.log('Loaded categories:', result);
+      console.log('Current form data before setting categories:', formData);
       setAllCategories(result);
+      console.log('Categories set successfully');
     } catch (e) {
       console.error('Failed to load categories:', e);
     }
@@ -117,31 +121,40 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent
+    e: SelectChangeEvent | React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    
-    // Clear category when type changes
+    let updates: Partial<Transaction> = { [name]: value };
+
     if (name === 'type') {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value as TransactionType,
-        category: '', // Reset category when type changes
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: name === 'amount' ? parseFloat(value) || 0 : value,
-      }));
+      // Reset category when type changes
+      updates.category = '';
+      
+      // Set default category for adjust and transfer types
+      if (value === 'adjust') {
+        updates.category = 'Add';
+      } else if (value === 'transfer') {
+        updates.category = 'Transfer Out';
+      }
     }
 
-    // Clear error when field is edited
-    if (errors[name]) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: '',
-      }));
+    // Handle amount sign for transfer categories
+    if (name === 'category' && formData.type === 'transfer') {
+      const amount = formData.amount || 0;
+      if (value === 'Transfer In' && amount < 0) {
+        updates.amount = Math.abs(amount);
+      } else if (value === 'Transfer Out' && amount > 0) {
+        updates.amount = -Math.abs(amount);
+      }
     }
+
+    // Handle numeric values
+    if (name === 'amount') {
+      updates.amount = parseFloat(value) || 0;
+    }
+
+    setFormData(prev => ({ ...prev, ...updates }));
+    setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
   const handlePayeeChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,11 +203,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   // Filter categories based on selected type
   const filteredCategories = useMemo(() => {
-    const filtered = allCategories
-      .filter(cat => cat.type === formData.type)
-      .sort((a, b) => a.name.localeCompare(b.name));
-    console.log('Filtered categories for type:', formData.type, filtered);
-    return filtered;
+    return allCategories.filter(cat => {
+      if (formData.type === 'adjust') {
+        return cat.type === 'adjust';
+      } else if (formData.type === 'transfer') {
+        return cat.type === 'transfer';
+      }
+      return cat.type === formData.type;
+    });
   }, [allCategories, formData.type]);
 
   return (
@@ -261,8 +277,38 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     onChange={handleChange}
                     label="Type"
                   >
-                    <MenuItem value="expense">Expense</MenuItem>
-                    <MenuItem value="income">Income</MenuItem>
+                    <MenuItem value="expense">
+                      <Chip 
+                        label="Expense" 
+                        size="small" 
+                        color="error" 
+                        sx={{ minWidth: 80 }}
+                      />
+                    </MenuItem>
+                    <MenuItem value="income">
+                      <Chip 
+                        label="Income" 
+                        size="small" 
+                        color="success" 
+                        sx={{ minWidth: 80 }}
+                      />
+                    </MenuItem>
+                    <MenuItem value="transfer">
+                      <Chip 
+                        label="Transfer" 
+                        size="small" 
+                        color="info" 
+                        sx={{ minWidth: 80 }}
+                      />
+                    </MenuItem>
+                    <MenuItem value="adjust">
+                      <Chip 
+                        label="Adjust" 
+                        size="small" 
+                        color="info" 
+                        sx={{ minWidth: 80 }}
+                      />
+                    </MenuItem>
                   </Select>
                   {errors.type && (
                     <FormHelperText>{errors.type}</FormHelperText>

@@ -18,7 +18,7 @@ import {
   ArcElement,
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
-import { Transaction } from '../db';
+import { Transaction, TransactionType } from '../db';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 
 ChartJS.register(
@@ -168,6 +168,41 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       style: 'currency',
       currency: 'CAD',
     }).format(amount);
+  };
+
+  const calculateSummary = () => {
+    const summary = {
+      income: 0,
+      expense: 0,
+      balance: 0,
+      categories: {} as Record<string, number>,
+    };
+
+    transactionsToSummarize.forEach((transaction) => {
+      // Skip adjust and transfer type transactions for monthly summary
+      if (transaction.type === 'adjust' || transaction.type === 'transfer' as TransactionType) {
+        return;
+      }
+
+      if (transaction.type === 'income') {
+        summary.income += transaction.amount;
+        summary.balance += transaction.amount;
+      } else if (transaction.type === 'expense') {
+        summary.expense += transaction.amount;
+        summary.balance -= transaction.amount;
+      }
+
+      // Update category totals
+      if (transaction.category) {
+        if (!summary.categories[transaction.category]) {
+          summary.categories[transaction.category] = 0;
+        }
+        summary.categories[transaction.category] += 
+          transaction.type === 'income' ? transaction.amount : -transaction.amount;
+      }
+    });
+
+    return summary;
   };
 
   return (

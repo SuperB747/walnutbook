@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 
-export type TransactionType = 'income' | 'expense';
+export type TransactionType = 'income' | 'expense' | 'adjust' | 'transfer';
 export type AccountType = 'checking' | 'savings' | 'credit' | 'investment' | 'other';
+export type CategoryType = 'income' | 'expense' | 'adjust' | 'transfer';
 
 export interface Transaction {
   id: number;
@@ -23,6 +24,12 @@ export interface Account {
   type: AccountType;
   balance: number;
   created_at: string;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  type: CategoryType;
 }
 
 export interface CategoryRule {
@@ -195,8 +202,16 @@ export async function addTransaction(transaction: Omit<Transaction, 'id'>): Prom
       transaction.notes || ''
     );
 
-    // Update account balance
-    const balanceChange = transaction.type === 'expense' ? -transaction.amount : transaction.amount;
+    // Update account balance based on transaction type and category
+    let balanceChange = 0;
+    if (transaction.type === 'expense') {
+      balanceChange = -transaction.amount;
+    } else if (transaction.type === 'income') {
+      balanceChange = transaction.amount;
+    } else if (transaction.type === 'adjust') {
+      balanceChange = transaction.category === 'Add' ? transaction.amount : -transaction.amount;
+    }
+
     db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?')
       .run(balanceChange, transaction.account_id);
   } catch (error) {
@@ -214,9 +229,27 @@ export async function updateTransaction(transaction: Transaction): Promise<void>
       throw new Error(`Transaction ${transaction.id} not found`);
     }
 
-    const balanceChange = 
-      (oldTransaction.type === 'expense' ? -oldTransaction.amount : oldTransaction.amount) +
-      (transaction.type === 'expense' ? transaction.amount : -transaction.amount);
+    // Calculate balance change considering Adjust type
+    let oldBalanceEffect = 0;
+    let newBalanceEffect = 0;
+
+    if (oldTransaction.type === 'expense') {
+      oldBalanceEffect = -oldTransaction.amount;
+    } else if (oldTransaction.type === 'income') {
+      oldBalanceEffect = oldTransaction.amount;
+    } else if (oldTransaction.type === 'adjust') {
+      oldBalanceEffect = oldTransaction.category === 'Add' ? oldTransaction.amount : -oldTransaction.amount;
+    }
+
+    if (transaction.type === 'expense') {
+      newBalanceEffect = -transaction.amount;
+    } else if (transaction.type === 'income') {
+      newBalanceEffect = transaction.amount;
+    } else if (transaction.type === 'adjust') {
+      newBalanceEffect = transaction.category === 'Add' ? transaction.amount : -transaction.amount;
+    }
+
+    const balanceChange = newBalanceEffect - oldBalanceEffect;
 
     db.transaction(() => {
       db.prepare(`
@@ -275,13 +308,23 @@ export async function getAccounts(): Promise<Account[]> {
   const accountsInfo = db.prepare(
     'SELECT id, name, type FROM accounts'
   ).all() as { id: number; name: string; type: string }[];
-  // Compute dynamic balances from transactions
+  
+  // Compute dynamic balances from transactions, handling Adjust type
   const sums = db.prepare(
-    `SELECT account_id, SUM(CASE WHEN type = 'expense' THEN -amount ELSE amount END) as sum_amount
+    `SELECT account_id, 
+      SUM(CASE 
+        WHEN type = 'expense' THEN -amount
+        WHEN type = 'income' THEN amount
+        WHEN type = 'adjust' AND category = 'Add' THEN amount
+        WHEN type = 'adjust' AND category = 'Subtract' THEN -amount
+        ELSE 0
+      END) as sum_amount
      FROM transactions
      GROUP BY account_id`
   ).all() as { account_id: number; sum_amount: number }[];
+  
   const balanceMap = new Map(sums.map(r => [r.account_id, r.sum_amount]));
+  
   // Build Account objects, defaulting created_at to empty string (not shown in UI)
   return accountsInfo.map(acc => ({
     id: acc.id,
@@ -512,11 +555,11 @@ export async function getNetWorthHistory(startDate: string, endDate: string): Pr
   try {
     // Get all transactions within the date range
     const transactions = db.prepare(`
-      SELECT date, type, amount
+      SELECT date, type, category, amount
       FROM transactions
       WHERE date BETWEEN ? AND ?
       ORDER BY date ASC
-    `).all(startDate, endDate) as { date: string; type: string; amount: number }[];
+    `).all(startDate, endDate) as { date: string; type: string; category: string; amount: number }[];
 
     // Get initial account balances
     const accounts = db.prepare('SELECT balance FROM accounts').all() as { balance: number }[];
@@ -533,7 +576,19 @@ export async function getNetWorthHistory(startDate: string, endDate: string): Pr
       }
       
       currentDate = transaction.date;
-      currentNetWorth += transaction.type === 'expense' ? -transaction.amount : transaction.amount;
+      
+      // Handle different transaction types
+      if (transaction.type === 'expense') {
+        currentNetWorth -= transaction.amount;
+      } else if (transaction.type === 'income') {
+        currentNetWorth += transaction.amount;
+      } else if (transaction.type === 'adjust') {
+        if (transaction.category === 'Add') {
+          currentNetWorth += transaction.amount;
+        } else if (transaction.category === 'Subtract') {
+          currentNetWorth -= transaction.amount;
+        }
+      }
     });
 
     // Add final entry
