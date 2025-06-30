@@ -47,13 +47,20 @@ const AccountList: React.FC<AccountListProps> = ({
   // 알파벳 순서로 정렬
   const sortedAccounts = [...accounts].sort((a, b) => a.name.localeCompare(b.name));
   const totalBalance = sortedAccounts.reduce((sum, account) => sum + account.balance, 0);
+  const availableFunds = sortedAccounts.filter(a => a.type === 'checking' || a.type === 'savings').reduce((sum, a) => sum + a.balance, 0);
+  const creditCardBalance = sortedAccounts.filter(a => a.type === 'credit').reduce((sum, a) => sum + a.balance, 0);
 
   return (
     <Box>
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h6">Accounts</Typography>
-        <Typography variant="h6">
-          Total Balance: {safeFormatCurrency(totalBalance)}
+      <Box sx={{ mb: 2, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <Typography variant="subtitle1">
+          Available Funds: <b style={{ color: availableFunds < 0 ? '#d32f2f' : '#388e3c' }}>{safeFormatCurrency(availableFunds)}</b>
+        </Typography>
+        <Typography variant="subtitle1">
+          Credit Card Balance: <b style={{ color: creditCardBalance < 0 ? '#d32f2f' : '#388e3c' }}>{safeFormatCurrency(creditCardBalance)}</b>
+        </Typography>
+        <Typography variant="subtitle1">
+          Net Balance: <b style={{ color: totalBalance < 0 ? '#d32f2f' : '#388e3c' }}>{safeFormatCurrency(totalBalance)}</b>
         </Typography>
       </Box>
       <TableContainer component={Paper}>
@@ -72,7 +79,9 @@ const AccountList: React.FC<AccountListProps> = ({
                 <TableCell>{account.name}</TableCell>
                 <TableCell>{account.type}</TableCell>
                 <TableCell align="right">
-                  {safeFormatCurrency(account.balance)}
+                  <Typography color={account.balance < 0 ? 'error.main' : 'inherit'}>
+                    {safeFormatCurrency(account.balance)}
+                  </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <IconButton

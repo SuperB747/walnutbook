@@ -207,8 +207,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       };
       // Transfer 거래의 경우 payee 필드에 계좌 ID 정보 저장
       if (formData.type === 'transfer' && toAccountId) {
-        const description = formData.payee || 'Transfer';
-        finalTransaction.payee = `${formData.account_id} → ${toAccountId} | ${description}`;
+        const description = formData.payee || '';
+        finalTransaction.payee = `${formData.account_id} → ${toAccountId} | ${description}`.trim();
       }
       // Adjust 거래는 category를 저장하지 않음
       if (formData.type === 'adjust') {

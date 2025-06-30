@@ -201,6 +201,27 @@ const TransactionList: React.FC<TransactionListProps> = ({
     return transaction.amount;
   };
 
+  // Transfer payee 포맷을 사용자 친화적으로 변환
+  const getDisplayPayee = (transaction: Transaction) => {
+    if (transaction.type === 'transfer') {
+      // id 기반 포맷: 'from_id → to_id | description'
+      const match = transaction.payee.match(/(\d+)\s*→\s*(\d+)\s*\|\s*(.*)/);
+      if (match) {
+        return match[3]; // description만 반환
+      }
+      // 예전 포맷: 'To: ...' 또는 'From: ...'로 시작
+      const toMatch = transaction.payee.match(/^To:\s*(.*)/i);
+      if (toMatch) {
+        return toMatch[1].trim();
+      }
+      const fromMatch = transaction.payee.match(/^From:\s*(.*)/i);
+      if (fromMatch) {
+        return fromMatch[1].trim();
+      }
+    }
+    return transaction.payee;
+  };
+
   return (
     <>
       <Box sx={{ mb: 1, p: 1, backgroundColor: 'background.paper', borderRadius: 1 }}>
@@ -422,7 +443,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                         }}
                       />
                     ) : (
-                      <Typography noWrap sx={{ fontSize: '0.9rem' }}>{transaction.payee}</Typography>
+                      <Typography noWrap sx={{ fontSize: '0.9rem' }}>{getDisplayPayee(transaction)}</Typography>
                     )}
                   </TableCell>
                   <TableCell sx={{ width: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>
@@ -474,13 +495,20 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       color={
                         transaction.type === 'adjust'
                           ? getDisplayAmount(transaction) < 0
-                            ? 'error'
+                            ? undefined
                             : 'info'
-                          : transaction.type === 'income'
-                            ? 'success'
-                            : transaction.type === 'expense'
-                              ? 'error'
-                              : 'info'
+                        : transaction.type === 'income'
+                          ? 'success'
+                        : transaction.type === 'expense'
+                          ? 'error'
+                        : transaction.type === 'transfer' && getDisplayAmount(transaction) < 0
+                          ? 'secondary'
+                          : 'info'
+                      }
+                      sx={
+                        transaction.type === 'adjust' && getDisplayAmount(transaction) < 0
+                          ? { backgroundColor: '#e573c7', color: '#fff' }
+                          : undefined
                       }
                     />
                   </TableCell>
