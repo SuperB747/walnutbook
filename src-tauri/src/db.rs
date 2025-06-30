@@ -4,11 +4,17 @@ use tauri::AppHandle;
 use serde::{Serialize, Deserialize};
 use serde_json::{Value, json};
 use std::env;
+use std::fs;
+use tauri_api::path::data_dir;
 
 /// Helper: get path to SQLite database
 fn get_db_path(_app: &AppHandle) -> PathBuf {
-  // Create the database file in the src-tauri project folder
-  PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("superbudget.db")
+  // Use OS-specific user data directory to avoid dev watch restarts
+  let mut path = data_dir().unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+  path.push("superbudget");
+  fs::create_dir_all(&path).expect("Failed to create app data directory");
+  path.push("superbudget.db");
+  path
 }
 
 /// Initialize database schema if not exists
@@ -18,7 +24,8 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
   conn.execute_batch(r#"
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'expense'
     );
     CREATE TABLE IF NOT EXISTS accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,11 +61,46 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   "#)?;
-  // Insert initial categories if empty
+  // Migrate: add created_at to accounts if missing
+  let _ = conn.execute(
+    "ALTER TABLE accounts ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+    [],
+  );
+  // Migrate: add created_at to budgets if missing
+  let _ = conn.execute(
+    "ALTER TABLE budgets ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+    [],
+  );
+  // Migrate: add type column to categories if missing
+  let _ = conn.execute(
+    "ALTER TABLE categories ADD COLUMN type TEXT NOT NULL DEFAULT 'expense'",
+    [],
+  );
+  // Migrate: set correct type for initial income categories
+  let _ = conn.execute(
+    "UPDATE categories SET type = 'income' WHERE name IN ('Salary','Business Income','Investment') AND type = 'expense'",
+    [],
+  );
+  // Insert initial categories if empty, with correct types
   let count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))?;
   if count == 0 {
-    for name in &["Salary", "Business Income", "Investment", "Food & Dining", "Housing", "Transportation", "Shopping", "Entertainment", "Healthcare", "Education", "Insurance", "Utilities", "Other"] {
-      conn.execute("INSERT INTO categories (name) VALUES (?1)", params![name])?;
+    let initial_categories: &[(&str, &str)] = &[
+      ("Salary", "income"),
+      ("Business Income", "income"),
+      ("Investment", "income"),
+      ("Food & Dining", "expense"),
+      ("Housing", "expense"),
+      ("Transportation", "expense"),
+      ("Shopping", "expense"),
+      ("Entertainment", "expense"),
+      ("Healthcare", "expense"),
+      ("Education", "expense"),
+      ("Insurance", "expense"),
+      ("Utilities", "expense"),
+      ("Other", "expense"),
+    ];
+    for (name, cat_type) in initial_categories {
+      conn.execute("INSERT INTO categories (name, type) VALUES (?1, ?2)", params![name, cat_type])?;
     }
   }
   // Insert initial accounts if empty
@@ -84,7 +126,21 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
 pub struct Account { pub id: i64, pub name: String, #[serde(rename = "type")] pub account_type: String, pub balance: f64, pub created_at: String }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Transaction { pub id: i64, pub date: String, pub account_id: i64, #[serde(rename = "type")] pub transaction_type: String, pub category: String, pub amount: f64, pub payee: String, pub notes: Option<String>, pub status: String, pub created_at: String }
+pub struct Transaction {
+  #[serde(default)]
+  pub id: i64,
+  pub date: String,
+  pub account_id: i64,
+  #[serde(rename = "type")]
+  pub transaction_type: String,
+  pub category: String,
+  pub amount: f64,
+  pub payee: String,
+  pub notes: Option<String>,
+  pub status: String,
+  #[serde(default)]
+  pub created_at: String,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct CategoryRule { pub id: i64, pub pattern: String, pub category: String, pub created_at: String }
@@ -92,27 +148,30 @@ pub struct CategoryRule { pub id: i64, pub pattern: String, pub category: String
 #[derive(Serialize, Deserialize)]
 pub struct Budget { pub id: i64, pub category: String, pub amount: f64, pub month: String, pub notes: Option<String>, pub created_at: String }
 
+#[derive(Serialize, Deserialize)]
+pub struct Category { pub id: i64, pub name: String, #[serde(rename = "type")] pub category_type: String }
+
 // Tauri command stubs
 #[tauri::command]
 pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
   // Open SQLite connection
   let path = get_db_path(&app);
   let conn = Connection::open(path).map_err(|e| e.to_string())?;
-  // Prepare and execute query
-  let mut stmt = conn
-      .prepare("SELECT id, name, type, balance, created_at FROM accounts ORDER BY id")
-      .map_err(|e| e.to_string())?;
-  let rows = stmt
-      .query_map([], |row| {
-          Ok(Account {
-              id: row.get(0)?,
-              name: row.get(1)?,
-              account_type: row.get(2)?,
-              balance: row.get(3)?,
-              created_at: row.get(4)?,
-          })
-      })
-      .map_err(|e| e.to_string())?;
+  // Attempt to include created_at; fallback if column missing
+  let (mut stmt, has_created) = match conn.prepare("SELECT id, name, type, balance, created_at FROM accounts ORDER BY id") {
+    Ok(s) => (s, true),
+    Err(_) => {
+      let s = conn.prepare("SELECT id, name, type, balance FROM accounts ORDER BY id").map_err(|e| e.to_string())?;
+      (s, false)
+    }
+  };
+  let rows = stmt.query_map([], move |row| {
+    if has_created {
+      Ok(Account { id: row.get(0)?, name: row.get(1)?, account_type: row.get(2)?, balance: row.get(3)?, created_at: row.get(4)? })
+    } else {
+      Ok(Account { id: row.get(0)?, name: row.get(1)?, account_type: row.get(2)?, balance: row.get(3)?, created_at: String::new() })
+    }
+  }).map_err(|e| e.to_string())?;
   // Collect results
   let mut accounts = Vec::new();
   for account in rows {
@@ -122,14 +181,14 @@ pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
 }
 
 #[tauri::command]
-pub fn create_account(app: AppHandle, name: String, account_type: String) -> Result<Vec<Account>, String> {
+pub fn create_account(app: AppHandle, name: String, account_type: String, balance: f64) -> Result<Vec<Account>, String> {
     // Open SQLite connection
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
-    // Insert new account with initial balance 0
+    // Insert new account with initial balance
     conn.execute(
-        "INSERT INTO accounts (name, type, balance) VALUES (?1, ?2, 0)",
-        params![name, account_type],
+        "INSERT INTO accounts (name, type, balance) VALUES (?1, ?2, ?3)",
+        params![name, account_type, balance],
     )
     .map_err(|e| e.to_string())?;
     // Return updated account list
@@ -141,8 +200,8 @@ pub fn update_account(app: AppHandle, account: Account) -> Result<Vec<Account>, 
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     conn.execute(
-        "UPDATE accounts SET name = ?1, type = ?2 WHERE id = ?3",
-        params![account.name, account.account_type, account.id],
+        "UPDATE accounts SET name = ?1, type = ?2, balance = ?3 WHERE id = ?4",
+        params![account.name, account.account_type, account.balance, account.id],
     )
     .map_err(|e| e.to_string())?;
     get_accounts(app)
@@ -353,14 +412,38 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
     let path = get_db_path(&app);
     let mut conn = Connection::open(path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    for t in transactions {
+    for mut t in transactions {
         if t.date.is_empty() { return Err("Missing date".into()); }
+        // Auto-fill category from existing transactions matching description
+        if t.category.is_empty() {
+            if let Ok(existing_cat) = tx.query_row(
+                "SELECT category FROM transactions WHERE payee = ?1 ORDER BY created_at DESC LIMIT 1",
+                params![t.payee],
+                |row| row.get::<_, String>(0)
+            ) {
+                t.category = existing_cat;
+            }
+        }
+        // Skip duplicates based on date and amount
+        let dup_count: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM transactions WHERE date = ?1 AND amount = ?2",
+            params![t.date, t.amount],
+            |row| row.get(0)
+        ).map_err(|e| e.to_string())?;
+        if dup_count > 0 {
+            continue;
+        }
+        // Insert new transaction
         tx.execute(
             "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![t.date, t.account_id, t.transaction_type, t.category, t.amount, t.payee, t.notes.clone().unwrap_or_default(), t.status],
         ).map_err(|e| e.to_string())?;
+        // Update account balance
         let change = if t.transaction_type == "expense" { -t.amount } else { t.amount };
-        tx.execute("UPDATE accounts SET balance = balance + ?1 WHERE id = ?2", params![change, t.account_id]).map_err(|e| e.to_string())?;
+        tx.execute(
+            "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
+            params![change, t.account_id]
+        ).map_err(|e| e.to_string())?;
     }
     tx.commit().map_err(|e| e.to_string())?;
     get_transactions(app)
@@ -449,4 +532,70 @@ pub fn get_net_worth_history(app: AppHandle, start_date: String, end_date: Strin
     }
     history.push(json!({ "date": last, "netWorth": net }));
     Ok(json!(history))
+}
+
+#[tauri::command]
+pub fn get_categories_full(app: AppHandle) -> Result<Vec<Category>, String> {
+    let path = get_db_path(&app);
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, name, type FROM categories ORDER BY id").map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| Ok(Category { id: row.get(0)?, name: row.get(1)?, category_type: row.get(2)? })).map_err(|e| e.to_string())?;
+    let mut categories = Vec::new();
+    for c in rows { categories.push(c.map_err(|e| e.to_string())?); }
+    Ok(categories)
+}
+
+#[tauri::command]
+pub fn add_category(app: AppHandle, name: String, category_type: String) -> Result<Vec<Category>, String> {
+    let path = get_db_path(&app);
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    conn.execute("INSERT INTO categories (name, type) VALUES (?1, ?2)", params![name, category_type]).map_err(|e| e.to_string())?;
+    get_categories_full(app)
+}
+
+#[tauri::command]
+pub fn update_category(app: AppHandle, id: i64, name: String, category_type: String) -> Result<Vec<Category>, String> {
+    let path = get_db_path(&app);
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    conn.execute("UPDATE categories SET name = ?1, type = ?2 WHERE id = ?3", params![name, category_type, id]).map_err(|e| e.to_string())?;
+    get_categories_full(app)
+}
+
+#[tauri::command]
+pub fn delete_category(app: AppHandle, id: i64) -> Result<Vec<Category>, String> {
+    let path = get_db_path(&app);
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM categories WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    get_categories_full(app)
+}
+
+// Commands for backing up and restoring the entire database
+#[tauri::command]
+pub fn backup_database(app: AppHandle, save_path: String) -> Result<(), String> {
+  let db_path = get_db_path(&app);
+  std::fs::copy(&db_path, &save_path).map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn restore_database(app: AppHandle, file_path: String) -> Result<(), String> {
+  let db_path = get_db_path(&app);
+  std::fs::copy(&file_path, &db_path).map(|_| ()).map_err(|e| e.to_string())
+}
+
+// Command to export the raw database file as bytes
+#[tauri::command]
+pub fn export_database(app: AppHandle) -> Result<Vec<u8>, String> {
+  let db_path = get_db_path(&app);
+  std::fs::read(&db_path).map_err(|e| e.to_string())
+}
+
+// Command to import raw database bytes and overwrite the DB file
+#[tauri::command]
+pub fn import_database(app: AppHandle, data: Vec<u8>) -> Result<(), String> {
+  let db_path = get_db_path(&app);
+  std::fs::write(&db_path, data).map_err(|e| e.to_string())
 } 

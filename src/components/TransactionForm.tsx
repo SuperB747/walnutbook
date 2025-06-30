@@ -27,6 +27,13 @@ export interface TransactionFormProps {
   categories: string[];
 }
 
+// Category with type info from backend
+interface FullCategory {
+  id: number;
+  name: string;
+  type: 'income' | 'expense';
+}
+
 const TransactionForm: React.FC<TransactionFormProps> = ({
   open,
   onClose,
@@ -46,6 +53,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [allCategories, setAllCategories] = useState<FullCategory[]>([]);
+
+  // Load all categories with type when dialog opens
+  const loadCategoriesFull = async () => {
+    try {
+      const result = await window.electron.invoke('get_categories_full');
+      setAllCategories(result as FullCategory[]);
+    } catch (e) {
+      console.error('Failed to load categories:', e);
+    }
+  };
+  useEffect(() => { if (open) loadCategoriesFull(); }, [open]);
 
   useEffect(() => {
     if (transaction) {
@@ -150,97 +169,102 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 />
               </Grid>
               <Grid item xs={12}>
-                <TextField
-                  name="date"
+            <TextField
+              name="date"
                   label="Date"
-                  type="date"
-                  value={formData.date}
-                  onChange={handleChange}
-                  fullWidth
-                  required
-                  error={!!errors.date}
-                  helperText={errors.date}
-                  InputLabelProps={{ shrink: true }}
-                />
+              type="date"
+              value={formData.date}
+              onChange={handleChange}
+              fullWidth
+              required
+              error={!!errors.date}
+              helperText={errors.date}
+              InputLabelProps={{ shrink: true }}
+            />
               </Grid>
               <Grid item xs={12}>
-                <FormControl fullWidth required error={!!errors.account_id}>
+            <FormControl fullWidth required error={!!errors.account_id}>
                   <InputLabel>Account</InputLabel>
-                  <Select
-                    name="account_id"
+              <Select
+                name="account_id"
                     value={formData.account_id?.toString() || ''}
-                    onChange={handleChange}
+                onChange={handleChange}
                     label="Account"
-                  >
-                    {accounts.map((account) => (
+              >
+                {accounts.map((account) => (
                       <MenuItem key={account.id} value={account.id.toString()}>
-                        {account.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  {errors.account_id && (
-                    <FormHelperText>{errors.account_id}</FormHelperText>
-                  )}
-                </FormControl>
+                    {account.name}
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.account_id && (
+                <FormHelperText>{errors.account_id}</FormHelperText>
+              )}
+            </FormControl>
               </Grid>
               <Grid item xs={12}>
-                <FormControl fullWidth required error={!!errors.category}>
+            <FormControl fullWidth required error={!!errors.category}>
                   <InputLabel>Category</InputLabel>
-                  <Select
-                    name="category"
+              <Select
+                name="category"
                     value={formData.category || ''}
-                    onChange={handleChange}
+                onChange={handleChange}
                     label="Category"
-                  >
-                    {categories.map((category) => (
-                      <MenuItem key={category} value={category}>
-                        {category}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  {errors.category && (
-                    <FormHelperText>{errors.category}</FormHelperText>
-                  )}
-                </FormControl>
+              >
+                    <MenuItem value="">
+                      <em>None</em>
+                    </MenuItem>
+                    {allCategories
+                      .filter(c => c.type === formData.type)
+                      .map(c => (
+                        <MenuItem key={c.name} value={c.name}>
+                          {c.name}
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.category && (
+                <FormHelperText>{errors.category}</FormHelperText>
+              )}
+            </FormControl>
               </Grid>
               <Grid item xs={12}>
-                <TextField
-                  name="amount"
+            <TextField
+              name="amount"
                   label="Amount"
-                  type="number"
-                  value={formData.amount}
-                  onChange={handleChange}
-                  fullWidth
-                  required
-                  error={!!errors.amount}
-                  helperText={errors.amount}
+              type="number"
+              value={formData.amount}
+              onChange={handleChange}
+              fullWidth
+              required
+              error={!!errors.amount}
+              helperText={errors.amount}
                 />
               </Grid>
               <Grid item xs={12}>
                 <FormControl fullWidth>
                   <InputLabel>Type</InputLabel>
-                  <Select
-                    name="type"
+              <Select
+                name="type"
                     value={formData.type || 'expense'}
-                    onChange={handleChange}
+                onChange={handleChange}
                     label="Type"
-                  >
+              >
                     <MenuItem value="expense">Expense</MenuItem>
                     <MenuItem value="income">Income</MenuItem>
                     <MenuItem value="transfer">Transfer</MenuItem>
-                  </Select>
-                </FormControl>
+              </Select>
+            </FormControl>
               </Grid>
               <Grid item xs={12}>
-                <TextField
-                  name="notes"
+            <TextField
+              name="notes"
                   label="Notes"
-                  value={formData.notes}
-                  onChange={handleChange}
-                  fullWidth
-                  multiline
+              value={formData.notes}
+              onChange={handleChange}
+              fullWidth
+              multiline
                   rows={3}
-                />
+            />
               </Grid>
               <Grid item xs={12}>
                 <FormControl fullWidth>

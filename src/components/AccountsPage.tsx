@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Box, Button, Snackbar, Alert } from '@mui/material';
+import { Container, Box, Button, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import AccountList from './AccountList';
 import AccountForm from './AccountForm';
@@ -19,6 +19,9 @@ const AccountsPage: React.FC = () => {
     message: '',
     severity: 'success',
   });
+  // State for delete confirmation dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteAccountId, setDeleteAccountId] = useState<number | null>(null);
 
   const loadAccounts = async () => {
     try {
@@ -53,25 +56,32 @@ const AccountsPage: React.FC = () => {
     setIsFormOpen(true);
   };
 
-  const handleDeleteAccount = async (accountId: number) => {
-    if (window.confirm('Are you sure you want to delete this account?')) {
-      try {
-        await invoke('delete_account', { id: accountId });
-        await loadAccounts();
-        setSnackbar({
-          open: true,
-          message: 'Account deleted successfully.',
-          severity: 'success',
-        });
-      } catch (error) {
-        console.error('Failed to delete account:', error);
-        setSnackbar({
-          open: true,
-          message: 'Failed to delete account.',
-          severity: 'error',
-        });
-      }
+  // Open confirmation dialog for account deletion
+  const handleDeleteAccount = (accountId: number) => {
+    setDeleteAccountId(accountId);
+    setDeleteDialogOpen(true);
+  };
+
+  // Confirm and perform deletion
+  const handleConfirmDelete = async () => {
+    if (deleteAccountId == null) return;
+    try {
+      await invoke('delete_account', { id: deleteAccountId });
+      await loadAccounts();
+      setSnackbar({ open: true, message: 'Account deleted successfully.', severity: 'success' });
+    } catch (error) {
+      console.error('Failed to delete account:', error);
+      setSnackbar({ open: true, message: 'Failed to delete account.', severity: 'error' });
+    } finally {
+      setDeleteDialogOpen(false);
+      setDeleteAccountId(null);
     }
+  };
+
+  // Cancel deletion
+  const handleCancelDelete = () => {
+    setDeleteDialogOpen(false);
+    setDeleteAccountId(null);
   };
 
   const handleSaveAccount = async (accountData: Partial<Account>) => {
@@ -82,7 +92,7 @@ const AccountsPage: React.FC = () => {
             id: selectedAccount.id,
             name: accountData.name!,
             type: accountData.type!,
-            balance: selectedAccount.balance,
+            balance: accountData.balance!,
             created_at: selectedAccount.created_at,
           }
         });
@@ -90,6 +100,7 @@ const AccountsPage: React.FC = () => {
         await invoke<Account[]>('create_account', {
           name: accountData.name!,
           accountType: accountData.type!,
+          balance: accountData.balance!,
         });
       }
       await loadAccounts();
@@ -155,6 +166,18 @@ const AccountsPage: React.FC = () => {
             {snackbar.message}
           </Alert>
         </Snackbar>
+
+        {/* Confirmation Dialog for Delete Account */}
+        <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
+          <DialogTitle>Delete Account</DialogTitle>
+          <DialogContent>
+            Are you sure you want to delete this account?
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCancelDelete}>Cancel</Button>
+            <Button onClick={handleConfirmDelete} color="error">Delete</Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Container>
   );

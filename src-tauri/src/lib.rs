@@ -2,6 +2,7 @@ mod db;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  let context = tauri::generate_context!();
   tauri::Builder::default()
     .setup(|app| {
       // Initialize SQLite database schema
@@ -36,10 +37,18 @@ pub fn run() {
       db::update_budget,
       db::delete_budget,
       db::get_categories,
+      db::get_categories_full,
+      db::add_category,
+      db::update_category,
+      db::delete_category,
+      db::backup_database,
+      db::restore_database,
+      db::export_database,
+      db::import_database,
       db::get_spending_by_category,
       db::get_income_vs_expenses,
       db::get_net_worth_history
     ])
-    .run(tauri::generate_context!())
+    .run(context)
     .expect("error while running tauri application");
 }

@@ -102,7 +102,7 @@ const rendererConfig = {
     ],
   },
   resolve: {
-    extensions: ['.tsx', '.ts', '.js', '.jsx'],
+    extensions: ['.tsx', '.ts', '.js', '.jsx', '.mjs'],
     fallback: {
       "util": require.resolve("util/"),
       "path": require.resolve("path-browserify"),

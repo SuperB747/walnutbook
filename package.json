@@ -9,7 +9,7 @@
     "build": "npm run clean && webpack --config webpack.config.js --progress",
     "dev": "npm run tauri:dev",
     "tauri:dev": "tauri dev",
-    "start": "npm run tauri:dev",
+    "start": "npm run dev",
     "prod": "npm run build && tauri build",
     "package": "npm run build && tauri build",
     "tauri:build": "tauri build",

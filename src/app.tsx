@@ -57,7 +57,7 @@ const App: React.FC = () => {
 
   return (
     <ThemeProvider theme={theme}>
-      <CssBaseline />
+        <CssBaseline />
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
         <AppBar position="static">
           <Toolbar>
@@ -77,9 +77,9 @@ const App: React.FC = () => {
             <Tab label="Accounts" component={Link} to="/" />
             <Tab label="Transactions" component={Link} to="/transactions" />
             <Tab label="Budgets" component={Link} to="/budgets" />
-          </Tabs>
+            </Tabs>
         </AppBar>
-        <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+          <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
           <Routes>
             <Route path="/" element={<AccountsPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />

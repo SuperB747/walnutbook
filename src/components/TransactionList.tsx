@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import {
   Table,
   TableBody,
@@ -27,7 +28,8 @@ import {
   FilterList as FilterIcon,
 } from '@mui/icons-material';
 import { Transaction, Account } from '../db';
-import { format } from 'date-fns';
+import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
 export interface TransactionListProps {
   transactions: Transaction[];
@@ -37,6 +39,8 @@ export interface TransactionListProps {
   onDelete: (id: number) => Promise<void>;
   onCategoryChange: (id: number, category: string) => Promise<void>;
   onStatusChange: (id: number, status: Transaction['status']) => Promise<void>;
+  onDescriptionChange?: (id: number, description: string) => Promise<void>;
+  initialSelectedIds?: number[];
 }
 
 const TransactionList: React.FC<TransactionListProps> = ({
@@ -47,6 +51,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
   onDelete,
   onCategoryChange,
   onStatusChange,
+  onDescriptionChange,
+  initialSelectedIds = [],
 }) => {
   // 검색 및 필터 상태
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,6 +65,26 @@ const TransactionList: React.FC<TransactionListProps> = ({
   });
   // Selected transaction IDs for bulk operations
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  // Full categories with type info for filtering
+  interface FullCategory { id: number; name: string; type: 'income' | 'expense'; }
+  const [fullCategories, setFullCategories] = useState<FullCategory[]>([]);
+  const [editDescriptionId, setEditDescriptionId] = useState<number | null>(null);
+  const [editDescriptionValue, setEditDescriptionValue] = useState<string>('');
+
+  // Pre-select newly imported transactions
+  useEffect(() => {
+    if (initialSelectedIds.length) {
+      setSelectedIds(initialSelectedIds);
+    }
+  }, [initialSelectedIds]);
+
+  // Load full categories for inline dropdown filtering
+  useEffect(() => {
+    invoke('get_categories_full')
+      .then(res => setFullCategories(res as FullCategory[]))
+      .catch(err => console.error('Failed to load full categories:', err));
+  }, []);
+
   // Bulk operation handlers
   const handleBulkDelete = async () => {
     for (const id of selectedIds) {
@@ -179,7 +205,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
   return (
     <>
-      <Box sx={{ mb: 3, p: 2, backgroundColor: 'background.paper', borderRadius: 1 }}>
+      <Box sx={{ mb: 1, p: 1, backgroundColor: 'background.paper', borderRadius: 1 }}>
         <Typography variant="h6" sx={{ mb: 2 }}>Filters</Typography>
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           <TextField
@@ -195,7 +221,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
             <Select
               multiple
               value={selectedTypes}
-              onChange={(e) => setSelectedTypes(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+              onChange={(e) => setSelectedTypes(
+                typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
+              )}
               input={<OutlinedInput label="Type" />}
               renderValue={(selected) => (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -204,10 +232,14 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   ))}
                 </Box>
               )}
+              MenuProps={{ MenuListProps: { dense: true } }}
             >
-              <MenuItem value="income">Income</MenuItem>
-              <MenuItem value="expense">Expense</MenuItem>
-              <MenuItem value="transfer">Transfer</MenuItem>
+              {['income', 'expense', 'transfer'].map((type) => (
+                <MenuItem key={type} value={type} dense>
+                  <Checkbox checked={selectedTypes.indexOf(type) > -1} size="small" />
+                  <ListItemText primary={type.charAt(0).toUpperCase() + type.slice(1)} />
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
 
@@ -216,7 +248,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
             <Select
               multiple
               value={selectedCategories}
-              onChange={(e) => setSelectedCategories(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+              onChange={(e) => setSelectedCategories(
+                typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
+              )}
               input={<OutlinedInput label="Category" />}
               renderValue={(selected) => (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -225,10 +259,11 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   ))}
                 </Box>
               )}
+              MenuProps={{ MenuListProps: { dense: true } }}
             >
               {uniqueCategories.map((category) => (
-                <MenuItem key={category} value={category}>
-                  <Checkbox checked={selectedCategories.indexOf(category) > -1} />
+                <MenuItem key={category} value={category} dense>
+                  <Checkbox checked={selectedCategories.indexOf(category) > -1} size="small" />
                   <ListItemText primary={category} />
                 </MenuItem>
               ))}
@@ -240,7 +275,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
             <Select
               multiple
               value={selectedAccounts}
-              onChange={(e) => setSelectedAccounts(typeof e.target.value === 'string' ? e.target.value.split(',').map(Number) : e.target.value)}
+              onChange={(e) => setSelectedAccounts(
+                typeof e.target.value === 'string' ? e.target.value.split(',').map(Number) : e.target.value
+              )}
               input={<OutlinedInput label="Account" />}
               renderValue={(selected) => (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -249,9 +286,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   ))}
                 </Box>
               )}
+              MenuProps={{ MenuListProps: { dense: true } }}
             >
               {accounts.map((account) => (
-                <MenuItem key={account.id} value={account.id}>
+                <MenuItem key={account.id} value={account.id} dense>
                   <Checkbox checked={selectedAccounts.indexOf(account.id) > -1} />
                   <ListItemText primary={account.name} />
                 </MenuItem>
@@ -259,28 +297,31 @@ const TransactionList: React.FC<TransactionListProps> = ({
             </Select>
           </FormControl>
 
-          <TextField
-            label="From Date"
-            type="date"
-            size="small"
-            value={dateRange.start}
-            onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-            InputLabelProps={{ shrink: true }}
-          />
-
-          <TextField
-            label="To Date"
-            type="date"
-            size="small"
-            value={dateRange.end}
-            onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-            InputLabelProps={{ shrink: true }}
-          />
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              label="From Date"
+              value={dateRange.start ? new Date(dateRange.start) : null}
+              onChange={(newDate) => setDateRange(prev => ({
+                ...prev,
+                start: newDate ? newDate.toISOString().split('T')[0] : ''
+              }))}
+              slotProps={{ textField: { size: 'small' } }}
+            />
+            <DatePicker
+              label="To Date"
+              value={dateRange.end ? new Date(dateRange.end) : null}
+              onChange={(newDate) => setDateRange(prev => ({
+                ...prev,
+                end: newDate ? newDate.toISOString().split('T')[0] : ''
+              }))}
+              slotProps={{ textField: { size: 'small' } }}
+            />
+          </LocalizationProvider>
         </Box>
       </Box>
 
       {/* Bulk action buttons */}
-      <Box sx={{ display: 'flex', gap: 1, p: 1 }}>
+      <Box sx={{ display: 'flex', gap: 1, p: 0.5 }}>
         <Button variant="outlined" disabled={selectedIds.length === 0} onClick={handleBulkDelete}>
           Delete Selected
         </Button>
@@ -289,11 +330,11 @@ const TransactionList: React.FC<TransactionListProps> = ({
         </Button>
       </Box>
 
-      <TableContainer component={Paper} elevation={2}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell padding="checkbox">
+      <TableContainer component={Paper} elevation={2} sx={{ width: '100%' }}>
+        <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
+        <TableHead>
+          <TableRow>
+              <TableCell padding="checkbox" sx={{ width: 40 }}>
                 <Checkbox
                   indeterminate={selectedIds.length > 0 && selectedIds.length < filteredTransactions.length}
                   checked={filteredTransactions.length > 0 && selectedIds.length === filteredTransactions.length}
@@ -306,30 +347,29 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   }}
                 />
               </TableCell>
-              <TableCell>Date</TableCell>
-              <TableCell>Account</TableCell>
-              <TableCell>Payee</TableCell>
-              <TableCell>Category</TableCell>
-              <TableCell>Amount</TableCell>
-              <TableCell>Type</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Notes</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
+              <TableCell sx={{ width: 100, whiteSpace: 'nowrap' }}>Date</TableCell>
+              <TableCell sx={{ width: 120, whiteSpace: 'nowrap' }}>Account</TableCell>
+              <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Description</TableCell>
+              <TableCell sx={{ width: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>Category</TableCell>
+              <TableCell sx={{ width: 100, whiteSpace: 'nowrap' }}>Amount</TableCell>
+              <TableCell sx={{ width: 100, whiteSpace: 'nowrap' }}>Type</TableCell>
+              <TableCell sx={{ width: 80, whiteSpace: 'nowrap' }}>Status</TableCell>
+              <TableCell align="right" sx={{ width: 100, whiteSpace: 'nowrap' }}>Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
             {filteredTransactions.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} align="center">
-                  <Typography variant="body1" color="text.secondary" sx={{ py: 2 }}>
+            <TableRow>
+              <TableCell colSpan={9} align="center">
+                <Typography variant="body1" color="text.secondary" sx={{ py: 2 }}>
                     No transactions found
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
+                </Typography>
+              </TableCell>
+            </TableRow>
+          ) : (
               filteredTransactions.map((transaction) => (
-                <TableRow key={transaction.id}>
-                  <TableCell padding="checkbox">
+              <TableRow key={transaction.id}>
+                  <TableCell padding="checkbox" sx={{ width: 40 }}>
                     <Checkbox
                       checked={selectedIds.includes(transaction.id)}
                       onChange={(e) => {
@@ -340,67 +380,117 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       }}
                     />
                   </TableCell>
-                  <TableCell>{format(new Date(transaction.date), 'yyyy-MM-dd')}</TableCell>
-                  <TableCell>{getAccountName(transaction.account_id)}</TableCell>
-                  <TableCell>{transaction.payee}</TableCell>
-                  <TableCell>
+                  <TableCell sx={{ width: 100, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{transaction.date}</TableCell>
+                  <TableCell sx={{ width: 120, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{getAccountName(transaction.account_id)}</TableCell>
+                  <TableCell
+                    sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    onClick={() => {
+                      setEditDescriptionId(transaction.id);
+                      setEditDescriptionValue(transaction.payee);
+                    }}
+                    style={{ cursor: 'text' }}
+                  >
+                    {editDescriptionId === transaction.id ? (
+                      <TextField
+                        value={editDescriptionValue}
+                        size="small"
+                        variant="standard"
+                        onChange={e => setEditDescriptionValue(e.target.value)}
+                        onBlur={async () => {
+                          if (typeof onDescriptionChange === 'function') {
+                            await onDescriptionChange(transaction.id, editDescriptionValue.trim());
+                          }
+                          setEditDescriptionId(null);
+                        }}
+                        onKeyDown={async (e) => {
+                          if (e.key === 'Enter') {
+                            if (typeof onDescriptionChange === 'function') {
+                              await onDescriptionChange(transaction.id, editDescriptionValue.trim());
+                            }
+                            setEditDescriptionId(null);
+                          } else if (e.key === 'Escape') {
+                            setEditDescriptionId(null);
+                          }
+                        }}
+                        autoFocus
+                        sx={{ width: '100%', fontSize: '0.9rem', p: 0 }}
+                      />
+                    ) : (
+                      <Typography noWrap sx={{ fontSize: '0.9rem' }}>{transaction.payee}</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ width: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>
                     <Select
                       value={transaction.category}
                       size="small"
+                      variant="standard"
+                      disableUnderline
                       onChange={(e) => onCategoryChange(transaction.id, e.target.value as string)}
+                      sx={{
+                        width: '100%',
+                        height: '24px',
+                        padding: '0 4px',
+                        fontSize: '0.9rem',
+                        '.MuiSelect-icon': { fontSize: '1rem', right: 4 },
+                      }}
                     >
-                      {categories.map(cat => (
-                        <MenuItem key={cat} value={cat}>{cat}</MenuItem>
-                      ))}
+                      {fullCategories
+                        .filter(c => c.type === transaction.type)
+                        .map(c => (
+                          <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
+                        ))}
+                      {categories.includes('Uncategorized') && (
+                        <MenuItem key="Uncategorized" value="Uncategorized">Uncategorized</MenuItem>
+                      )}
                     </Select>
                   </TableCell>
-                  <TableCell>
-                    <Typography
-                      color={transaction.type === 'expense' ? 'error' : 'success'}
-                    >
-                      {formatCurrency(transaction.amount)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
+                  <TableCell sx={{ width: 100, whiteSpace: 'nowrap', px: 1 }}>
+                  <Typography
+                      sx={{ fontSize: '0.9rem' }}
+                    color={transaction.type === 'expense' ? 'error' : 'success'}
+                  >
+                    {formatCurrency(transaction.amount)}
+                  </Typography>
+                </TableCell>
+                  <TableCell sx={{ width: 100, whiteSpace: 'nowrap', px: 1 }}>
+                  <Chip
                       label={transaction.type}
-                      size="small"
+                    size="small"
                       color={
                         transaction.type === 'income' ? 'success' :
                         transaction.type === 'expense' ? 'error' : 'info'
                       }
-                    />
-                  </TableCell>
-                  <TableCell>
+                  />
+                </TableCell>
+                  <TableCell sx={{ width: 80, whiteSpace: 'nowrap', px: 1 }}>
                     {/* Clear/Unclear toggle */}
                     <Checkbox
                       checked={transaction.status === 'cleared'}
                       onChange={(e) => onStatusChange(transaction.id, e.target.checked ? 'cleared' : 'uncleared')}
                       color="primary"
-                    />
-                  </TableCell>
-                  <TableCell>{transaction.notes || '-'}</TableCell>
-                  <TableCell align="right">
-                    <IconButton
-                      size="small"
+                  />
+                </TableCell>
+                  <TableCell align="right" sx={{ width: 100, whiteSpace: 'nowrap' }}>
+                  <IconButton
+                    size="small"
                       onClick={() => onEdit(transaction)}
-                      sx={{ mr: 1 }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
+                    sx={{ mr: 1 }}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton
+                    size="small"
                       onClick={() => onDelete(transaction.id)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </TableContainer>
     </>
   );
 };

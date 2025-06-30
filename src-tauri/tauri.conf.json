@@ -6,9 +6,11 @@
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run serve"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "superbudget",
@@ -32,5 +34,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "dialog": {
+      "open": true,
+      "save": true
+    }
   }
 }

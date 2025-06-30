@@ -20,11 +20,24 @@ import { Account } from '../db';
 export interface AccountListProps {
   accounts: Account[];
   onEdit: (account: Account) => void;
-  onDelete: (id: number) => Promise<void>;
+  onDelete: (id: number) => void;
 }
 
 // Helper: format numbers as CAD currency with comma separators
 const formatCurrency = (amount: number): string => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(amount);
+
+// Safely format balance values, fallback to 0 on invalid input
+const safeFormatCurrency = (amount: number): string => {
+  if (typeof amount !== 'number' || isNaN(amount)) {
+    console.warn('Invalid account balance:', amount);
+    return formatCurrency(0);
+  }
+  // Treat near-zero values as exactly zero to avoid "-$0.00"
+  if (Math.abs(amount) < 0.005) {
+    return formatCurrency(0);
+}
+  return formatCurrency(amount);
+};
 
 const AccountList: React.FC<AccountListProps> = ({
   accounts,
@@ -38,7 +51,7 @@ const AccountList: React.FC<AccountListProps> = ({
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6">Accounts</Typography>
         <Typography variant="h6">
-          Total Balance: {formatCurrency(totalBalance)}
+          Total Balance: {safeFormatCurrency(totalBalance)}
         </Typography>
       </Box>
       <TableContainer component={Paper}>
@@ -52,33 +65,33 @@ const AccountList: React.FC<AccountListProps> = ({
             </TableRow>
           </TableHead>
           <TableBody>
-            {accounts.map((account) => (
+          {accounts.map((account) => (
               <TableRow key={account.id}>
                 <TableCell>{account.name}</TableCell>
                 <TableCell>{account.type}</TableCell>
                 <TableCell align="right">
-                  {formatCurrency(account.balance)}
+                  {safeFormatCurrency(account.balance)}
                 </TableCell>
                 <TableCell align="right">
                   <IconButton
-                    size="small"
+                      size="small"
                     onClick={() => onEdit(account)}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
+                >
+                  <EditIcon />
+                </IconButton>
+                <IconButton
                     size="small"
                     onClick={() => onDelete(account.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+                >
+                  <DeleteIcon />
+                </IconButton>
                 </TableCell>
               </TableRow>
-            ))}
+          ))}
           </TableBody>
         </Table>
       </TableContainer>
-    </Box>
+      </Box>
   );
 };
 

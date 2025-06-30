@@ -132,9 +132,9 @@ export function disconnect(): void {
 export function getDatabase(): Database.Database {
   if (!database) {
     throw new Error('Database not initialized');
-  }
+    }
   return database;
-}
+  }
 
 // Initialize database
 export async function initializeDatabase(): Promise<void> {
@@ -148,7 +148,7 @@ export async function initializeDatabase(): Promise<void> {
     const cols = db.prepare("PRAGMA table_info(transactions)").all() as { name: string }[];
     if (!cols.some(c => c.name === 'status')) {
       db.prepare("ALTER TABLE transactions ADD COLUMN status TEXT NOT NULL DEFAULT 'uncleared'").run();
-    }
+  }
 
     // Migration: ensure transactions table has a created_at column
     if (!cols.some(c => c.name === 'created_at')) {
@@ -175,7 +175,7 @@ export async function getTransactions(): Promise<Transaction[]> {
 export async function getTransaction(id: number): Promise<Transaction | null> {
   const db = getDatabase();
   return db.prepare('SELECT * FROM transactions WHERE id = ?').get(id) as Transaction | null;
-}
+  }
 
 export async function addTransaction(transaction: Omit<Transaction, 'id'>): Promise<void> {
   const db = getDatabase();
@@ -468,8 +468,8 @@ export async function addBudget(budget: Omit<Budget, 'id'>): Promise<void> {
   } catch (error) {
     console.error('Error adding budget:', error);
     throw error;
+    }
   }
-}
 
 export async function updateBudget(budget: Budget): Promise<void> {
   const db = getDatabase();
@@ -638,7 +638,7 @@ function isCardPayment(transaction: Transaction): boolean {
   return transaction.payee.toLowerCase().includes('card') || 
          transaction.notes?.toLowerCase().includes('card') || 
          transaction.category.toLowerCase().includes('card');
-}
+  }
 
 // Add a function to get the list of categories
 export async function getCategories(): Promise<string[]> {

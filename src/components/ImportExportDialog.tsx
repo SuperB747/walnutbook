@@ -114,28 +114,41 @@ const PAYMENT_KEYWORDS = [
 
 // Simple OFX parser function
 function parseOFXContent(ofxContent: string): OFXTransaction[] {
-  // Extract transaction data from OFX content using regex
   const transactions: OFXTransaction[] = [];
-  const transactionRegex = /<STMTTRN>([\s\S]*?)<\/STMTTRN>/g;
-  let match;
-
-  while ((match = transactionRegex.exec(ofxContent)) !== null) {
-    const transaction = match[1];
-    const dateMatch = /<DTPOSTED>(.*?)<\/DTPOSTED>/i.exec(transaction);
-    const amountMatch = /<TRNAMT>(.*?)<\/TRNAMT>/i.exec(transaction);
-    const nameMatch = /<NAME>(.*?)<\/NAME>/i.exec(transaction);
-    const memoMatch = /<MEMO>(.*?)<\/MEMO>/i.exec(transaction);
-
-    if (dateMatch && amountMatch) {
+  // Split by STMTTRN (opening tag) to get each record after header
+  const parts = ofxContent.split(/<STMTTRN>/i);
+  parts.shift(); // drop header before first transaction
+  parts.forEach(part => {
+    // Limit segment to end of this record before next STMTTRN start or closing tag
+    const segment = part.split(/<\/?STMTTRN>/i)[0];
+    // extract fields
+    const dtMatch = /<DTPOSTED>([^<\r\n]+)/i.exec(segment);
+    const amtMatch = /<TRNAMT>([^<\r\n]+)/i.exec(segment);
+    const nameMatch = /<NAME>([^<\r\n]+)/i.exec(segment);
+    // Extract memo: try full XML-style <MEMO>...</MEMO>
+    let memo: string | undefined;
+    const xmlMemoMatch = /<MEMO>([\s\S]*?)<\/MEMO>/i.exec(segment);
+    if (xmlMemoMatch) {
+      memo = xmlMemoMatch[1].trim();
+    } else {
+      // Fallback: manual substring after <MEMO> up to next tag
+      const tagIndex = segment.search(/<MEMO>/i);
+      if (tagIndex >= 0) {
+        let rawMemo = segment.substring(tagIndex + 6);
+        const nextTag = rawMemo.search(/<\w+/);
+        if (nextTag >= 0) rawMemo = rawMemo.substring(0, nextTag);
+        memo = rawMemo.trim();
+      }
+    }
+    if (dtMatch && amtMatch) {
       transactions.push({
-        DTPOSTED: dateMatch[1],
-        TRNAMT: amountMatch[1],
-        NAME: nameMatch ? nameMatch[1] : undefined,
-        MEMO: memoMatch ? memoMatch[1] : undefined,
+        DTPOSTED: dtMatch[1].trim(),
+        TRNAMT: amtMatch[1].trim(),
+        NAME: nameMatch ? nameMatch[1].trim() : undefined,
+        MEMO: memo,
       });
     }
-  }
-
+  });
   return transactions;
 }
 
@@ -165,6 +178,15 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     onDrop: (acceptedFiles) => {
       const file = acceptedFiles[0];
       if (file) {
+        // Auto-select format based on extension
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        if (ext === 'qif') {
+          setSelectedFormat('qif');
+        } else if (ext === 'csv') {
+          setSelectedFormat('csv');
+        } else if (ext === 'ofx' || ext === 'qfx') {
+          setSelectedFormat('ofx');
+        }
         setSelectedFile(file);
         setImportStatus({ status: 'ready', message: '' });
       }
@@ -369,7 +391,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
 
     try {
       setImportStatus({ status: 'processing', message: 'Importing transactions...' });
-      const validTransactions = transactions
+      const validTransactions: Partial<Transaction>[] = transactions
         .filter((t): t is ParsedTransaction => t.date !== null)
         .map(t => ({
           date: t.date!,            // non-null by filter
@@ -378,6 +400,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
           payee: t.payee,
           category: t.category,
           notes: t.notes,
+          status: 'uncleared',      // set default status for import
           account_id: selectedAccount
         }));
       await onImport(validTransactions);
@@ -411,18 +434,41 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   };
 
   const handleOfxImport = async (content: string): Promise<void> => {
+    console.log('[ImportExportDialog] Starting OFX import');
+    console.log('[ImportExportDialog] OFX file content (first 200 chars):', content.slice(0, 200));
     try {
       const transactions = parseOFXContent(content);
-      const parsedTransactions = transactions.map((t: OFXTransaction) => ({
-        date: t.DTPOSTED,
-        amount: parseFloat(t.TRNAMT),
-        payee: t.NAME || 'Unknown Payee',
-        notes: t.MEMO || '',
-        type: parseFloat(t.TRNAMT) < 0 ? 'expense' : 'income' as TransactionType,
-        account_id: selectedAccount || 0,
-        category: '',
-      }));
-
+      console.log('[ImportExportDialog] parseOFXContent returned', transactions.length, 'records:', transactions);
+      // Map OFX records to ParsedTransaction, combining NAME and MEMO description
+      const parsedTransactions: ParsedTransaction[] = transactions.map((t: OFXTransaction) => {
+        // Extract raw date string before fractional seconds and timezone
+        const rawPosted = t.DTPOSTED.split('.')[0];
+        const rawMemo = t.MEMO || '';
+        const nameDesc = t.NAME ? t.NAME.trim() : '';
+        let memoDesc = '';
+        let memoNotes = '';
+        if (rawMemo.trim()) {
+          const parts = rawMemo.trim().split(/\s{2,}/);
+          memoDesc = parts[0] || '';
+          if (parts.length > 1) {
+            memoNotes = parts.slice(1).join(' ').trim();
+          }
+        }
+        // Combine NAME and MEMO description without extra spaces
+        const combined = (nameDesc + memoDesc).trim();
+        const payee = combined || 'Unknown Payee';
+        const notes = memoNotes;
+        return {
+          date: parseDate(rawPosted),
+          amount: Math.abs(parseFloat(t.TRNAMT)),
+          payee,
+          notes,
+          type: parseFloat(t.TRNAMT) < 0 ? 'expense' : 'income' as TransactionType,
+          account_id: selectedAccount || 0,
+          category: '',
+        };
+      });
+      console.log('[ImportExportDialog] parsedTransactions for import', parsedTransactions.length, parsedTransactions);
       await handleImport(parsedTransactions);
     } catch (error) {
       handleError(error);
@@ -512,6 +558,8 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
           await handleQifImport(content);
           break;
         case 'ofx':
+        case 'qfx':
+          // Support both OFX and QFX extensions
           await handleOfxImport(content);
           break;
         case 'csv':
@@ -555,7 +603,20 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       <DialogTitle>Import/Export Transactions</DialogTitle>
       <DialogContent>
         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-          <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
+          <Tabs
+            value={activeTab}
+            onChange={(_, newValue) => setActiveTab(newValue)}
+            textColor="primary"
+            indicatorColor="primary"
+            sx={{
+              '& .MuiTab-root': {
+                color: 'text.primary',
+                '&.Mui-selected': {
+                  color: 'text.primary',
+                },
+              },
+            }}
+          >
             <Tab label="Import" />
             <Tab label="Export" />
           </Tabs>

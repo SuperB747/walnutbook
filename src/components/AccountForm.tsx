@@ -72,47 +72,46 @@ const AccountForm: React.FC<AccountFormProps> = ({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{account ? 'Edit Account' : 'New Account'}</DialogTitle>
-      <DialogContent>
+        <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-          <TextField
+            <TextField
             fullWidth
             label="Name"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-          />
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+            />
 
           <FormControl fullWidth>
             <InputLabel>Type</InputLabel>
-            <Select
-              value={formData.type}
+              <Select
+                value={formData.type}
               onChange={handleTypeChange}
               label="Type"
-            >
+              >
               <MenuItem value="checking">Checking</MenuItem>
               <MenuItem value="savings">Savings</MenuItem>
               <MenuItem value="credit">Credit</MenuItem>
               <MenuItem value="investment">Investment</MenuItem>
               <MenuItem value="other">Other</MenuItem>
-            </Select>
-          </FormControl>
+              </Select>
+            </FormControl>
 
-          <TextField
-            fullWidth
-            label="Balance"
-            name="balance"
-            type="number"
-            value={formData.balance}
-            onChange={handleChange}
-          />
-        </Box>
-      </DialogContent>
-      <DialogActions>
+            <TextField
+              fullWidth
+              label="Balance"
+              name="balance"
+              value={new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(formData.balance || 0)}
+              disabled
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button onClick={handleSubmit} variant="contained" color="primary">
           Save
-        </Button>
-      </DialogActions>
+          </Button>
+        </DialogActions>
     </Dialog>
   );
 };

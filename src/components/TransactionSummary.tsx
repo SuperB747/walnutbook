@@ -5,6 +5,7 @@ import {
   Typography,
   Grid,
   Divider,
+  TextField,
 } from '@mui/material';
 import {
   Chart as ChartJS,
@@ -31,13 +32,19 @@ ChartJS.register(
 );
 
 interface TransactionSummaryProps {
-  transactions: Transaction[];
+  monthTransactions: Transaction[];
+  allTransactions: Transaction[];
+  selectedMonth: string;
+  onMonthChange: (month: string) => void;
 }
 
-const TransactionSummary: React.FC<TransactionSummaryProps> = ({ transactions }) => {
+const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactions, allTransactions, selectedMonth, onMonthChange }) => {
+  // Transactions for summary and category calculations
+  const transactionsToSummarize = monthTransactions;
+
   // 수입/지출 합계 계산
   const totals = useMemo(() => {
-    return transactions.reduce(
+    return transactionsToSummarize.reduce(
       (acc, transaction) => {
         if (transaction.type === 'income') {
           acc.income += transaction.amount;
@@ -48,11 +55,11 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ transactions })
       },
       { income: 0, expense: 0 }
     );
-  }, [transactions]);
+  }, [transactionsToSummarize]);
 
   // 카테고리별 지출 계산
   const categoryExpenses = useMemo(() => {
-    const expenses = transactions
+    const expenses = transactionsToSummarize
       .filter(t => t.type === 'expense')
       .reduce((acc, transaction) => {
         acc[transaction.category] = (acc[transaction.category] || 0) + transaction.amount;
@@ -70,10 +77,11 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ transactions })
       labels: [...top5.map(([category]) => category), others > 0 ? 'Others' : null].filter(Boolean),
       data: [...top5.map(([, amount]) => amount), others > 0 ? others : null].filter(Boolean),
     };
-  }, [transactions]);
+  }, [transactionsToSummarize]);
 
   // 월별 트렌드 계산
   const monthlyTrends = useMemo(() => {
+    // Use all transactions for trends
     const last6Months = eachMonthOfInterval({
       start: startOfMonth(subMonths(new Date(), 5)),
       end: endOfMonth(new Date()),
@@ -83,7 +91,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ transactions })
       const monthStart = startOfMonth(month);
       const monthEnd = endOfMonth(month);
 
-      return transactions.reduce(
+      return allTransactions.reduce(
         (acc, transaction) => {
           const transactionDate = new Date(transaction.date);
           if (transactionDate >= monthStart && transactionDate <= monthEnd) {
@@ -104,7 +112,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ transactions })
       income: monthlyData.map(data => data.income),
       expense: monthlyData.map(data => data.expense),
     };
-  }, [transactions]);
+  }, [allTransactions]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-CA', {
@@ -114,14 +122,25 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ transactions })
   };
 
   return (
-    <Box sx={{ mb: 4 }}>
+    <Box sx={{ mb: 2 }}>
       <Grid container spacing={3}>
         {/* 총계 */}
         <Grid item xs={12} md={4}>
           <Paper sx={{ p: 2, height: '100%' }}>
-            <Typography variant="h6" gutterBottom>
-              Summary
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography variant="h6" gutterBottom>
+                Summary
+              </Typography>
+              <TextField
+                label="Month"
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => onMonthChange(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+                sx={{ width: 120 }}
+              />
+            </Box>
             <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle1" color="success.main">
                 Total Income: {formatCurrency(totals.income)}

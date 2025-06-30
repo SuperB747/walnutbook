@@ -97,11 +97,16 @@ const BulkTransactionEdit: React.FC<BulkTransactionEditProps> = ({
           </MenuItem>
         ));
       case 'category':
-        return categories.map(category => (
-          <MenuItem key={category} value={category}>
-            {category}
-          </MenuItem>
-        ));
+        return [
+          <MenuItem key="" value="">
+            <em>None</em>
+          </MenuItem>,
+          ...categories.map(category => (
+            <MenuItem key={category} value={category}>
+              {category}
+            </MenuItem>
+          )),
+        ];
       case 'type':
         return [
           <MenuItem key="expense" value="expense">Expense</MenuItem>,
