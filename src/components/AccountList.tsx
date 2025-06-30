@@ -10,12 +10,18 @@ import {
   IconButton,
   Typography,
   Box,
+  Card,
+  CardContent,
+  Grid,
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { Account } from '../db';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
+import CalculateIcon from '@mui/icons-material/Calculate';
 
 export interface AccountListProps {
   accounts: Account[];
@@ -52,19 +58,54 @@ const AccountList: React.FC<AccountListProps> = ({
 
   return (
     <Box>
-      <Box sx={{ mb: 2, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        <Typography variant="subtitle1">
-          Available Funds: <b style={{ color: availableFunds < 0 ? '#d32f2f' : '#388e3c' }}>{safeFormatCurrency(availableFunds)}</b>
-        </Typography>
-        <Typography variant="subtitle1">
-          Credit Card Balance: <b style={{ color: creditCardBalance < 0 ? '#d32f2f' : '#388e3c' }}>{safeFormatCurrency(creditCardBalance)}</b>
-        </Typography>
-        <Typography variant="subtitle1">
-          Net Balance: <b style={{ color: totalBalance < 0 ? '#d32f2f' : '#388e3c' }}>{safeFormatCurrency(totalBalance)}</b>
-        </Typography>
-      </Box>
+      <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>Account Summary</Typography>
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} md={4}>
+          <Card elevation={3} sx={{ display: 'flex', alignItems: 'center', p: 2 }}>
+            <AccountBalanceWalletIcon sx={{ fontSize: 40, color: availableFunds < 0 ? '#d32f2f' : '#388e3c', mr: 2 }} />
+            <CardContent sx={{ p: 0 }}>
+              <Typography variant="subtitle2" color="text.secondary">Available Funds</Typography>
+              <Typography variant="h6" sx={{ color: availableFunds < 0 ? '#d32f2f' : '#388e3c', fontWeight: 700 }}>
+                {safeFormatCurrency(availableFunds)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card elevation={3} sx={{ display: 'flex', alignItems: 'center', p: 2 }}>
+            <CreditCardIcon sx={{ fontSize: 40, color: creditCardBalance < 0 ? '#d32f2f' : '#388e3c', mr: 2 }} />
+            <CardContent sx={{ p: 0 }}>
+              <Typography variant="subtitle2" color="text.secondary">Credit Card Balance</Typography>
+              <Typography variant="h6" sx={{ color: creditCardBalance < 0 ? '#d32f2f' : '#388e3c', fontWeight: 700 }}>
+                {safeFormatCurrency(creditCardBalance)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card elevation={3} sx={{ display: 'flex', alignItems: 'center', p: 2 }}>
+            <CalculateIcon sx={{ fontSize: 40, color: totalBalance < 0 ? '#d32f2f' : '#388e3c', mr: 2 }} />
+            <CardContent sx={{ p: 0 }}>
+              <Typography variant="subtitle2" color="text.secondary">Net Balance</Typography>
+              <Typography variant="h6" sx={{ color: totalBalance < 0 ? '#d32f2f' : '#388e3c', fontWeight: 700 }}>
+                {safeFormatCurrency(totalBalance)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
       <TableContainer component={Paper}>
-        <Table>
+        <Table size="small" sx={{
+          '& .MuiTableCell-root': {
+            fontSize: '0.92rem',
+            py: 0.5,
+            px: 1.2,
+            lineHeight: 1.2,
+          },
+          '& .MuiTableRow-root': {
+            height: '32px',
+          },
+        }}>
           <TableHead>
             <TableRow>
               <TableCell>Name</TableCell>
