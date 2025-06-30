@@ -67,7 +67,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   interface FullCategory { 
     id: number; 
     name: string; 
-    type: 'income' | 'expense' | 'adjust'; 
+    type: 'income' | 'expense' | 'adjust' | 'transfer'; 
   }
   const [fullCategories, setFullCategories] = useState<FullCategory[]>([]);
   const [editDescriptionId, setEditDescriptionId] = useState<number | null>(null);
@@ -133,9 +133,12 @@ const TransactionList: React.FC<TransactionListProps> = ({
   }, [transactions, searchTerm, selectedTypes, selectedCategories, selectedAccounts, dateRange]);
 
   const formatCurrency = (amount: number) => {
+    // 부호를 그대로 표시
     return new Intl.NumberFormat('en-CA', {
       style: 'currency',
       currency: 'CAD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
     }).format(amount);
   };
 
@@ -176,6 +179,25 @@ const TransactionList: React.FC<TransactionListProps> = ({
       default:
         return type;
     }
+  };
+
+  // 표시용 금액 변환 함수
+  const getDisplayAmount = (transaction: Transaction) => {
+    if (transaction.type === 'expense') {
+      return -Math.abs(transaction.amount);
+    }
+    if (transaction.type === 'income') {
+      return Math.abs(transaction.amount);
+    }
+    if (transaction.type === 'transfer' || transaction.type === 'adjust') {
+      if (transaction.category === 'Transfer Out' || transaction.category === 'Subtract') {
+        return -Math.abs(transaction.amount);
+      }
+      if (transaction.category === 'Transfer In' || transaction.category === 'Add') {
+        return Math.abs(transaction.amount);
+      }
+    }
+    return transaction.amount;
   };
 
   return (
@@ -384,7 +406,19 @@ const TransactionList: React.FC<TransactionListProps> = ({
                           }
                         }}
                         autoFocus
-                        sx={{ width: '100%', fontSize: '0.9rem', p: 0 }}
+                        sx={{ 
+                          width: '100%', 
+                          fontSize: '0.9rem', 
+                          p: 0,
+                          '& .MuiInputBase-input': {
+                            fontSize: '0.9rem !important',
+                            lineHeight: '1.2',
+                            padding: '0 !important'
+                          },
+                          '& .MuiInputBase-root': {
+                            fontSize: '0.9rem !important'
+                          }
+                        }}
                       />
                     ) : (
                       <Typography noWrap sx={{ fontSize: '0.9rem' }}>{transaction.payee}</Typography>
@@ -409,9 +443,16 @@ const TransactionList: React.FC<TransactionListProps> = ({
                         .filter(c => {
                           if (transaction.type === 'adjust') {
                             return c.type === 'adjust';
+                          } else if (transaction.type === 'transfer') {
+                            return c.type === 'transfer';
+                          } else if (transaction.type === 'income') {
+                            return c.type === 'income';
+                          } else if (transaction.type === 'expense') {
+                            return c.type === 'expense';
                           }
                           return c.type === transaction.type;
                         })
+                        .sort((a, b) => a.name.localeCompare(b.name))
                         .map(c => (
                           <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
                         ))}
@@ -424,14 +465,12 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     <Typography
                       sx={{ fontSize: '0.9rem' }}
                       color={
-                        transaction.type === 'expense' ? 'error' :
-                        transaction.type === 'income' ? 'success' :
-                        transaction.type === 'adjust' && transaction.category === 'Subtract' ? 'error' :
-                        transaction.type === 'adjust' && transaction.category === 'Add' ? 'success' :
-                        'info'
+                        getDisplayAmount(transaction) < 0 ? 'error' :
+                        getDisplayAmount(transaction) > 0 ? 'success' :
+                        'text.primary'
                       }
                     >
-                      {formatCurrency(transaction.amount)}
+                      {formatCurrency(getDisplayAmount(transaction))}
                     </Typography>
                   </TableCell>
                   <TableCell sx={{ width: 100, whiteSpace: 'nowrap', px: 1 }}>

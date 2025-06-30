@@ -82,7 +82,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (transaction) {
       setFormData({
         ...transaction,
-        date: format(new Date(transaction.date), 'yyyy-MM-dd'),
+        date: transaction.date,
       });
       setAmountInputValue(transaction.amount?.toString() || '');
     } else {
@@ -115,12 +115,26 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (!formData.category) {
       newErrors.category = 'Please select a category';
     }
-    if (!formData.amount || formData.amount <= 0) {
+
+    // 입력값(양수) 기준으로 검사
+    const inputAmount = parseFloat(amountInputValue);
+    if (isNaN(inputAmount) || inputAmount <= 0) {
       newErrors.amount = 'Please enter an amount';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const fixAmountSign = (amount: number | undefined, type: string | undefined, category: string | undefined) => {
+    if (amount === undefined) return amount;
+    if (type === 'expense') return -Math.abs(amount);
+    if (type === 'income') return Math.abs(amount);
+    if (type === 'transfer' || type === 'adjust') {
+      if (category === 'Transfer Out' || category === 'Subtract') return -Math.abs(amount);
+      if (category === 'Transfer In' || category === 'Add') return Math.abs(amount);
+    }
+    return amount;
   };
 
   const handleChange = (
@@ -137,7 +151,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (name === 'type') {
       // Reset category when type changes
       updates.category = '';
-      
       // Set default category for adjust and transfer types
       if (value === 'adjust') {
         updates.category = 'Add';
@@ -146,19 +159,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       }
     }
 
-    // Handle amount sign for transfer categories
-    if (name === 'category' && formData.type === 'transfer') {
+    // Handle amount sign for transfer/adjust categories only
+    if (name === 'category' && (formData.type === 'transfer' || formData.type === 'adjust')) {
       const amount = formData.amount || 0;
-      if (value === 'Transfer In' && amount < 0) {
-        updates.amount = Math.abs(amount);
-      } else if (value === 'Transfer Out' && amount > 0) {
-        updates.amount = -Math.abs(amount);
-      }
+      updates.amount = fixAmountSign(amount, formData.type, value);
     }
 
     // Handle numeric values
     if (name === 'amount') {
-      updates.amount = parseFloat(value) || 0;
+      updates.amount = fixAmountSign(parseFloat(value) || 0, formData.type, formData.category);
     }
 
     setFormData(prev => ({ ...prev, ...updates }));
@@ -194,7 +203,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
-      await onSave(formData);
+      // 마지막으로 부호 보정 후 저장
+      const fixed = {
+        ...formData,
+        amount: fixAmountSign(formData.amount, formData.type, formData.category)
+      };
+      await onSave(fixed);
     }
   };
 
@@ -358,7 +372,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     const value = e.target.value;
                     setAmountInputValue(value);
                     if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                      const amount = value === '' ? undefined : parseFloat(value);
+                      let amount = value === '' ? undefined : parseFloat(value);
+                      // type과 category에 따라 부호 결정
+                      if (amount !== undefined && amount !== 0) {
+                        if (formData.type === 'expense') {
+                          amount = -Math.abs(amount);
+                        } else if (formData.type === 'income') {
+                          amount = Math.abs(amount);
+                        } else if (formData.type === 'transfer' || formData.type === 'adjust') {
+                          if (formData.category === 'Transfer Out' || formData.category === 'Subtract') {
+                            amount = -Math.abs(amount);
+                          } else if (formData.category === 'Transfer In' || formData.category === 'Add') {
+                            amount = Math.abs(amount);
+                          }
+                        }
+                      }
                       setFormData(prev => ({ ...prev, amount }));
                       if (errors.amount) {
                         setErrors(prev => ({ ...prev, amount: '' }));

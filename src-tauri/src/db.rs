@@ -268,6 +268,13 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     .map_err(|e| e.to_string())?;
     let balance_change = if transaction.transaction_type == "expense" {
         -transaction.amount
+    } else if transaction.transaction_type == "transfer" {
+        // Transfer Out은 음수, Transfer In은 양수로 처리
+        if transaction.category == "Transfer Out" {
+            -transaction.amount
+        } else {
+            transaction.amount
+        }
     } else {
         transaction.amount
     };
@@ -285,13 +292,25 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     // Retrieve old transaction to adjust balance
-    let mut sel = conn.prepare("SELECT type, amount FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
+    let mut sel = conn.prepare("SELECT type, amount, category FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
     let mut rows = sel.query_map(params![transaction.id], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, String>(2)?))
     }).map_err(|e| e.to_string())?;
-    let (old_type, old_amount) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
-    let old_effect = if old_type == "expense" { -old_amount } else { old_amount };
-    let new_effect = if transaction.transaction_type == "expense" { -transaction.amount } else { transaction.amount };
+    let (old_type, old_amount, old_category) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
+    let old_effect = if old_type == "expense" { 
+        -old_amount 
+    } else if old_type == "transfer" {
+        if old_category == "Transfer Out" { -old_amount } else { old_amount }
+    } else { 
+        old_amount 
+    };
+    let new_effect = if transaction.transaction_type == "expense" { 
+        -transaction.amount 
+    } else if transaction.transaction_type == "transfer" {
+        if transaction.category == "Transfer Out" { -transaction.amount } else { transaction.amount }
+    } else { 
+        transaction.amount 
+    };
     let net = new_effect - old_effect;
     // Update transaction record
     conn.execute(
@@ -324,12 +343,18 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     // Retrieve transaction to adjust balance
-    let mut sel = conn.prepare("SELECT type, amount, account_id FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
+    let mut sel = conn.prepare("SELECT type, amount, account_id, category FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
     let mut rows = sel.query_map(params![id], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, i64>(2)?))
+        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, i64>(2)?, row.get::<_, String>(3)?))
     }).map_err(|e| e.to_string())?;
-    let (old_type, old_amount, acct_id) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
-    let balance_change = if old_type == "expense" { old_amount } else { -old_amount };
+    let (old_type, old_amount, acct_id, old_category) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
+    let balance_change = if old_type == "expense" { 
+        old_amount 
+    } else if old_type == "transfer" {
+        if old_category == "Transfer Out" { old_amount } else { -old_amount }
+    } else { 
+        -old_amount 
+    };
     // Delete and adjust balance
     conn.execute("DELETE FROM transactions WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     conn.execute(
@@ -450,10 +475,21 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
             "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![t.date, t.account_id, t.transaction_type, t.category, t.amount, t.payee, t.notes.clone().unwrap_or_default()],
         ).map_err(|e| e.to_string())?;
-        let change = if t.transaction_type == "expense" { -t.amount } else { t.amount };
+        let balance_change = if t.transaction_type == "expense" {
+            -t.amount
+        } else if t.transaction_type == "transfer" {
+            // Transfer Out은 음수, Transfer In은 양수로 처리
+            if t.category == "Transfer Out" {
+                -t.amount
+            } else {
+                t.amount
+            }
+        } else {
+            t.amount
+        };
         tx.execute(
             "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-            params![change, t.account_id]
+            params![balance_change, t.account_id]
         ).map_err(|e| e.to_string())?;
     }
     tx.commit().map_err(|e| e.to_string())?;

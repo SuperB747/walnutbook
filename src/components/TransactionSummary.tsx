@@ -97,34 +97,36 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       .filter(t => t.type === 'expense')
       .reduce((acc, transaction) => {
         let amount = transaction.amount;
+        const category = transaction.category || 'Uncategorized';
+        
         // Subtract reimbursements from corresponding categories
-        if (transaction.category === 'Grocery') {
+        if (category === 'Grocery') {
           amount = Math.max(0, amount - reimbursements.grocery);
           reimbursements.grocery = Math.max(0, reimbursements.grocery - transaction.amount);
-        } else if (transaction.category === 'Utility') {
+        } else if (category === 'Utility') {
           amount = Math.max(0, amount - reimbursements.utility);
           reimbursements.utility = Math.max(0, reimbursements.utility - transaction.amount);
-        } else if (transaction.category === 'Exercise') {
+        } else if (category === 'Exercise') {
           amount = Math.max(0, amount - reimbursements.exercise);
           reimbursements.exercise = Math.max(0, reimbursements.exercise - transaction.amount);
         }
         
         if (amount > 0) {
-          acc[transaction.category] = (acc[transaction.category] || 0) + amount;
+          acc[category] = (acc[category] || 0) + amount;
         }
         return acc;
       }, {} as Record<string, number>);
 
-    // 상위 5개 카테고리 선택 (나머지는 '기타'로 통합)
+    // 상위 6개 카테고리 선택 (나머지는 'Others'로 통합)
     const sortedCategories = Object.entries(expenses)
       .sort(([, a], [, b]) => b - a);
     
-    const top5 = sortedCategories.slice(0, 5);
-    const others = sortedCategories.slice(5).reduce((sum, [, amount]) => sum + amount, 0);
+    const top6 = sortedCategories.slice(0, 6);
+    const others = sortedCategories.slice(6).reduce((sum, [, amount]) => sum + amount, 0);
 
     return {
-      labels: [...top5.map(([category]) => category), others > 0 ? 'Others' : null].filter(Boolean),
-      data: [...top5.map(([, amount]) => amount), others > 0 ? others : null].filter(Boolean),
+      labels: [...top6.map(([category]) => category), others > 0 ? 'Others' : null].filter(Boolean),
+      data: [...top6.map(([, amount]) => amount), others > 0 ? others : null].filter(Boolean),
     };
   }, [transactionsToSummarize]);
 
@@ -144,6 +146,11 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
         (acc, transaction) => {
           const transactionDate = new Date(transaction.date);
           if (transactionDate >= monthStart && transactionDate <= monthEnd) {
+            // Skip adjust and transfer type transactions for monthly trends
+            if (transaction.type === 'adjust' || transaction.type === 'transfer') {
+              return acc;
+            }
+            
             if (transaction.type === 'income') {
               acc.income += transaction.amount;
             } else if (transaction.type === 'expense') {
@@ -168,6 +175,38 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       style: 'currency',
       currency: 'CAD',
     }).format(amount);
+  };
+
+  // 카테고리별 색상 매핑
+  const getCategoryColor = (category: string): string => {
+    const colorMap: Record<string, string> = {
+      'Food & Dining': '#FF6384',
+      'Housing': '#36A2EB', 
+      'Transportation': '#FFCE56',
+      'Shopping': '#4BC0C0',
+      'Entertainment': '#9966FF',
+      'Healthcare': '#FF9F40',
+      'Education': '#FF6384',
+      'Insurance': '#36A2EB',
+      'Utilities': '#FFCE56',
+      'Other': '#C9CBCF',
+      'Salary': '#4BC0C0',
+      'Business Income': '#9966FF',
+      'Investment': '#FF9F40',
+      'Reimbursement [G]': '#FF6384',
+      'Reimbursement [U]': '#FFCE56',
+      'Reimbursement [E]': '#4BC0C0',
+      'Grocery': '#FF6384',
+      'Utility': '#FFCE56',
+      'Exercise': '#4BC0C0',
+      'Add': '#4BC0C0',
+      'Subtract': '#FF6384',
+      'Transfer In': '#36A2EB',
+      'Transfer Out': '#9966FF',
+      'Uncategorized': '#C9CBCF',
+    };
+    
+    return colorMap[category] || '#C9CBCF'; // 기본값은 회색
   };
 
   const calculateSummary = () => {
@@ -253,14 +292,9 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                   datasets: [
                     {
                       data: categoryExpenses.data,
-                      backgroundColor: [
-                        '#FF6384',
-                        '#36A2EB',
-                        '#FFCE56',
-                        '#4BC0C0',
-                        '#9966FF',
-                        '#C9CBCF',
-                      ],
+                      backgroundColor: categoryExpenses.labels
+                        .filter((label): label is string => label !== null)
+                        .map(label => getCategoryColor(label)),
                     },
                   ],
                 }}
