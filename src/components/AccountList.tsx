@@ -44,7 +44,9 @@ const AccountList: React.FC<AccountListProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
+  // 알파벳 순서로 정렬
+  const sortedAccounts = [...accounts].sort((a, b) => a.name.localeCompare(b.name));
+  const totalBalance = sortedAccounts.reduce((sum, account) => sum + account.balance, 0);
 
   return (
     <Box>
@@ -65,7 +67,7 @@ const AccountList: React.FC<AccountListProps> = ({
             </TableRow>
           </TableHead>
           <TableBody>
-          {accounts.map((account) => (
+          {sortedAccounts.map((account) => (
               <TableRow key={account.id}>
                 <TableCell>{account.name}</TableCell>
                 <TableCell>{account.type}</TableCell>

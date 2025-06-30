@@ -157,25 +157,24 @@ pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
   // Open SQLite connection
   let path = get_db_path(&app);
   let conn = Connection::open(path).map_err(|e| e.to_string())?;
-  // Attempt to include created_at; fallback if column missing
-  let (mut stmt, has_created) = match conn.prepare("SELECT id, name, type, balance, created_at FROM accounts ORDER BY id") {
-    Ok(s) => (s, true),
-    Err(_) => {
-      let s = conn.prepare("SELECT id, name, type, balance FROM accounts ORDER BY id").map_err(|e| e.to_string())?;
-      (s, false)
-    }
-  };
-  let rows = stmt.query_map([], move |row| {
-    if has_created {
-      Ok(Account { id: row.get(0)?, name: row.get(1)?, account_type: row.get(2)?, balance: row.get(3)?, created_at: row.get(4)? })
-    } else {
-      Ok(Account { id: row.get(0)?, name: row.get(1)?, account_type: row.get(2)?, balance: row.get(3)?, created_at: String::new() })
-    }
+  // 알파벳 순서로 계좌 조회
+  let mut stmt = conn.prepare("SELECT id, name, type, created_at FROM accounts ORDER BY name").map_err(|e| e.to_string())?;
+  let rows = stmt.query_map([], |row| {
+    let id: i64 = row.get(0)?;
+    let name: String = row.get(1)?;
+    let account_type: String = row.get(2)?;
+    let created_at: String = row.get(3)?;
+    // 거래 합계로 잔액 계산
+    let balance: f64 = conn.query_row(
+      "SELECT IFNULL(SUM(amount), 0) FROM transactions WHERE account_id = ?1",
+      params![id],
+      |r| r.get(0),
+    ).unwrap_or(0.0);
+    Ok(Account { id, name, account_type, balance, created_at })
   }).map_err(|e| e.to_string())?;
-  // Collect results
   let mut accounts = Vec::new();
   for account in rows {
-      accounts.push(account.map_err(|e| e.to_string())?);
+    accounts.push(account.map_err(|e| e.to_string())?);
   }
   Ok(accounts)
 }
@@ -252,36 +251,101 @@ pub fn get_transactions(app: AppHandle) -> Result<Vec<Transaction>, String> {
 pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Vec<Transaction>, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
-    conn.execute(
-        "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![
-            transaction.date,
-            transaction.account_id,
-            transaction.transaction_type,
-            transaction.category,
-            transaction.amount,
-            transaction.payee,
-            transaction.notes.clone().unwrap_or_default()
-        ],
-    )
-    .map_err(|e| e.to_string())?;
-    let balance_change = if transaction.transaction_type == "expense" {
-        -transaction.amount
-    } else if transaction.transaction_type == "transfer" {
-        // Transfer Out은 음수, Transfer In은 양수로 처리
-        if transaction.category == "Transfer Out" {
+    
+    if transaction.transaction_type == "transfer" {
+        // Transfer 거래: 출발 계좌에서 도착 계좌로 자금 이동
+        // payee 형식: "from_account_id → to_account_id | description"
+        let parts: Vec<&str> = transaction.payee.split(" | ").collect();
+        if parts.len() != 2 {
+            return Err("Invalid transfer format. Expected 'from_account_id → to_account_id | description'".to_string());
+        }
+        
+        let account_part = parts[0];
+        let description = parts[1];
+        
+        let account_ids: Vec<i64> = account_part
+            .split(" → ")
+            .filter_map(|s| s.trim().parse::<i64>().ok())
+            .collect();
+        
+        if account_ids.len() != 2 {
+            return Err("Invalid account IDs in transfer".to_string());
+        }
+        
+        let from_account_id = account_ids[0];
+        let to_account_id = account_ids[1];
+        let transfer_amount = transaction.amount.abs();
+        
+        // 출발 계좌에서 Transfer 거래 생성 (음수)
+        conn.execute(
+            "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                transaction.date,
+                from_account_id,
+                "transfer",
+                "Transfer", // 단일 카테고리 사용
+                -transfer_amount, // 출발 계좌는 차감
+                format!("To: {}", description),
+                transaction.notes.clone().unwrap_or_default()
+            ],
+        ).map_err(|e| e.to_string())?;
+        
+        // 출발 계좌 잔액 차감
+        conn.execute(
+            "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
+            params![-transfer_amount, from_account_id],
+        ).map_err(|e| e.to_string())?;
+        
+        // 도착 계좌에서 Transfer 거래 생성 (양수)
+        conn.execute(
+            "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                transaction.date,
+                to_account_id,
+                "transfer",
+                "Transfer", // 단일 카테고리 사용
+                transfer_amount, // 도착 계좌는 증가
+                format!("From: {}", description),
+                transaction.notes.unwrap_or_default()
+            ],
+        ).map_err(|e| e.to_string())?;
+        
+        // 도착 계좌 잔액 증가
+        conn.execute(
+            "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
+            params![transfer_amount, to_account_id],
+        ).map_err(|e| e.to_string())?;
+        
+    } else {
+        // 일반 거래 처리
+        conn.execute(
+            "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                transaction.date,
+                transaction.account_id,
+                transaction.transaction_type,
+                transaction.category,
+                transaction.amount,
+                transaction.payee,
+                transaction.notes.clone().unwrap_or_default()
+            ],
+        ).map_err(|e| e.to_string())?;
+        
+        let balance_change = if transaction.transaction_type == "expense" {
             -transaction.amount
+        } else if transaction.transaction_type == "adjust" {
+            // Adjust 거래는 이미 올바른 부호로 저장되어 있음
+            transaction.amount
         } else {
             transaction.amount
-        }
-    } else {
-        transaction.amount
-    };
-    conn.execute(
-        "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-        params![balance_change, transaction.account_id],
-    )
-    .map_err(|e| e.to_string())?;
+        };
+        
+        conn.execute(
+            "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
+            params![balance_change, transaction.account_id],
+        ).map_err(|e| e.to_string())?;
+    }
+    
     get_transactions(app)
 }
 
@@ -299,14 +363,22 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let old_effect = if old_type == "expense" { 
         -old_amount 
     } else if old_type == "transfer" {
-        if old_category == "Transfer Out" { -old_amount } else { old_amount }
+        // Transfer 거래는 이미 올바른 부호로 저장되어 있음
+        old_amount
+    } else if old_type == "adjust" {
+        // Adjust 거래는 이미 올바른 부호로 저장되어 있음
+        old_amount
     } else { 
         old_amount 
     };
     let new_effect = if transaction.transaction_type == "expense" { 
         -transaction.amount 
     } else if transaction.transaction_type == "transfer" {
-        if transaction.category == "Transfer Out" { -transaction.amount } else { transaction.amount }
+        // Transfer 거래는 이미 올바른 부호로 저장되어 있음
+        transaction.amount
+    } else if transaction.transaction_type == "adjust" {
+        // Adjust 거래는 이미 올바른 부호로 저장되어 있음
+        transaction.amount
     } else { 
         transaction.amount 
     };
@@ -350,7 +422,11 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
     let balance_change = if old_type == "expense" { 
         old_amount 
     } else if old_type == "transfer" {
-        if old_category == "Transfer Out" { old_amount } else { -old_amount }
+        // Transfer 거래 삭제 시: 반대 부호로 처리
+        -old_amount
+    } else if old_type == "adjust" {
+        // Adjust 거래 삭제 시: 반대 부호로 처리
+        -old_amount
     } else { 
         -old_amount 
     };
@@ -451,6 +527,24 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
         }
         set
     };
+    
+    // Transfer 거래 정보를 추적하기 위한 추가 키셋
+    let transfer_keys: HashSet<(String, i64)> = {
+        let mut stmt = tx.prepare("SELECT date, amount FROM transactions WHERE type = 'transfer'").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            let date: String = row.get(0)?;
+            let amt: f64 = row.get(1)?;
+            let cents = (amt * 100.0).round() as i64;
+            Ok((date, cents))
+        }).map_err(|e| e.to_string())?;
+        let mut set = HashSet::new();
+        for entry in rows {
+            let key = entry.map_err(|e| e.to_string())?;
+            set.insert(key);
+        }
+        set
+    };
+
     for mut t in transactions {
         if t.date.is_empty() { return Err("Missing date".into()); }
         // Auto-fill category from existing transactions matching description
@@ -466,9 +560,20 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
         // Skip duplicates only if matching a pre-existing record (date, amount, payee)
         let cents = (t.amount * 100.0).round() as i64;
         let key = (t.date.clone(), cents, t.payee.clone());
+        
+        // 일반 중복 체크
         if existing_keys.contains(&key) {
             continue;
         }
+        
+        // Transfer 거래와의 중복 체크 (같은 날짜, 같은 금액)
+        let transfer_key = (t.date.clone(), cents);
+        if transfer_keys.contains(&transfer_key) {
+            // Transfer 거래가 이미 있는 경우, 사용자에게 경고를 주기 위해 특별한 처리
+            // 여기서는 건너뛰지만, 실제로는 사용자가 선택할 수 있도록 UI에서 처리하는 것이 좋음
+            continue;
+        }
+        
         // Insert new transaction
         tx.execute(
             "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -477,12 +582,15 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
         let balance_change = if t.transaction_type == "expense" {
             -t.amount
         } else if t.transaction_type == "transfer" {
-            // Transfer Out은 음수, Transfer In은 양수로 처리
-            if t.category == "Transfer Out" {
-                -t.amount
-            } else {
-                t.amount
-            }
+            // Transfer 거래는 이미 올바른 부호로 저장되어 있음
+            // Transfer Out: 음수 금액 (잔액 차감)
+            // Transfer In: 양수 금액 (잔액 증가)
+            t.amount
+        } else if t.transaction_type == "adjust" {
+            // Adjust 거래는 이미 올바른 부호로 저장되어 있음
+            // Subtract: 음수 금액 (잔액 차감)
+            // Add: 양수 금액 (잔액 증가)
+            t.amount
         } else {
             t.amount
         };

@@ -38,7 +38,6 @@ const AccountForm: React.FC<AccountFormProps> = ({
   const [formData, setFormData] = useState<Partial<Account>>({
     name: '',
     type: 'checking' as AccountType,
-    balance: 0,
   });
 
   useEffect(() => {
@@ -46,13 +45,11 @@ const AccountForm: React.FC<AccountFormProps> = ({
       setFormData({
         name: account.name,
         type: account.type,
-        balance: account.balance,
       });
     } else {
       setFormData({
         name: '',
         type: 'checking' as AccountType,
-        balance: 0,
       });
     }
   }, [account]);
@@ -61,7 +58,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
     const { name, value } = event.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'balance' ? parseFloat(value) : value,
+      [name]: value,
     }));
   };
 
@@ -104,13 +101,15 @@ const AccountForm: React.FC<AccountFormProps> = ({
               </Select>
             </FormControl>
 
-            <TextField
-            fullWidth
-            label="Balance"
-            value={formatCurrency(formData.balance || 0)}
-            InputProps={{ readOnly: true }}
-            disabled
-            />
+            {account && (
+              <TextField
+                fullWidth
+                label="Current Balance"
+                value={formatCurrency(account.balance || 0)}
+                InputProps={{ readOnly: true }}
+                disabled
+              />
+            )}
           </Box>
         </DialogContent>
         <DialogActions>

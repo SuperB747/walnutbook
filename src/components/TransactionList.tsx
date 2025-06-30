@@ -189,14 +189,15 @@ const TransactionList: React.FC<TransactionListProps> = ({
     if (transaction.type === 'income') {
       return Math.abs(transaction.amount);
     }
-    if (transaction.type === 'transfer' || transaction.type === 'adjust') {
-      if (transaction.category === 'Transfer Out' || transaction.category === 'Subtract') {
+    if (transaction.type === 'adjust') {
+      if (transaction.category === 'Subtract') {
         return -Math.abs(transaction.amount);
       }
-      if (transaction.category === 'Transfer In' || transaction.category === 'Add') {
+      if (transaction.category === 'Add') {
         return Math.abs(transaction.amount);
       }
     }
+    // Transfer는 저장된 부호 그대로 표시 (출발 계좌는 음수, 도착 계좌는 양수)
     return transaction.amount;
   };
 
@@ -425,41 +426,34 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     )}
                   </TableCell>
                   <TableCell sx={{ width: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>
-                    <Select
-                      value={transaction.category}
-                      size="small"
-                      variant="standard"
-                      disableUnderline
-                      onChange={(e) => onCategoryChange(transaction.id, e.target.value as string)}
-                      sx={{
-                        width: '100%',
-                        height: '24px',
-                        padding: '0 4px',
-                        fontSize: '0.9rem',
-                        '.MuiSelect-icon': { fontSize: '1rem', right: 4 },
-                      }}
-                    >
-                      {fullCategories
-                        .filter(c => {
-                          if (transaction.type === 'adjust') {
-                            return c.type === 'adjust';
-                          } else if (transaction.type === 'transfer') {
-                            return c.type === 'transfer';
-                          } else if (transaction.type === 'income') {
-                            return c.type === 'income';
-                          } else if (transaction.type === 'expense') {
-                            return c.type === 'expense';
-                          }
-                          return c.type === transaction.type;
-                        })
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map(c => (
-                          <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
-                        ))}
-                      {categories.includes('Uncategorized') && (
-                        <MenuItem key="Uncategorized" value="Uncategorized">Uncategorized</MenuItem>
-                      )}
-                    </Select>
+                    {(transaction.type === 'income' || transaction.type === 'expense') ? (
+                      <Select
+                        value={transaction.category}
+                        size="small"
+                        variant="standard"
+                        disableUnderline
+                        onChange={(e) => onCategoryChange(transaction.id, e.target.value as string)}
+                        sx={{
+                          width: '100%',
+                          height: '24px',
+                          padding: '0 4px',
+                          fontSize: '0.9rem',
+                          '.MuiSelect-icon': { fontSize: '1rem', right: 4 },
+                        }}
+                      >
+                        {fullCategories
+                          .filter(c => c.type === transaction.type)
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(c => (
+                            <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
+                          ))}
+                        {categories.includes('Uncategorized') && (
+                          <MenuItem key="Uncategorized" value="Uncategorized">Uncategorized</MenuItem>
+                        )}
+                      </Select>
+                    ) : (
+                      ''
+                    )}
                   </TableCell>
                   <TableCell sx={{ width: 100, whiteSpace: 'nowrap', px: 1 }}>
                     <Typography
@@ -475,14 +469,18 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   </TableCell>
                   <TableCell sx={{ width: 100, whiteSpace: 'nowrap', px: 1 }}>
                     <Chip
-                      label={transaction.type}
+                      label={transaction.type === 'adjust' ? 'Adjust' : transaction.type}
                       size="small"
                       color={
-                        transaction.type === 'income' ? 'success' :
-                        transaction.type === 'expense' ? 'error' :
-                        transaction.type === 'adjust' && transaction.category === 'Subtract' ? 'error' :
-                        transaction.type === 'adjust' && transaction.category === 'Add' ? 'success' :
-                        'info'
+                        transaction.type === 'adjust'
+                          ? getDisplayAmount(transaction) < 0
+                            ? 'error'
+                            : 'info'
+                          : transaction.type === 'income'
+                            ? 'success'
+                            : transaction.type === 'expense'
+                              ? 'error'
+                              : 'info'
                       }
                     />
                   </TableCell>

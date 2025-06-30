@@ -165,6 +165,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   const [selectedFormat, setSelectedFormat] = useState<string>('csv');
   const [removeDuplicates, setRemoveDuplicates] = useState(true);
   const [duplicatesFound, setDuplicatesFound] = useState(0);
+  const [transferConflicts, setTransferConflicts] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<number | null>(null);
   const [importStatus, setImportStatus] = useState<ImportStatus>({
@@ -606,6 +607,31 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       notes: transaction.notes || '',
       account_id: selectedAccount || 0
     };
+  };
+
+  // Helper function to check for transfer conflicts
+  const checkTransferConflicts = (
+    newTransactions: Partial<Transaction>[],
+    existingTransactions: Transaction[]
+  ): number => {
+    let conflicts = 0;
+    
+    for (const newTx of newTransactions) {
+      if (!newTx.date || !newTx.amount) continue;
+      
+      // Check if there's a transfer transaction on the same date with the same amount
+      const existingTransfer = existingTransactions.find(existing => 
+        existing.type === 'transfer' &&
+        existing.date === newTx.date &&
+        Math.abs(existing.amount) === Math.abs(newTx.amount || 0)
+      );
+      
+      if (existingTransfer) {
+        conflicts++;
+      }
+    }
+    
+    return conflicts;
   };
 
   return (

@@ -46,17 +46,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 }) => {
   const [formData, setFormData] = useState<Partial<Transaction>>({
     date: format(new Date(), 'yyyy-MM-dd'),
-    type: transaction?.type || 'expense' as TransactionType,
+    account_id: accounts[0]?.id,
+    type: 'expense',
+    category: '',
     amount: undefined,
     payee: '',
-    category: '',
     notes: '',
-    account_id: accounts[0]?.id,
   });
-
+  const [amountInputValue, setAmountInputValue] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [allCategories, setAllCategories] = useState<FullCategory[]>([]);
-  const [amountInputValue, setAmountInputValue] = useState<string>('');
+  const [toAccountId, setToAccountId] = useState<number | undefined>(undefined);
 
   // Load all categories with type when dialog opens
   const loadCategoriesFull = async () => {
@@ -103,24 +103,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.date) {
-      newErrors.date = 'Please select a date';
-    }
-    if (!formData.account_id) {
-      newErrors.account_id = 'Please select an account';
-    }
-    if (!formData.payee) {
-      newErrors.payee = 'Please enter a payee';
-    }
-    if (!formData.category) {
-      newErrors.category = 'Please select a category';
-    }
-
-    // 입력값(양수) 기준으로 검사
-    const inputAmount = parseFloat(amountInputValue);
-    if (isNaN(inputAmount) || inputAmount <= 0) {
-      newErrors.amount = 'Please enter an amount';
-    }
+    if (!formData.date) newErrors.date = 'Date is required';
+    if (!formData.payee) newErrors.payee = 'Payee is required';
+    if (!formData.account_id) newErrors.account_id = 'Account is required';
+    if (!formData.type) newErrors.type = 'Type is required';
+    if (!formData.category) newErrors.category = 'Category is required';
+    if (!formData.amount || formData.amount === 0) newErrors.amount = 'Amount is required';
+    if (formData.type === 'transfer' && !toAccountId) newErrors.toAccount = 'To Account is required';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -130,10 +119,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (amount === undefined) return amount;
     if (type === 'expense') return -Math.abs(amount);
     if (type === 'income') return Math.abs(amount);
-    if (type === 'transfer' || type === 'adjust') {
-      if (category === 'Transfer Out' || category === 'Subtract') return -Math.abs(amount);
-      if (category === 'Transfer In' || category === 'Add') return Math.abs(amount);
+    if (type === 'transfer') {
+      // Transfer는 항상 양수로 처리 (백엔드에서 출발/도착 계좌에 따라 부호 결정)
+      return Math.abs(amount);
     }
+    // Adjust는 부호 보정 없이 입력값 그대로 사용
+    if (type === 'adjust') return amount;
     return amount;
   };
 
@@ -155,7 +146,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       if (value === 'adjust') {
         updates.category = 'Add';
       } else if (value === 'transfer') {
-        updates.category = 'Transfer Out';
+        updates.category = 'Transfer';
       }
     }
 
@@ -167,7 +158,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     // Handle numeric values
     if (name === 'amount') {
-      updates.amount = fixAmountSign(parseFloat(value) || 0, formData.type, formData.category);
+      if (formData.type === 'adjust') {
+        updates.amount = parseFloat(value) || 0;
+      } else {
+        updates.amount = fixAmountSign(parseFloat(value) || 0, formData.type, formData.category);
+      }
     }
 
     setFormData(prev => ({ ...prev, ...updates }));
@@ -203,25 +198,34 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
-      // 마지막으로 부호 보정 후 저장
-      const fixed = {
+      let finalTransaction = {
         ...formData,
         amount: fixAmountSign(formData.amount, formData.type, formData.category)
       };
-      await onSave(fixed);
+      // Transfer 거래의 경우 payee 필드에 계좌 ID 정보 저장
+      if (formData.type === 'transfer' && toAccountId) {
+        const description = formData.payee || 'Transfer';
+        finalTransaction.payee = `${formData.account_id} → ${toAccountId} | ${description}`;
+      }
+      // Adjust 거래는 category를 저장하지 않음
+      if (formData.type === 'adjust') {
+        finalTransaction.category = '';
+      }
+      await onSave(finalTransaction);
     }
   };
 
   // Filter categories based on selected type
   const filteredCategories = useMemo(() => {
-    return allCategories.filter(cat => {
-      if (formData.type === 'adjust') {
-        return cat.type === 'adjust';
-      } else if (formData.type === 'transfer') {
-        return cat.type === 'transfer';
-      }
-      return cat.type === formData.type;
-    });
+    if (formData.type === 'transfer') {
+      // Transfer는 단일 카테고리 사용
+      return [{ id: 0, name: 'Transfer', type: 'transfer' as const }];
+    }
+    // Adjust는 카테고리 없음
+    if (formData.type === 'adjust') {
+      return [];
+    }
+    return allCategories.filter(cat => cat.type === formData.type);
   }, [allCategories, formData.type]);
 
   return (
@@ -248,16 +252,30 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 />
               </Grid>
               <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Payee"
-                  name="payee"
-                  value={formData.payee}
-                  onChange={handlePayeeChange}
-                  required
-                  error={!!errors.payee}
-                  helperText={errors.payee}
-                />
+                {formData.type === 'transfer' ? (
+                  <TextField
+                    fullWidth
+                    label="Transfer Description"
+                    name="payee"
+                    value={formData.payee}
+                    onChange={handlePayeeChange}
+                    required
+                    error={!!errors.payee}
+                    helperText={errors.payee}
+                    placeholder="e.g., Monthly transfer to savings"
+                  />
+                ) : (
+                  <TextField
+                    fullWidth
+                    label="Payee"
+                    name="payee"
+                    value={formData.payee}
+                    onChange={handlePayeeChange}
+                    required
+                    error={!!errors.payee}
+                    helperText={errors.payee}
+                  />
+                )}
               </Grid>
               <Grid item xs={12}>
                 <FormControl fullWidth required error={!!errors.account_id}>
@@ -279,6 +297,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   )}
                 </FormControl>
               </Grid>
+              {formData.type === 'transfer' && (
+                <Grid item xs={12}>
+                  <FormControl fullWidth required error={!!errors.toAccount}>
+                    <InputLabel>To Account</InputLabel>
+                    <Select
+                      value={toAccountId?.toString() || ''}
+                      onChange={(e) => setToAccountId(parseInt(e.target.value, 10))}
+                      label="To Account"
+                    >
+                      {accounts
+                        .filter(account => account.id !== formData.account_id)
+                        .map((account) => (
+                          <MenuItem key={account.id} value={account.id.toString()}>
+                            {account.name}
+                          </MenuItem>
+                        ))}
+                    </Select>
+                    {errors.toAccount && (
+                      <FormHelperText>{errors.toAccount}</FormHelperText>
+                    )}
+                  </FormControl>
+                </Grid>
+              )}
               <Grid item xs={12}>
                 <FormControl fullWidth required error={!!errors.type}>
                   <InputLabel>Type</InputLabel>
@@ -316,7 +357,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       <Chip 
                         label="Adjust" 
                         size="small" 
-                        color="info" 
+                        color={formData.type === 'adjust' && Number(formData.amount) < 0 ? 'error' : 'info'}
                         sx={{ minWidth: 80 }}
                       />
                     </MenuItem>
@@ -326,43 +367,45 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   )}
                 </FormControl>
               </Grid>
-              <Grid item xs={12}>
-                <FormControl fullWidth required error={!!errors.category}>
-                  <InputLabel>Category</InputLabel>
-                  <Select
-                    name="category"
-                    value={formData.category || ''}
-                    onChange={handleChange}
-                    label="Category"
-                    MenuProps={{
-                      PaperProps: {
-                        style: {
-                          maxHeight: 300
-                        }
-                      },
-                      slotProps: {
-                        paper: {
+              {formData.type !== 'transfer' && formData.type !== 'adjust' && (
+                <Grid item xs={12}>
+                  <FormControl fullWidth required error={!!errors.category}>
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      name="category"
+                      value={formData.category || ''}
+                      onChange={handleChange}
+                      label="Category"
+                      MenuProps={{
+                        PaperProps: {
                           style: {
-                            zIndex: 9999
+                            maxHeight: 300
+                          }
+                        },
+                        slotProps: {
+                          paper: {
+                            style: {
+                              zIndex: 9999
+                            }
                           }
                         }
-                      }
-                    }}
-                  >
-                    <MenuItem value="">
-                      <em>Select a category</em>
-                    </MenuItem>
-                    {filteredCategories.map(category => (
-                      <MenuItem key={category.id} value={category.name}>
-                        {category.name}
+                      }}
+                    >
+                      <MenuItem value="">
+                        <em>Select a category</em>
                       </MenuItem>
-                    ))}
-                  </Select>
-                  {errors.category && (
-                    <FormHelperText>{errors.category}</FormHelperText>
-                  )}
-                </FormControl>
-              </Grid>
+                      {filteredCategories.map(category => (
+                        <MenuItem key={category.id} value={category.name}>
+                          {category.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    {errors.category && (
+                      <FormHelperText>{errors.category}</FormHelperText>
+                    )}
+                  </FormControl>
+                </Grid>
+              )}
               <Grid item xs={12}>
                 <TextField
                   name="amount"
@@ -371,7 +414,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   onChange={(e) => {
                     const value = e.target.value;
                     setAmountInputValue(value);
-                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                    if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
                       let amount = value === '' ? undefined : parseFloat(value);
                       // type과 category에 따라 부호 결정
                       if (amount !== undefined && amount !== 0) {
@@ -379,13 +422,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           amount = -Math.abs(amount);
                         } else if (formData.type === 'income') {
                           amount = Math.abs(amount);
-                        } else if (formData.type === 'transfer' || formData.type === 'adjust') {
-                          if (formData.category === 'Transfer Out' || formData.category === 'Subtract') {
-                            amount = -Math.abs(amount);
-                          } else if (formData.category === 'Transfer In' || formData.category === 'Add') {
-                            amount = Math.abs(amount);
-                          }
-                        }
+                        } else if (formData.type === 'transfer') {
+                          // Transfer는 항상 양수로 처리 (백엔드에서 출발/도착 계좌에 따라 부호 결정)
+                          amount = Math.abs(amount);
+                        } // adjust는 부호 보정 없이 그대로
                       }
                       setFormData(prev => ({ ...prev, amount }));
                       if (errors.amount) {
