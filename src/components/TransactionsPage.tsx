@@ -321,7 +321,10 @@ const TransactionsPage: React.FC = () => {
 
       <CategoryManagementDialog
         open={categoriesOpen}
-        onClose={() => setCategoriesOpen(false)}
+        onClose={() => {
+          setCategoriesOpen(false);
+          loadCategories();
+        }}
         onChange={loadCategories}
       />
 
