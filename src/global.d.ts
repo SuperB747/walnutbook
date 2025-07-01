@@ -126,12 +126,7 @@ declare module 'ofx' {
   export function parse(content: string): OFXData;
 }
 
-interface CategoryRule {
-  id: number;
-  pattern: string;
-  category: string;
-  created_at: string;
-}
+
 
 interface Budget {
   id: number;

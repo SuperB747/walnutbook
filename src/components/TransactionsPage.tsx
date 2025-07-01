@@ -27,7 +27,7 @@ import ImportExportDialog from './ImportExportDialog';
 
 import CategoryManagementDialog from './CategoryManagementDialog';
 import BackupRestoreDialog from './BackupRestoreDialog';
-import { Transaction, Account, CategoryRule } from '../db';
+import { Transaction, Account } from '../db';
 import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
 

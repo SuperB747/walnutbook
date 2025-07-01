@@ -31,12 +31,7 @@ export interface Category {
   type: CategoryType;
 }
 
-export interface CategoryRule {
-  id: number;
-  pattern: string;
-  category: string;
-  created_at: string;
-}
+
 
 export interface Budget {
   id: number;
@@ -84,12 +79,7 @@ const SCHEMA = `
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
-  CREATE TABLE IF NOT EXISTS category_rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pattern TEXT NOT NULL,
-    category TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
+
 `;
 
 // Add initial data
@@ -364,53 +354,7 @@ export async function deleteAccount(id: number): Promise<void> {
   }
 }
 
-// Category rules
-export async function getCategoryRules(): Promise<CategoryRule[]> {
-  const db = getDatabase();
-  return db.prepare('SELECT * FROM category_rules').all() as CategoryRule[];
-}
 
-export async function addCategoryRule(rule: Omit<CategoryRule, 'id' | 'created_at'>): Promise<void> {
-  const db = getDatabase();
-
-  try {
-    db.prepare(`
-      INSERT INTO category_rules (pattern, category, created_at)
-      VALUES (?, ?, CURRENT_TIMESTAMP)
-    `).run(rule.pattern, rule.category);
-  } catch (error) {
-    console.error('Error adding category rule:', error);
-    throw error;
-  }
-}
-
-export async function deleteCategoryRule(id: number): Promise<void> {
-  const db = getDatabase();
-
-  try {
-    db.prepare('DELETE FROM category_rules WHERE id = ?').run(id);
-  } catch (error) {
-    console.error('Error deleting category rule:', error);
-    throw error;
-  }
-}
-
-export async function findMatchingCategory(payee: string): Promise<string | null> {
-  const db = getDatabase();
-
-  try {
-    const rules = await getCategoryRules();
-    for (const rule of rules) {
-      if (payee.toLowerCase().includes(rule.pattern.toLowerCase())) {
-        return rule.category;
-      }
-    }
-    return null;
-  } catch (error) {
-    console.error('Error finding matching category:', error);
-    throw error;
-  }
-}
 
 // Bulk operations
 export async function bulkUpdateTransactions(updates: { id: number; changes: Partial<Transaction> }[]): Promise<void> {

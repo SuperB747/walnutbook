@@ -5,7 +5,7 @@ use serde::{Serialize, Deserialize};
 use serde_json::{Value, json};
 use std::env;
 use std::fs;
-use std::collections::HashSet;
+
 
 /// Helper: get path to SQLite database
 fn get_db_path(app: &AppHandle) -> PathBuf {
@@ -45,12 +45,7 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE TABLE IF NOT EXISTS category_rules (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      pattern TEXT NOT NULL,
-      category TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
+
     CREATE TABLE IF NOT EXISTS budgets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       category TEXT NOT NULL,
@@ -149,8 +144,7 @@ pub struct Transaction {
   pub created_at: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct CategoryRule { pub id: i64, pub pattern: String, pub category: String, pub created_at: String }
+
 
 #[derive(Serialize, Deserialize)]
 pub struct Budget { pub id: i64, pub category: String, pub amount: f64, pub month: String, pub notes: Option<String>, pub created_at: String }
@@ -601,34 +595,6 @@ pub fn bulk_update_transactions(app: AppHandle, updates: Vec<(i64, Value)>) -> R
         update_transaction(app.clone(), updated)?;
     }
     get_transactions(app)
-}
-
-#[tauri::command]
-pub fn get_category_rules(app: AppHandle) -> Result<Vec<CategoryRule>, String> {
-    let path = get_db_path(&app);
-    let conn = Connection::open(path).map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare("SELECT id, pattern, category, created_at FROM category_rules ORDER BY id").map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], |row| Ok(CategoryRule {
-        id: row.get(0)?, pattern: row.get(1)?, category: row.get(2)?, created_at: row.get(3)?,
-    })).map_err(|e| e.to_string())?;
-    let mut rules = Vec::new(); for r in rows { rules.push(r.map_err(|e| e.to_string())?); }
-    Ok(rules)
-}
-
-#[tauri::command]
-pub fn add_category_rule(app: AppHandle, pattern: String, category: String) -> Result<Vec<CategoryRule>, String> {
-    let path = get_db_path(&app);
-    let conn = Connection::open(path).map_err(|e| e.to_string())?;
-    conn.execute("INSERT INTO category_rules (pattern, category) VALUES (?1, ?2)", params![pattern, category]).map_err(|e| e.to_string())?;
-    get_category_rules(app)
-}
-
-#[tauri::command]
-pub fn delete_category_rule(app: AppHandle, id: i64) -> Result<Vec<CategoryRule>, String> {
-    let path = get_db_path(&app);
-    let conn = Connection::open(path).map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM category_rules WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
-    get_category_rules(app)
 }
 
 
