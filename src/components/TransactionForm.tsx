@@ -184,20 +184,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
-  const handlePayeeChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePayeeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const payee = event.target.value;
     setFormData(prev => ({ ...prev, payee }));
-
-    if (payee && !transaction) {
-      try {
-        const category = await invoke<string>('find_matching_category', { payee });
-        if (category) {
-          setFormData(prev => ({ ...prev, category }));
-        }
-      } catch (error) {
-        console.error('Error finding matching category:', error);
-      }
-    }
   };
 
   const formatAmount = (amount: number | undefined): string => {

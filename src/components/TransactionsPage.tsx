@@ -24,7 +24,7 @@ import TransactionForm from './TransactionForm';
 import BulkTransactionEdit from './BulkTransactionEdit';
 import TransactionSummary from './TransactionSummary';
 import ImportExportDialog from './ImportExportDialog';
-import AutoCategoryRules from './AutoCategoryRules';
+
 import CategoryManagementDialog from './CategoryManagementDialog';
 import BackupRestoreDialog from './BackupRestoreDialog';
 import { Transaction, Account, CategoryRule } from '../db';
@@ -44,9 +44,9 @@ const TransactionsPage: React.FC = () => {
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | undefined>();
   const [importExportOpen, setImportExportOpen] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
+
   const [categoriesOpen, setCategoriesOpen] = useState(false);
-  const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
+
   const [categories, setCategories] = useState<string[]>([]);
   const [snackbar, setSnackbar] = useState<SnackbarState>({
     open: false,
@@ -65,7 +65,7 @@ const TransactionsPage: React.FC = () => {
   useEffect(() => {
     loadTransactions();
     loadAccounts();
-    loadCategoryRules();
+
     loadCategories();
   }, []);
 
@@ -89,15 +89,7 @@ const TransactionsPage: React.FC = () => {
     }
   };
 
-  const loadCategoryRules = async (): Promise<void> => {
-    try {
-      const rules = await invoke('get_category_rules') as CategoryRule[];
-      setCategoryRules(rules);
-    } catch (error) {
-      console.error('Failed to load category rules:', error);
-      showSnackbar('Failed to load category rules', 'error');
-    }
-  };
+
 
   const loadCategories = async (): Promise<void> => {
     try {
@@ -241,9 +233,7 @@ const TransactionsPage: React.FC = () => {
           <MenuItem onClick={() => { setImportExportOpen(true); closeActionsMenu(); }}>
             Import/Export
           </MenuItem>
-          <MenuItem onClick={() => { setRulesOpen(true); closeActionsMenu(); }}>
-            Auto-Category Rules
-          </MenuItem>
+
           <MenuItem onClick={() => { setBackupOpen(true); closeActionsMenu(); }}>
             Backup & Restore
           </MenuItem>
@@ -313,12 +303,7 @@ const TransactionsPage: React.FC = () => {
         onImport={handleImport}
       />
 
-      <AutoCategoryRules
-        open={rulesOpen}
-        rules={categoryRules}
-        onClose={() => setRulesOpen(false)}
-        onRulesChange={loadCategoryRules}
-      />
+
 
       <CategoryManagementDialog
         open={categoriesOpen}

@@ -631,12 +631,7 @@ pub fn delete_category_rule(app: AppHandle, id: i64) -> Result<Vec<CategoryRule>
     get_category_rules(app)
 }
 
-#[tauri::command]
-pub fn find_matching_category(app: AppHandle, payee: String) -> Result<Option<String>, String> {
-    let rules = get_category_rules(app.clone())?;
-    for rule in rules { if payee.to_lowercase().contains(&rule.pattern.to_lowercase()) { return Ok(Some(rule.category)); } }
-    Ok(None)
-}
+
 
 #[tauri::command]
 pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Result<Vec<Transaction>, String> {

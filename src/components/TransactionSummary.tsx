@@ -121,12 +121,14 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     
     // 카테고리별 지출 합계 계산
     const expensesByCategory = monthExpenses.reduce((acc, transaction) => {
-      const category = transaction.category || 'Uncategorized';
+      const category = transaction.category && transaction.category.trim() !== '' ? transaction.category : 'Uncategorized';
+      console.log(`Processing transaction: category="${transaction.category}" -> normalized="${category}"`);
       acc[category] = (acc[category] || 0) + transaction.amount;
       return acc;
     }, {} as Record<string, number>);
     
     console.log('Expenses by category:', expensesByCategory);
+    console.log('All categories found:', Object.keys(expensesByCategory));
     
     // 금액 순으로 정렬
     const sortedCategories = Object.entries(expensesByCategory)
@@ -265,7 +267,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
 
   // 범례 분할 (퍼센테이지 순으로 정렬)
   const sortedLabels = useMemo(() => {
-    return categoryExpenses.labels
+    const result = categoryExpenses.labels
       .map((label, index) => ({
         label,
         percentage: categoryPercentages[label] || 0,
@@ -274,6 +276,9 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       .filter(item => item.label !== null)
       .sort((a, b) => b.percentage - a.percentage)
       .map(item => item.label as string);
+    
+    console.log('Sorted labels for legend:', result);
+    return result;
   }, [categoryExpenses, categoryPercentages]);
 
   const mid = Math.ceil(sortedLabels.length / 2);
