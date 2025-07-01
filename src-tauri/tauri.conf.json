@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "superbudget",
+  "productName": "Walnut Book",
   "version": "0.1.0",
-  "identifier": "com.superbudget.app",
+  "identifier": "com.walnutbook.app",
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:3000",
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "superbudget",
+        "title": "Walnut Book",
         "width": 800,
         "height": 600,
         "resizable": true,

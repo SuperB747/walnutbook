@@ -1,7 +1,7 @@
 {
-  "name": "superbudget",
+  "name": "walnut-book",
   "version": "1.0.0",
-  "description": "Personal budget management application",
+  "description": "Personal budget management application - Walnut Book",
   "main": "./build/index.js",
   "scripts": {
     "clean": "rimraf build",

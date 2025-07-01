@@ -1,6 +1,6 @@
-# SuperBudget
+# Walnut Book
 
-개인 재무 관리를 위한 데스크톱 애플리케이션입니다. Electron과 React를 사용하여 개발되었습니다.
+개인 재무 관리를 위한 데스크톱 애플리케이션입니다. Tauri와 React를 사용하여 개발되었습니다.
 
 ## 기능
 
@@ -21,8 +21,8 @@
 
 1. 저장소 클론:
 ```bash
-git clone https://github.com/[your-username]/superbudget.git
-cd superbudget
+git clone https://github.com/[your-username]/walnut-book.git
+cd walnut-book
 ```
 
 2. 의존성 설치:
@@ -47,11 +47,11 @@ npm run make
 
 ## 기술 스택
 
-- Electron
+- Tauri
 - React
 - TypeScript
 - Material-UI
-- SQL.js (SQLite)
+- SQLite (Rusqlite)
 - webpack
 
 ## 라이선스
