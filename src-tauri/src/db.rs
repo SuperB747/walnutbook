@@ -379,13 +379,30 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
 pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Vec<Transaction>, String> {
     // Open connection
     let path = get_db_path(&app);
-    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    let mut conn = Connection::open(path).map_err(|e| e.to_string())?;
     // Retrieve old transaction to adjust balance
     let mut sel = conn.prepare("SELECT type, amount, category FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
     let mut rows = sel.query_map(params![transaction.id], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, String>(2)?))
     }).map_err(|e| e.to_string())?;
-    let (old_type, old_amount, _old_category) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
+    let (old_type, _old_amount, _old_category) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
+
+    // 만약 트랜잭션 타입이 transfer로 변경되는 경우, 기존 트랜잭션을 삭제하고 create_transaction의 transfer 로직을 실행
+    if transaction.transaction_type == "transfer" && old_type != "transfer" {
+        // 기존 statement들을 drop하여 immutable borrow 해제
+        drop(rows);
+        drop(sel);
+        
+        // rusqlite 트랜잭션으로 묶기
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM transactions WHERE id = ?1", params![transaction.id]).map_err(|e| e.to_string())?;
+        // create_transaction의 transfer 로직 실행 (app, transaction)
+        // create_transaction은 app 핸들로 새 커넥션을 열기 때문에, 여기서는 직접 insert 쿼리를 실행해야 함
+        // 하지만, 간단하게 tx.commit() 후 create_transaction을 호출하는 방식으로 처리
+        tx.commit().map_err(|e| e.to_string())?;
+        return create_transaction(app, transaction);
+    }
+
     // 계좌 타입 조회
     let account_type: String = conn.query_row(
         "SELECT type FROM accounts WHERE id = ?1",
@@ -396,32 +413,32 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let old_effect = if account_type == "credit" {
         // Credit 계좌: 빚이 늘어나면 양수, 줄어들면 음수
         if old_type == "expense" { 
-            old_amount  // 빚 증가
+            _old_amount  // 빚 증가
         } else if old_type == "transfer" {
-            old_amount  // Transfer 거래는 이미 올바른 부호로 저장되어 있음
+            _old_amount  // Transfer 거래는 이미 올바른 부호로 저장되어 있음
         } else if old_type == "adjust" {
             if _old_category == "Subtract" {
-                old_amount  // 빚 증가
+                _old_amount  // 빚 증가
             } else {
-                -old_amount  // 빚 감소
+                -_old_amount  // 빚 감소
             }
         } else { 
-            -old_amount  // 빚 감소
+            -_old_amount  // 빚 감소
         }
     } else {
         // 일반 계좌: 기존 로직
         if old_type == "expense" { 
-            -old_amount 
+            -_old_amount 
         } else if old_type == "transfer" {
-            old_amount
+            _old_amount
         } else if old_type == "adjust" {
             if _old_category == "Subtract" {
-                -old_amount
+                -_old_amount
             } else {
-                old_amount
+                _old_amount
             }
         } else { 
-            old_amount 
+            _old_amount 
         }
     };
     

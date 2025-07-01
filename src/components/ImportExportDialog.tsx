@@ -320,8 +320,17 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     }
 
     // Determine transaction type based on amount
-    const type: TransactionType = transaction.amount < 0 ? 'expense' : 'income';
-    const amount = Math.abs(transaction.amount);
+    let type: TransactionType = transaction.type as TransactionType;
+    let amount = Number(transaction.amount);
+    if (!type) {
+      type = amount < 0 ? 'expense' : 'income';
+    }
+    if (type === 'expense') {
+      amount = -Math.abs(amount);
+    } else if (type === 'income') {
+      amount = Math.abs(amount);
+    }
+    // transfer/adjust 등은 별도 처리 가능
 
     // Return validated transaction
     return {
@@ -393,15 +402,8 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       setImportStatus({ status: 'processing', message: 'Importing transactions...' });
       const validTransactions: Partial<Transaction>[] = transactions
         .filter((t): t is ParsedTransaction => t.date !== null)
-        .map(t => ({
-          date: t.date!,            // non-null by filter
-          type: t.type,
-          amount: t.amount,
-          payee: t.payee,
-          category: t.category,
-          notes: t.notes,
-          account_id: selectedAccount
-        }));
+        .map(t => validateTransaction({ ...t, date: t.date! }))
+        .filter((t): t is Partial<Transaction> => !!t);
       await onImport(validTransactions);
       setImportStatus({ status: 'success', message: 'Import completed successfully' });
       setTimeout(() => {
