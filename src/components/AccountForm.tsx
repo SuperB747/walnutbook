@@ -12,8 +12,11 @@ import {
   InputLabel,
   Box,
   SelectChangeEvent,
+  Typography,
+  Divider,
 } from '@mui/material';
 import { Account, AccountType } from '../db';
+import { invoke } from '@tauri-apps/api/core';
 
 // Helper: format numbers as CAD currency with two decimal places, treating near-zero as zero
 const formatCurrency = (amount: number): string => {
@@ -39,6 +42,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
     name: '',
     type: 'checking' as AccountType,
   });
+  const [csvSignLogic, setCsvSignLogic] = useState<string>('standard');
 
   useEffect(() => {
     if (account) {
@@ -46,13 +50,28 @@ const AccountForm: React.FC<AccountFormProps> = ({
         name: account.name,
         type: account.type,
       });
+      // Load CSV import settings for existing account
+      loadCsvImportSettings(account.id);
     } else {
       setFormData({
         name: '',
         type: 'checking' as AccountType,
       });
+      setCsvSignLogic('standard');
     }
   }, [account]);
+
+  const loadCsvImportSettings = async (accountId: number) => {
+    try {
+      console.log('Loading CSV import settings for account:', accountId);
+      const logic = await invoke('get_csv_sign_logic_for_account', { accountId });
+      console.log('Loaded CSV sign logic:', logic);
+      setCsvSignLogic(logic as string);
+    } catch (error) {
+      console.warn('Failed to load CSV import settings:', error);
+      setCsvSignLogic('standard');
+    }
+  };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
@@ -70,7 +89,21 @@ const AccountForm: React.FC<AccountFormProps> = ({
   };
 
   const handleSubmit = async () => {
-    await onSave(formData);
+    try {
+      await onSave(formData);
+      
+      // Save CSV import settings if account exists
+      if (account) {
+        console.log('Saving CSV import settings:', { accountId: account.id, csvSignLogic });
+        await invoke('update_account_import_settings', { 
+          accountId: account.id, 
+          csvSignLogic 
+        });
+        console.log('CSV import settings saved successfully');
+      }
+    } catch (error) {
+      console.error('Failed to save account or CSV import settings:', error);
+    }
   };
 
   return (
@@ -100,6 +133,43 @@ const AccountForm: React.FC<AccountFormProps> = ({
               <MenuItem value="other">Other</MenuItem>
               </Select>
             </FormControl>
+
+            {account && (
+              <>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="h6" sx={{ mb: 1 }}>
+                  CSV Import Settings
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Configure how CSV files are interpreted for this account
+                </Typography>
+                <FormControl fullWidth>
+                  <InputLabel>CSV Sign Logic</InputLabel>
+                  <Select
+                    value={csvSignLogic}
+                    onChange={(e) => setCsvSignLogic(e.target.value)}
+                    label="CSV Sign Logic"
+                  >
+                    <MenuItem value="standard">
+                      <Box>
+                        <Typography variant="body2">Standard (BMO MC)</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Negative = Income, Positive = Expense
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="reversed">
+                      <Box>
+                        <Typography variant="body2">Reversed (PC MC)</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Negative = Expense, Positive = Income
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  </Select>
+                </FormControl>
+              </>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>

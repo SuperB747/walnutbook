@@ -114,12 +114,13 @@ const TransactionsPage: React.FC = () => {
     try {
       if (selectedTransaction) {
         await invoke('update_transaction', { transaction: { ...selectedTransaction, ...transaction } });
+        setFormOpen(false);
+        setSelectedTransaction(undefined);
       } else {
         await invoke('create_transaction', { transaction });
+        // Always keep the form open for new transactions (continuous mode)
       }
       await loadTransactions();
-      setFormOpen(false);
-      setSelectedTransaction(undefined);
       showSnackbar('Transaction saved successfully', 'success');
     } catch (error) {
       console.error('Failed to save transaction:', error);
@@ -248,7 +249,7 @@ const TransactionsPage: React.FC = () => {
           </MenuItem>
         </Menu>
       </Stack>
-
+      
       {/* Summary with month selector inside component */}
       <TransactionSummary
         monthTransactions={filteredByMonth}

@@ -239,7 +239,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           />
 
           <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Account</InputLabel>
+            <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Account</InputLabel>
             <Select
               multiple
               value={selectedAccounts}
@@ -266,7 +266,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           </FormControl>
 
           <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Type</InputLabel>
+            <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Type</InputLabel>
             <Select
               multiple
               value={selectedTypes}
@@ -283,7 +283,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
               )}
               MenuProps={{ MenuListProps: { dense: true } }}
             >
-              {['income', 'expense', 'transfer'].map((type) => (
+              {['income', 'expense', 'transfer', 'adjust'].map((type) => (
                 <MenuItem key={type} value={type} dense>
                   <Checkbox checked={selectedTypes.indexOf(type) > -1} size="small" />
                   <ListItemText primary={type.charAt(0).toUpperCase() + type.slice(1)} />
@@ -293,7 +293,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           </FormControl>
 
           <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Category</InputLabel>
+            <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Category</InputLabel>
             <Select
               multiple
               value={selectedCategories}

@@ -60,6 +60,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [allCategories, setAllCategories] = useState<FullCategory[]>([]);
   const [toAccountId, setToAccountId] = useState<number | undefined>(undefined);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  
+  // State to preserve values for continuous mode
+  const [preservedValues, setPreservedValues] = useState<Partial<Transaction>>({
+    date: format(new Date(), 'yyyy-MM-dd'),
+    account_id: accounts[0]?.id,
+    type: 'expense',
+    category: '',
+    payee: '',
+  });
 
   // Load all categories with type when dialog opens
   const loadCategoriesFull = async () => {
@@ -89,19 +98,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       });
       setAmountInputValue(transaction.amount?.toString() || '');
     } else {
+      // In continuous mode, preserve most fields and only reset amount and notes
       setFormData({
-        date: format(new Date(), 'yyyy-MM-dd'),
-        type: 'expense' as TransactionType,
+        ...preservedValues,
         amount: undefined,
-        payee: '',
-        category: '',
         notes: '',
-        account_id: accounts[0]?.id,
       });
       setAmountInputValue('');
     }
     setErrors({});
-  }, [transaction, accounts]);
+  }, [transaction, accounts, preservedValues]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -219,7 +225,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       }
       // Adjust 거래는 category를 그대로 저장 (백엔드에서 부호 결정에 사용)
       // category는 이미 'Add' 또는 'Subtract'로 설정되어 있음
+      
       await onSave(finalTransaction);
+      
+      // In continuous mode, preserve current values for next transaction
+      if (!transaction) {
+        setPreservedValues({
+          date: formData.date,
+          type: formData.type,
+          payee: formData.payee,
+          account_id: formData.account_id,
+          category: formData.category,
+        });
+      }
     }
   };
 
@@ -534,8 +552,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>Cancel</Button>
+          {!transaction && (
+            <Button onClick={onClose} variant="outlined">
+              Done
+            </Button>
+          )}
           <Button type="submit" variant="contained" color="primary">
-            {transaction ? 'Save Changes' : 'Add Transaction'}
+            {transaction ? 'Save Changes' : 'Add & Continue'}
           </Button>
         </DialogActions>
       </form>

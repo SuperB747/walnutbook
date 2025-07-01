@@ -59,6 +59,13 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS account_import_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL,
+      csv_sign_logic TEXT NOT NULL DEFAULT 'standard',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
+    );
   "#)?;
   // Migrate: add created_at to accounts if missing
   let _ = conn.execute(
@@ -150,6 +157,14 @@ pub struct Budget { pub id: i64, pub category: String, pub amount: f64, pub mont
 
 #[derive(Serialize, Deserialize)]
 pub struct Category { pub id: i64, pub name: String, #[serde(rename = "type")] pub category_type: String }
+
+#[derive(Serialize, Deserialize)]
+pub struct AccountImportSettings { 
+  pub id: i64, 
+  pub account_id: i64, 
+  pub csv_sign_logic: String, 
+  pub created_at: String 
+}
 
 // Tauri command stubs
 #[tauri::command]
@@ -899,4 +914,80 @@ pub fn import_database(app: AppHandle, data: Vec<u8>) -> Result<(), String> {
       Err(format!("Failed to write database file: {}", e))
     }
   }
+}
+
+// Account import settings management
+#[tauri::command]
+pub fn get_account_import_settings(app: AppHandle) -> Result<Vec<AccountImportSettings>, String> {
+  let path = get_db_path(&app);
+  let conn = Connection::open(path).map_err(|e| e.to_string())?;
+  let mut stmt = conn.prepare("SELECT id, account_id, csv_sign_logic, created_at FROM account_import_settings ORDER BY account_id").map_err(|e| e.to_string())?;
+  let rows = stmt.query_map([], |row| {
+    Ok(AccountImportSettings {
+      id: row.get(0)?,
+      account_id: row.get(1)?,
+      csv_sign_logic: row.get(2)?,
+      created_at: row.get(3)?,
+    })
+  }).map_err(|e| e.to_string())?;
+  let mut settings = Vec::new();
+  for setting in rows {
+    settings.push(setting.map_err(|e| e.to_string())?);
+  }
+  Ok(settings)
+}
+
+#[tauri::command]
+pub fn update_account_import_settings(app: AppHandle, account_id: i64, csv_sign_logic: String) -> Result<Vec<AccountImportSettings>, String> {
+  let path = get_db_path(&app);
+  let conn = Connection::open(path).map_err(|e| e.to_string())?;
+  
+  println!("[update_account_import_settings] Updating account {} with csv_sign_logic: {}", account_id, csv_sign_logic);
+  
+  // Check if settings exist for this account
+  let exists: i64 = conn.query_row(
+    "SELECT COUNT(*) FROM account_import_settings WHERE account_id = ?1",
+    params![account_id],
+    |r| r.get(0),
+  ).map_err(|e| e.to_string())?;
+  
+  println!("[update_account_import_settings] Settings exist: {}", exists);
+  
+  if exists > 0 {
+    // Update existing settings
+    println!("[update_account_import_settings] Updating existing settings");
+    conn.execute(
+      "UPDATE account_import_settings SET csv_sign_logic = ?1 WHERE account_id = ?2",
+      params![csv_sign_logic, account_id],
+    ).map_err(|e| e.to_string())?;
+  } else {
+    // Insert new settings
+    println!("[update_account_import_settings] Inserting new settings");
+    conn.execute(
+      "INSERT INTO account_import_settings (account_id, csv_sign_logic) VALUES (?1, ?2)",
+      params![account_id, csv_sign_logic],
+    ).map_err(|e| e.to_string())?;
+  }
+  
+  println!("[update_account_import_settings] Settings updated successfully");
+  get_account_import_settings(app)
+}
+
+#[tauri::command]
+pub fn get_csv_sign_logic_for_account(app: AppHandle, account_id: i64) -> Result<String, String> {
+  let path = get_db_path(&app);
+  let conn = Connection::open(path).map_err(|e| e.to_string())?;
+  
+  println!("[get_csv_sign_logic_for_account] Getting settings for account: {}", account_id);
+  
+  // Get the CSV sign logic for the account, default to 'standard' if not set
+  let csv_sign_logic: String = conn.query_row(
+    "SELECT csv_sign_logic FROM account_import_settings WHERE account_id = ?1",
+    params![account_id],
+    |r| r.get(0),
+  ).unwrap_or("standard".to_string());
+  
+  println!("[get_csv_sign_logic_for_account] Retrieved csv_sign_logic: {}", csv_sign_logic);
+  
+  Ok(csv_sign_logic)
 } 

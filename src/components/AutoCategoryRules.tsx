@@ -23,6 +23,7 @@ import {
   Add as AddIcon,
 } from '@mui/icons-material';
 import { CategoryRule } from '../db';
+import { invoke } from '@tauri-apps/api/core';
 
 export interface AutoCategoryRulesProps {
   open: boolean;
@@ -44,7 +45,7 @@ const AutoCategoryRules: React.FC<AutoCategoryRulesProps> = ({
     if (!newPattern || !newCategory) return;
 
     try {
-      await window.electron.invoke('addCategoryRule', {
+      await invoke('add_category_rule', {
         pattern: newPattern,
         category: newCategory,
       });
@@ -58,7 +59,7 @@ const AutoCategoryRules: React.FC<AutoCategoryRulesProps> = ({
 
   const handleDeleteRule = async (id: number) => {
     try {
-      await window.electron.invoke('deleteCategoryRule', id);
+      await invoke('delete_category_rule', { id });
       await onRulesChange();
     } catch (error) {
       console.error('Failed to delete category rule:', error);

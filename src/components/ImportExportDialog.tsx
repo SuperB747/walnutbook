@@ -25,6 +25,7 @@ import { Transaction, Account, TransactionType } from '../db';
 import * as ofx from 'ofx';
 import * as qif2json from 'qif2json';
 import { format, parse, isValid } from 'date-fns';
+import { invoke } from '@tauri-apps/api/core';
 
 interface ImportExportDialogProps {
   open: boolean;
@@ -269,40 +270,67 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   // Helper function to parse and validate date
   const parseDate = (dateStr: string | undefined): string | null => {
     if (!dateStr) return null;
+    
+    // 공백 제거 및 정리
+    const cleanDateStr = dateStr.trim();
+    
     // Try different date formats
     const formats = [
       'yyyy-MM-dd',
       'MM/dd/yyyy',
       'dd/MM/yyyy',
+      'yyyy/MM/dd',
+      'dd-MM-yyyy',
+      'MM-dd-yyyy',
       'yyyyMMdd',
       'yyyyMMddHHmmss',
       'yyyyMMddHHmm',
+      'dd/MM/yy',
+      'MM/dd/yy',
+      'yy/MM/dd',
     ];
 
     for (const formatStr of formats) {
-      const parsedDate = parse(dateStr!, formatStr, new Date());
-      if (isValid(parsedDate)) {
-        return format(parsedDate, 'yyyy-MM-dd');
+      try {
+        const parsedDate = parse(cleanDateStr, formatStr, new Date());
+        if (isValid(parsedDate)) {
+          return format(parsedDate, 'yyyy-MM-dd');
+        }
+      } catch (e) {
+        // Continue to next format
       }
     }
 
     // Try parsing OFX date format (YYYYMMDD)
-    if (/^\d{8}/.test(dateStr!)) {
-      const year = dateStr!.slice(0, 4);
-      const month = dateStr!.slice(4, 6);
-      const day = dateStr!.slice(6, 8);
+    if (/^\d{8}/.test(cleanDateStr)) {
+      const year = cleanDateStr.slice(0, 4);
+      const month = cleanDateStr.slice(4, 6);
+      const day = cleanDateStr.slice(6, 8);
       const parsedDate = new Date(`${year}-${month}-${day}`);
       if (isValid(parsedDate)) {
         return format(parsedDate, 'yyyy-MM-dd');
       }
     }
 
-    // Fallback to Date.parse for other formats
-    const timestamp = Date.parse(dateStr!);
-    if (!isNaN(timestamp)) {
-      return format(new Date(timestamp), 'yyyy-MM-dd');
+    // Try parsing with timezone info (e.g., "2025-01-15T00:00:00.000Z")
+    if (cleanDateStr.includes('T')) {
+      const datePart = cleanDateStr.split('T')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+        return datePart;
+      }
     }
 
+    // Fallback to Date.parse for other formats
+    try {
+      const timestamp = Date.parse(cleanDateStr);
+      if (!isNaN(timestamp)) {
+        return format(new Date(timestamp), 'yyyy-MM-dd');
+      }
+    } catch (e) {
+      // Continue to next method
+    }
+
+    console.warn('Could not parse date:', cleanDateStr);
     return null;
   };
 
@@ -480,46 +508,246 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     return new Promise((resolve, reject) => {
       // Strip BOM and split lines
       const sanitizedContent = content.replace(/^\uFEFF/, '');
-      const allLines = sanitizedContent.split(/\r?\n/);
-      // Find header line that contains both Date and Amount
-      let headerIndex = allLines.findIndex(line => /date/i.test(line) && /amount/i.test(line));
-      if (headerIndex < 0) headerIndex = 0;
+      const allLines = sanitizedContent.split(/\r?\n/).filter(line => line.trim());
+      
+      console.log('CSV Import Debug - Raw content preview:', allLines.slice(0, 5));
+      
+      // 더 강력한 헤더 찾기
+      let headerIndex = -1;
+      let bestHeaderScore = 0;
+      
+      // 처음 15줄에서 헤더 찾기
+      for (let i = 0; i < Math.min(15, allLines.length); i++) {
+        const line = allLines[i];
+        
+        // 다양한 구분자 시도
+        const delimiters = [',', ';', '\t', '|'];
+        let bestDelimiter = ',';
+        let bestFields: string[] = [];
+        let bestFieldCount = 0;
+        
+        for (const delim of delimiters) {
+          const fields = line.split(delim).map(f => f.trim());
+          if (fields.length > bestFieldCount) {
+            bestFieldCount = fields.length;
+            bestDelimiter = delim;
+            bestFields = fields;
+          }
+        }
+        
+        // 헤더 점수 계산
+        let score = 0;
+        const lowerFields = bestFields.map(f => f.toLowerCase());
+        
+        // 날짜 필드 찾기
+        if (lowerFields.some(f => /^date$/i.test(f))) score += 3;
+        else if (lowerFields.some(f => /date/i.test(f))) score += 2;
+        else if (lowerFields.some(f => /transaction.*date/i.test(f))) score += 2;
+        
+        // 금액 필드 찾기
+        if (lowerFields.some(f => /^amount$/i.test(f))) score += 3;
+        else if (lowerFields.some(f => /amount/i.test(f))) score += 2;
+        else if (lowerFields.some(f => /debit|credit/i.test(f))) score += 2;
+        else if (lowerFields.some(f => /withdrawal|deposit/i.test(f))) score += 1;
+        
+        // 설명 필드 찾기
+        if (lowerFields.some(f => /^description$/i.test(f))) score += 2;
+        else if (lowerFields.some(f => /description/i.test(f))) score += 1;
+        else if (lowerFields.some(f => /^payee$/i.test(f))) score += 2;
+        else if (lowerFields.some(f => /payee/i.test(f))) score += 1;
+        else if (lowerFields.some(f => /^memo$/i.test(f))) score += 1;
+        else if (lowerFields.some(f => /memo/i.test(f))) score += 1;
+        else if (lowerFields.some(f => /^details$/i.test(f))) score += 1;
+        else if (lowerFields.some(f => /^narrative$/i.test(f))) score += 1;
+        
+        // 카테고리 필드 찾기
+        if (lowerFields.some(f => /^category$/i.test(f))) score += 1;
+        else if (lowerFields.some(f => /category/i.test(f))) score += 1;
+        
+        // 숫자가 아닌 필드가 많을수록 헤더일 가능성이 높음
+        const nonNumericFields = lowerFields.filter(f => !/^\d+\.?\d*$/.test(f));
+        score += nonNumericFields.length * 0.3;
+        
+        if (score > bestHeaderScore) {
+          bestHeaderScore = score;
+          headerIndex = i;
+        }
+      }
+      
+      // 최소 점수가 없으면 첫 번째 라인 사용
+      if (headerIndex < 0 || bestHeaderScore < 2) {
+        headerIndex = 0;
+      }
+      
       const headerLine = allLines[headerIndex];
-      // Determine delimiter based on header line
-      const commaCount = (headerLine.match(/,/g) || []).length;
-      const semicolonCount = (headerLine.match(/;/g) || []).length;
-      const delimiter = semicolonCount > commaCount ? ';' : ',';
+      console.log('Selected header line:', headerLine);
+      console.log('Header score:', bestHeaderScore);
+      
+      // 구분자 결정
+      const delimiters = [',', ';', '\t', '|'];
+      let bestDelimiter = ',';
+      let bestFieldCount = 0;
+      
+      for (const delim of delimiters) {
+        const fields = headerLine.split(delim).map(f => f.trim());
+        if (fields.length > bestFieldCount) {
+          bestFieldCount = fields.length;
+          bestDelimiter = delim;
+        }
+      }
+      
+      console.log('Selected delimiter:', bestDelimiter);
+      
       // Only parse from the header onward
       const contentToParse = allLines.slice(headerIndex).join('\n');
+      
       Papa.parse<CSVTransaction>(contentToParse, {
         header: true,
         skipEmptyLines: true,
-        delimiter,
+        delimiter: bestDelimiter,
         transformHeader: header => header.trim().toLowerCase(),
         complete: async (results) => {
           // Debug: inspect parsed CSV data
           console.log('CSV import header line:', headerLine);
-          console.log('Detected delimiter:', delimiter);
+          console.log('Detected delimiter:', bestDelimiter);
           console.log('Parsed raw rows:', results.data.length, 'fields:', results.meta.fields);
+          console.log('Sample data:', results.data.slice(0, 3));
+          
           try {
-            // Dynamically map header keys
+            // 더 강력한 필드 매핑
             const fields = results.meta.fields as string[];
-            const dateKey = fields.find(f => /date/i.test(f) && !/amount/i.test(f)) || '';
-            const amountKey = fields.find(f => /amount/i.test(f)) || '';
-            const payeeKey = fields.find(f => /description|payee/i.test(f)) || fields[0] || '';
-            const categoryKey = fields.find(f => /category/i.test(f)) || '';
-            const notesKey = fields.find(f => /notes|memo/i.test(f)) || '';
+            console.log('Available fields:', fields);
+            
+            // 날짜 필드 찾기
+            const dateKey = fields.find(f => /^date$/i.test(f.trim())) || 
+                           fields.find(f => /date/i.test(f) && !/amount/i.test(f)) ||
+                           fields.find(f => /transaction.*date/i.test(f)) || '';
+            
+            // 금액 필드 찾기
+            const amountKey = fields.find(f => /^amount$/i.test(f.trim())) || 
+                             fields.find(f => /amount/i.test(f)) ||
+                             fields.find(f => /^debit$/i.test(f.trim())) ||
+                             fields.find(f => /^credit$/i.test(f.trim())) || '';
+            
+            // 설명 필드 찾기
+            const payeeKey = fields.find(f => /^description$/i.test(f.trim())) || 
+                            fields.find(f => /^payee$/i.test(f.trim())) ||
+                            fields.find(f => /^memo$/i.test(f.trim())) ||
+                            fields.find(f => /^details$/i.test(f.trim())) ||
+                            fields.find(f => /^narrative$/i.test(f.trim())) ||
+                            fields.find(f => /description/i.test(f)) ||
+                            fields.find(f => /payee/i.test(f)) ||
+                            fields[0] || '';
+            
+            // 카테고리 필드 찾기
+            const categoryKey = fields.find(f => /^category$/i.test(f.trim())) || 
+                               fields.find(f => /category/i.test(f)) || '';
+            
+            // 메모 필드 찾기
+            const notesKey = fields.find(f => /^notes$/i.test(f.trim())) || 
+                            fields.find(f => /^memo$/i.test(f.trim())) ||
+                            fields.find(f => /notes/i.test(f)) ||
+                            fields.find(f => /memo/i.test(f)) || '';
+            
             console.log('Mapped CSV keys:', { dateKey, amountKey, payeeKey, categoryKey, notesKey });
             // Filter and parse rows
             const validRows = (results.data as any[]).filter(row => row[dateKey] && row[amountKey]);
             console.log('Valid rows after dynamic filtering:', validRows.length);
+            // 계좌별 CSV 부호 로직 가져오기
+            let csvSignLogic = 'standard'; // 기본값
+            try {
+              csvSignLogic = await invoke('get_csv_sign_logic_for_account', { accountId: selectedAccount });
+            } catch (error) {
+              console.warn('Failed to get CSV sign logic for account:', error);
+            }
+            
             const parsedTransactions: ParsedTransaction[] = validRows.map((row) => {
               // Extract and sanitize
               const rawDate = row[dateKey];
-              const rawAmt = row[amountKey]?.toString().replace(/[^0-9.\-]/g, '') || '';
+              
+              // 더 강력한 금액 파싱
+              let amt = 0;
+              let rawAmt = '';
+              
+              if (amountKey) {
+                rawAmt = row[amountKey]?.toString() || '';
+              } else {
+                // Debit/Credit 별도 컬럼 처리
+                const debitKey = fields.find(f => /^debit$/i.test(f.trim()));
+                const creditKey = fields.find(f => /^credit$/i.test(f.trim()));
+                
+                if (debitKey && creditKey) {
+                  const debit = parseFloat(row[debitKey]?.toString().replace(/[^0-9.\-]/g, '') || '0');
+                  const credit = parseFloat(row[creditKey]?.toString().replace(/[^0-9.\-]/g, '') || '0');
+                  amt = debit > 0 ? -debit : credit; // Debit은 지출(음수), Credit은 수입(양수)
+                  rawAmt = amt.toString();
+                }
+              }
+              
+              // 일반 금액 파싱
+              if (!rawAmt && amountKey) {
+                rawAmt = row[amountKey]?.toString() || '';
+              }
+              
+              // 금액에서 통화 기호, 괄호, 공백 제거
+              if (rawAmt) {
+                // 괄호는 음수로 처리 (예: (100.00) -> -100.00)
+                const hasParentheses = /\([^)]*\)/.test(rawAmt);
+                rawAmt = rawAmt.replace(/[^\d.\-]/g, '');
+                amt = parseFloat(rawAmt);
+                if (hasParentheses && amt > 0) {
+                  amt = -amt;
+                }
+              }
+              
               const parsedDate = parseDate(rawDate);
-              const amt = parseFloat(rawAmt);
-              const type: TransactionType = isNaN(amt) ? 'expense' : (amt < 0 ? 'expense' : 'income');
+              
+              // 선택된 계좌 정보 가져오기
+              const selectedAccountObj = accounts.find(acc => acc.id === selectedAccount);
+              const isCreditCard = selectedAccountObj?.type === 'credit';
+              
+              // 계좌별 CSV 부호 로직에 따른 트랜잭션 타입 결정
+              let type: TransactionType;
+              if (isNaN(amt)) {
+                type = 'expense';
+              } else {
+                // 디버깅 로그 추가
+                console.log('CSV Import Debug:', {
+                  accountName: selectedAccountObj?.name,
+                  isCreditCard,
+                  csvSignLogic,
+                  amount: amt,
+                  payee: row[payeeKey] || ''
+                });
+                
+                switch (csvSignLogic) {
+                  case 'reversed':
+                    // PC MC 등: 크레딧 카드이지만 부호가 반대
+                    if (isCreditCard) {
+                      // 크레딧 카드: 음수 = 빚 감소(수입), 양수 = 빚 증가(지출)
+                      // 하지만 PC MC는 부호가 반대이므로: 음수 = 빚 증가(지출), 양수 = 빚 감소(수입)
+                      type = amt < 0 ? 'expense' : 'income';
+                    } else {
+                      // 일반 계좌: 음수 = 지출, 양수 = 수입
+                      type = amt < 0 ? 'expense' : 'income';
+                    }
+                    break;
+                  case 'standard':
+                  default:
+                    // BMO MC 등: 기존 로직
+                    if (isCreditCard) {
+                      // 크레딧 카드: 음수 = 빚 감소(수입), 양수 = 빚 증가(지출)
+                      type = amt < 0 ? 'income' : 'expense';
+                    } else {
+                      // 일반 계좌: 음수 = 지출, 양수 = 수입
+                      type = amt < 0 ? 'expense' : 'income';
+                    }
+                    break;
+                }
+                
+                console.log('Determined type:', type);
+              }
+              
               return {
                 date: parsedDate,
                 amount: isNaN(amt) ? 0 : Math.abs(amt),

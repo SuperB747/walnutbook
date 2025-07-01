@@ -47,8 +47,11 @@ pub fn run() {
       db::import_database,
       db::get_spending_by_category,
       db::get_income_vs_expenses,
-      db::get_net_worth_history
+      db::get_net_worth_history,
+      db::get_account_import_settings,
+      db::update_account_import_settings,
+      db::get_csv_sign_logic_for_account,
     ])
     .run(context)
     .expect("error while running tauri application");
-}
+} 
