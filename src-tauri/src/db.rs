@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use serde_json::{Value, json};
 use std::env;
 use std::fs;
+use std::collections::HashSet;
 
 
 /// Helper: get path to SQLite database
