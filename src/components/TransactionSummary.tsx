@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -185,6 +185,22 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     }).format(amount);
   };
 
+  // 카테고리별 퍼센테이지 계산
+  const categoryPercentages = useMemo(() => {
+    const totalExpense = Math.abs(categoryExpenses.data.reduce((sum, amount) => sum + amount, 0));
+    if (totalExpense === 0) return {};
+    
+    const percentages: Record<string, number> = {};
+    categoryExpenses.labels.forEach((label, index) => {
+      if (label) {
+        const amount = Math.abs(categoryExpenses.data[index]);
+        percentages[label] = (amount / totalExpense) * 100;
+      }
+    });
+    
+    return percentages;
+  }, [categoryExpenses]);
+
   const calculateSummary = () => {
     const summary = {
       income: 0,
@@ -247,11 +263,48 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     onMonthChange(`${newYear}-${newMonth}`);
   };
 
-  // 범례 분할
-  const allLabels = categoryExpenses.labels.filter((label): label is string => label !== null);
-  const mid = Math.ceil(allLabels.length / 2);
-  const leftLegend = allLabels.slice(0, mid);
-  const rightLegend = allLabels.slice(mid);
+  // 범례 분할 (퍼센테이지 순으로 정렬)
+  const sortedLabels = useMemo(() => {
+    return categoryExpenses.labels
+      .map((label, index) => ({
+        label,
+        percentage: categoryPercentages[label] || 0,
+        amount: categoryExpenses.data[index]
+      }))
+      .filter(item => item.label !== null)
+      .sort((a, b) => b.percentage - a.percentage)
+      .map(item => item.label as string);
+  }, [categoryExpenses, categoryPercentages]);
+
+  const mid = Math.ceil(sortedLabels.length / 2);
+  const leftLegend = sortedLabels.slice(0, mid);
+  const rightLegend = sortedLabels.slice(mid);
+
+  // 차트 ref
+  const doughnutRef = useRef<any>(null);
+
+  // 범례 hover 핸들러
+  const handleLegendHover = (label: string) => {
+    const chart = doughnutRef.current;
+    if (!chart) return;
+    const idx = categoryExpenses.labels.indexOf(label);
+    if (idx === -1) return;
+    // Chart.js v3+ API
+    chart.setActiveElements([
+      { datasetIndex: 0, index: idx }
+    ]);
+    chart.tooltip.setActiveElements([
+      { datasetIndex: 0, index: idx }
+    ], {x: 0, y: 0});
+    chart.update();
+  };
+  const handleLegendLeave = () => {
+    const chart = doughnutRef.current;
+    if (!chart) return;
+    chart.setActiveElements([]);
+    chart.tooltip.setActiveElements([], {x: 0, y: 0});
+    chart.update();
+  };
 
   return (
     <Box sx={{ mb: 2 }}>
@@ -317,7 +370,12 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
               {/* 왼쪽 범례 */}
               <Box sx={{ minWidth: 120, mr: 2 }}>
                 {leftLegend.map((label) => (
-                  <Box key={label} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                  <Box 
+                    key={label} 
+                    sx={{ display: 'flex', alignItems: 'center', mb: 1, cursor: 'pointer' }}
+                    onMouseEnter={() => handleLegendHover(label)}
+                    onMouseLeave={handleLegendLeave}
+                  >
                     <Box sx={{ width: 12, height: 12, bgcolor: getCategoryColor(label), mr: 1, borderRadius: '2px' }} />
                     <Typography variant="body2" noWrap>{label}</Typography>
                   </Box>
@@ -326,6 +384,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
               {/* 도넛 그래프 */}
               <Box sx={{ width: 180, height: 180 }}>
                 <Doughnut
+                  ref={doughnutRef}
                   data={{
                     labels: categoryExpenses.labels,
                     datasets: [
@@ -342,10 +401,14 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                       legend: { display: false },
                       tooltip: {
                         callbacks: {
+                          title: function(context) {
+                            const label = context[0].label || '';
+                            const percentage = categoryPercentages[label]?.toFixed(1) || '0.0';
+                            return `${label} (${percentage}%)`;
+                          },
                           label: function(context) {
-                            const label = context.label || '';
                             const value = context.parsed;
-                            return `${label}: ${formatCurrency(value)}`;
+                            return `  ${formatCurrency(Math.abs(value))}`;
                           }
                         }
                       }
@@ -356,7 +419,12 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
               {/* 오른쪽 범례 */}
               <Box sx={{ minWidth: 120, ml: 2 }}>
                 {rightLegend.map((label) => (
-                  <Box key={label} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                  <Box 
+                    key={label} 
+                    sx={{ display: 'flex', alignItems: 'center', mb: 1, cursor: 'pointer' }}
+                    onMouseEnter={() => handleLegendHover(label)}
+                    onMouseLeave={handleLegendLeave}
+                  >
                     <Box sx={{ width: 12, height: 12, bgcolor: getCategoryColor(label), mr: 1, borderRadius: '2px' }} />
                     <Typography variant="body2" noWrap>{label}</Typography>
                   </Box>

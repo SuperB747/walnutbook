@@ -131,6 +131,15 @@ const TransactionList: React.FC<TransactionListProps> = ({
   };
   const handleCancel = () => setConfirmDialog({ open: false, type: null });
 
+  // Clear all filters
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setSelectedTypes([]);
+    setSelectedCategories([]);
+    setSelectedAccounts([]);
+    setDateRange({ start: '', end: '' });
+  };
+
   // 모든 고유 카테고리 추출
   const uniqueCategories = useMemo(() => {
     return Array.from(new Set(transactions.map(t => t.category)));
@@ -227,119 +236,123 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
   return (
     <>
-      <Box sx={{ mb: 1, p: 1, backgroundColor: 'background.paper', borderRadius: 1 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>Filters</Typography>
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          <TextField
-            label="Search"
-            size="small"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            sx={{ flexGrow: 1 }}
+      <Box sx={{ mb: 1, p: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, minHeight: 56 }}>
+        <TextField
+          label="Search"
+          size="small"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          sx={{ minWidth: 120, flex: 1 }}
+        />
+        <FormControl size="small" sx={{ minWidth: 100 }}>
+          <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Account</InputLabel>
+          <Select
+            multiple
+            value={selectedAccounts}
+            onChange={(e) => setSelectedAccounts(
+              typeof e.target.value === 'string' ? e.target.value.split(',').map(Number) : e.target.value
+            )}
+            input={<OutlinedInput label="Account" />}
+            renderValue={(selected) => (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {selected.map((value) => (
+                  <Chip key={value} label={getAccountName(value)} size="small" />
+                ))}
+              </Box>
+            )}
+            MenuProps={{ MenuListProps: { dense: true } }}
+          >
+            {accounts.map((account) => (
+              <MenuItem key={account.id} value={account.id} dense>
+                <Checkbox checked={selectedAccounts.indexOf(account.id) > -1} />
+                <ListItemText primary={account.name} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 100 }}>
+          <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Type</InputLabel>
+          <Select
+            multiple
+            value={selectedTypes}
+            onChange={(e) => setSelectedTypes(
+              typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
+            )}
+            input={<OutlinedInput label="Type" />}
+            renderValue={(selected) => (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {selected.map((value) => (
+                  <Chip key={value} label={value} size="small" />
+                ))}
+              </Box>
+            )}
+            MenuProps={{ MenuListProps: { dense: true } }}
+          >
+            {['income', 'expense', 'transfer', 'adjust'].map((type) => (
+              <MenuItem key={type} value={type} dense>
+                <Checkbox checked={selectedTypes.indexOf(type) > -1} size="small" />
+                <ListItemText primary={type.charAt(0).toUpperCase() + type.slice(1)} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 100 }}>
+          <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Category</InputLabel>
+          <Select
+            multiple
+            value={selectedCategories}
+            onChange={(e) => setSelectedCategories(
+              typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
+            )}
+            input={<OutlinedInput label="Category" />}
+            renderValue={(selected) => (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {selected.map((value) => (
+                  <Chip key={value} label={value} size="small" />
+                ))}
+              </Box>
+            )}
+            MenuProps={{ MenuListProps: { dense: true } }}
+          >
+            {uniqueCategories.map((category) => (
+              <MenuItem key={category} value={category} dense>
+                <Checkbox checked={selectedCategories.indexOf(category) > -1} size="small" />
+                <ListItemText primary={category} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+          <DatePicker
+            label="From Date"
+            value={dateRange.start ? parse(dateRange.start, 'yyyy-MM-dd', new Date()) : null}
+            onChange={(newDate) => setDateRange(prev => ({
+              ...prev,
+              start: newDate ? newDate.toISOString().split('T')[0] : ''
+            }))}
+            slotProps={{ textField: { size: 'small' } }}
           />
-
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Account</InputLabel>
-            <Select
-              multiple
-              value={selectedAccounts}
-              onChange={(e) => setSelectedAccounts(
-                typeof e.target.value === 'string' ? e.target.value.split(',').map(Number) : e.target.value
-              )}
-              input={<OutlinedInput label="Account" />}
-              renderValue={(selected) => (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {selected.map((value) => (
-                    <Chip key={value} label={getAccountName(value)} size="small" />
-                  ))}
-                </Box>
-              )}
-              MenuProps={{ MenuListProps: { dense: true } }}
-            >
-              {accounts.map((account) => (
-                <MenuItem key={account.id} value={account.id} dense>
-                  <Checkbox checked={selectedAccounts.indexOf(account.id) > -1} />
-                  <ListItemText primary={account.name} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Type</InputLabel>
-            <Select
-              multiple
-              value={selectedTypes}
-              onChange={(e) => setSelectedTypes(
-                typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
-              )}
-              input={<OutlinedInput label="Type" />}
-              renderValue={(selected) => (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {selected.map((value) => (
-                    <Chip key={value} label={value} size="small" />
-                  ))}
-                </Box>
-              )}
-              MenuProps={{ MenuListProps: { dense: true } }}
-            >
-              {['income', 'expense', 'transfer', 'adjust'].map((type) => (
-                <MenuItem key={type} value={type} dense>
-                  <Checkbox checked={selectedTypes.indexOf(type) > -1} size="small" />
-                  <ListItemText primary={type.charAt(0).toUpperCase() + type.slice(1)} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Category</InputLabel>
-            <Select
-              multiple
-              value={selectedCategories}
-              onChange={(e) => setSelectedCategories(
-                typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
-              )}
-              input={<OutlinedInput label="Category" />}
-              renderValue={(selected) => (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {selected.map((value) => (
-                    <Chip key={value} label={value} size="small" />
-                  ))}
-                </Box>
-              )}
-              MenuProps={{ MenuListProps: { dense: true } }}
-            >
-              {uniqueCategories.map((category) => (
-                <MenuItem key={category} value={category} dense>
-                  <Checkbox checked={selectedCategories.indexOf(category) > -1} size="small" />
-                  <ListItemText primary={category} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <DatePicker
-              label="From Date"
-              value={dateRange.start ? parse(dateRange.start, 'yyyy-MM-dd', new Date()) : null}
-              onChange={(newDate) => setDateRange(prev => ({
-                ...prev,
-                start: newDate ? newDate.toISOString().split('T')[0] : ''
-              }))}
-              slotProps={{ textField: { size: 'small' } }}
-            />
-            <DatePicker
-              label="To Date"
-              value={dateRange.end ? parse(dateRange.end, 'yyyy-MM-dd', new Date()) : null}
-              onChange={(newDate) => setDateRange(prev => ({
-                ...prev,
-                end: newDate ? newDate.toISOString().split('T')[0] : ''
-              }))}
-              slotProps={{ textField: { size: 'small' } }}
-            />
-          </LocalizationProvider>
-        </Box>
+          <DatePicker
+            label="To Date"
+            value={dateRange.end ? parse(dateRange.end, 'yyyy-MM-dd', new Date()) : null}
+            onChange={(newDate) => setDateRange(prev => ({
+              ...prev,
+              end: newDate ? newDate.toISOString().split('T')[0] : ''
+            }))}
+            slotProps={{ textField: { size: 'small' } }}
+          />
+        </LocalizationProvider>
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={handleClearFilters}
+          sx={{ 
+            minWidth: 100,
+            height: 40
+          }}
+        >
+          Clear Filters
+        </Button>
       </Box>
 
       {/* Bulk action buttons */}
