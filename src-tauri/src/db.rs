@@ -12,9 +12,9 @@ use std::collections::HashSet;
 fn get_db_path(app: &AppHandle) -> PathBuf {
   // Use OS-specific user data directory to avoid dev watch restarts
   let mut path = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
-  path.push("walnut-book");
+  path.push("walnutbook");
   fs::create_dir_all(&path).expect("Failed to create app data directory");
-  path.push("walnut-book.db");
+  path.push("walnutbook.db");
   path
 }
 

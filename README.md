@@ -1,4 +1,4 @@
-# Walnut Book
+# WalnutBook
 
 개인 재무 관리를 위한 데스크톱 애플리케이션입니다. Tauri와 React를 사용하여 개발되었습니다.
 
@@ -21,8 +21,8 @@
 
 1. 저장소 클론:
 ```bash
-git clone https://github.com/[your-username]/walnut-book.git
-cd walnut-book
+git clone https://github.com/[your-username]/walnutbook.git
+cd walnutbook
 ```
 
 2. 의존성 설치:
@@ -56,4 +56,4 @@ npm run make
 
 ## 라이선스
 
-ISC 
+ISC

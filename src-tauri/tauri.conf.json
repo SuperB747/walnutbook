@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Walnut Book",
+  "productName": "WalnutBook",
   "version": "0.1.0",
   "identifier": "com.walnutbook.app",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Walnut Book",
+        "title": "WalnutBook",
         "width": 800,
         "height": 600,
         "resizable": true,

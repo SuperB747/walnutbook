@@ -1,7 +1,7 @@
 {
-  "name": "walnut-book",
+  "name": "walnutbook",
   "version": "1.0.0",
-  "description": "Personal budget management application - Walnut Book",
+  "description": "Personal budget management application - WalnutBook",
   "main": "./build/index.js",
   "scripts": {
     "clean": "rimraf build",
