@@ -100,16 +100,6 @@ const AccountForm: React.FC<AccountFormProps> = ({
               <MenuItem value="other">Other</MenuItem>
               </Select>
             </FormControl>
-
-            {account && (
-              <TextField
-                fullWidth
-                label="Current Balance"
-                value={formatCurrency(account.balance || 0)}
-                InputProps={{ readOnly: true }}
-                disabled
-              />
-            )}
           </Box>
         </DialogContent>
         <DialogActions>

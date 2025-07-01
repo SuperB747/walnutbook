@@ -92,7 +92,7 @@ const AccountsPage: React.FC = () => {
             id: selectedAccount.id,
             name: accountData.name!,
             type: accountData.type!,
-            balance: accountData.balance!,
+            balance: selectedAccount.balance,
             created_at: selectedAccount.created_at,
           }
         });
@@ -100,7 +100,6 @@ const AccountsPage: React.FC = () => {
         await invoke<Account[]>('create_account', {
           name: accountData.name!,
           accountType: accountData.type!,
-          balance: accountData.balance!,
         });
       }
       await loadAccounts();

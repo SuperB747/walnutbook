@@ -41,8 +41,13 @@ const safeFormatCurrency = (amount: number): string => {
   // Treat near-zero values as exactly zero to avoid "-$0.00"
   if (Math.abs(amount) < 0.005) {
     return formatCurrency(0);
-}
+  }
   return formatCurrency(amount);
+};
+
+// Credit 계좌 잔액을 표시하는 함수 (부호 변환 없이 그대로)
+const formatCreditBalance = (account: Account): string => {
+  return safeFormatCurrency(account.balance);
 };
 
 const AccountList: React.FC<AccountListProps> = ({
@@ -52,9 +57,12 @@ const AccountList: React.FC<AccountListProps> = ({
 }) => {
   // 알파벳 순서로 정렬
   const sortedAccounts = [...accounts].sort((a, b) => a.name.localeCompare(b.name));
+  // Net Balance 계산: 모든 계좌 balance를 그대로 합산
   const totalBalance = sortedAccounts.reduce((sum, account) => sum + account.balance, 0);
   const availableFunds = sortedAccounts.filter(a => a.type === 'checking' || a.type === 'savings').reduce((sum, a) => sum + a.balance, 0);
-  const creditCardBalance = sortedAccounts.filter(a => a.type === 'credit').reduce((sum, a) => sum + a.balance, 0);
+  // Credit 계좌 잔액 합산 (부호 변환 없이 그대로)
+  const creditAccounts = sortedAccounts.filter(a => a.type === 'credit');
+  const creditCardBalance = creditAccounts.reduce((sum, a) => sum + a.balance, 0);
 
   return (
     <Box>
@@ -121,7 +129,7 @@ const AccountList: React.FC<AccountListProps> = ({
                 <TableCell>{account.type}</TableCell>
                 <TableCell align="right">
                   <Typography color={account.balance < 0 ? 'error.main' : 'inherit'}>
-                    {safeFormatCurrency(account.balance)}
+                    {formatCreditBalance(account)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">

@@ -18,7 +18,7 @@ import {
 } from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
 import { Transaction, Account, TransactionType } from '../db';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
@@ -126,8 +126,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       // Transfer는 항상 양수로 처리 (백엔드에서 출발/도착 계좌에 따라 부호 결정)
       return Math.abs(amount);
     }
-    // Adjust는 부호 보정 없이 입력값 그대로 사용
-    if (type === 'adjust') return amount;
+    // Adjust는 category에 따라 부호 결정
+    if (type === 'adjust') {
+      if (category === 'Subtract') {
+        return -Math.abs(amount);
+      } else {
+        return Math.abs(amount);
+      }
+    }
     return amount;
   };
 
@@ -205,15 +211,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         ...formData,
         amount: fixAmountSign(formData.amount, formData.type, formData.category)
       };
-      // Transfer 거래의 경우 payee 필드에 계좌 ID 정보 저장
+      // Transfer 거래의 경우 description을 notes에 저장하고, payee는 백엔드에서 자동 설정
       if (formData.type === 'transfer' && toAccountId) {
         const description = formData.payee || '';
-        finalTransaction.payee = `${formData.account_id} → ${toAccountId} | ${description}`.trim();
+        finalTransaction.notes = description;
+        finalTransaction.payee = `${formData.account_id} → ${toAccountId}`; // 백엔드에서 계좌 이름으로 대체됨
       }
-      // Adjust 거래는 category를 저장하지 않음
-      if (formData.type === 'adjust') {
-        finalTransaction.category = '';
-      }
+      // Adjust 거래는 category를 그대로 저장 (백엔드에서 부호 결정에 사용)
+      // category는 이미 'Add' 또는 'Subtract'로 설정되어 있음
       await onSave(finalTransaction);
     }
   };
@@ -224,9 +229,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       // Transfer는 단일 카테고리 사용
       return [{ id: 0, name: 'Transfer', type: 'transfer' as const }];
     }
-    // Adjust는 카테고리 없음
+    // Adjust는 Add/Subtract 카테고리 사용
     if (formData.type === 'adjust') {
-      return [];
+      return [
+        { id: 0, name: 'Add', type: 'adjust' as const },
+        { id: 1, name: 'Subtract', type: 'adjust' as const }
+      ];
     }
     return allCategories.filter(cat => cat.type === formData.type);
   }, [allCategories, formData.type]);
@@ -244,7 +252,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <LocalizationProvider dateAdapter={AdapterDateFns}>
                   <DatePicker
                     label="Date"
-                    value={formData.date ? new Date(formData.date) : null}
+                    value={formData.date ? parse(formData.date, 'yyyy-MM-dd', new Date()) : null}
                     onChange={(newDate) => {
                       if (newDate) {
                         setFormData(prev => ({ ...prev, date: format(newDate, 'yyyy-MM-dd') }));
@@ -426,6 +434,39 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   </FormControl>
                 </Grid>
               )}
+              {formData.type === 'adjust' && (
+                <Grid item xs={12}>
+                  <FormControl fullWidth required error={!!errors.category}>
+                    <InputLabel>Adjustment Type</InputLabel>
+                    <Select
+                      name="category"
+                      value={formData.category || ''}
+                      onChange={handleChange}
+                      label="Adjustment Type"
+                    >
+                      <MenuItem value="Add">
+                        <Chip 
+                          label="Add" 
+                          size="small" 
+                          color="success"
+                          sx={{ minWidth: 80 }}
+                        />
+                      </MenuItem>
+                      <MenuItem value="Subtract">
+                        <Chip 
+                          label="Subtract" 
+                          size="small" 
+                          color="error"
+                          sx={{ minWidth: 80 }}
+                        />
+                      </MenuItem>
+                    </Select>
+                    {errors.category && (
+                      <FormHelperText>{errors.category}</FormHelperText>
+                    )}
+                  </FormControl>
+                </Grid>
+              )}
               <Grid item xs={12}>
                 <TextField
                   name="amount"
@@ -445,7 +486,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         } else if (formData.type === 'transfer') {
                           // Transfer는 항상 양수로 처리 (백엔드에서 출발/도착 계좌에 따라 부호 결정)
                           amount = Math.abs(amount);
-                        } // adjust는 부호 보정 없이 그대로
+                        } else if (formData.type === 'adjust') {
+                          // Adjust는 category에 따라 부호 결정
+                          if (formData.category === 'Subtract') {
+                            amount = -Math.abs(amount);
+                          } else {
+                            amount = Math.abs(amount);
+                          }
+                        }
                       }
                       setFormData(prev => ({ ...prev, amount }));
                       if (errors.amount) {

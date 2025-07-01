@@ -35,6 +35,7 @@ import {
 import { Transaction, Account } from '../db';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { parse } from 'date-fns';
 
 export interface TransactionListProps {
   transactions: Transaction[];
@@ -215,42 +216,23 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
   // 표시용 금액 변환 함수
   const getDisplayAmount = (transaction: Transaction) => {
-    if (transaction.type === 'expense') {
-      return -Math.abs(transaction.amount);
+    const account = accounts.find(a => a.id === transaction.account_id);
+    const isCredit = account && account.type === 'credit';
+    let amount = transaction.amount;
+    
+    // 백엔드에서 이미 올바른 부호로 저장된 금액을 그대로 사용
+    // (expense는 -amount, income은 +amount, adjust는 category에 따라, transfer는 출발/도착에 따라)
+    
+    // Credit 계좌에서는 Transfer 거래만 부호를 반대로 표시
+    // (Transfer는 출발/도착에 따라 이미 올바른 부호로 저장되어 있음)
+    if (isCredit && transaction.type === 'transfer') {
+      amount = -amount;
     }
-    if (transaction.type === 'income') {
-      return Math.abs(transaction.amount);
-    }
-    if (transaction.type === 'adjust') {
-      if (transaction.category === 'Subtract') {
-        return -Math.abs(transaction.amount);
-      }
-      if (transaction.category === 'Add') {
-        return Math.abs(transaction.amount);
-      }
-    }
-    // Transfer는 저장된 부호 그대로 표시 (출발 계좌는 음수, 도착 계좌는 양수)
-    return transaction.amount;
+    return amount;
   };
 
   // Transfer payee 포맷을 사용자 친화적으로 변환
   const getDisplayPayee = (transaction: Transaction) => {
-    if (transaction.type === 'transfer') {
-      // id 기반 포맷: 'from_id → to_id | description'
-      const match = transaction.payee.match(/(\d+)\s*→\s*(\d+)\s*\|\s*(.*)/);
-      if (match) {
-        return match[3]; // description만 반환
-      }
-      // 예전 포맷: 'To: ...' 또는 'From: ...'로 시작
-      const toMatch = transaction.payee.match(/^To:\s*(.*)/i);
-      if (toMatch) {
-        return toMatch[1].trim();
-      }
-      const fromMatch = transaction.payee.match(/^From:\s*(.*)/i);
-      if (fromMatch) {
-        return fromMatch[1].trim();
-      }
-    }
     return transaction.payee;
   };
 
@@ -351,7 +333,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           <LocalizationProvider dateAdapter={AdapterDateFns}>
             <DatePicker
               label="From Date"
-              value={dateRange.start ? new Date(dateRange.start) : null}
+              value={dateRange.start ? parse(dateRange.start, 'yyyy-MM-dd', new Date()) : null}
               onChange={(newDate) => setDateRange(prev => ({
                 ...prev,
                 start: newDate ? newDate.toISOString().split('T')[0] : ''
@@ -360,7 +342,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
             />
             <DatePicker
               label="To Date"
-              value={dateRange.end ? new Date(dateRange.end) : null}
+              value={dateRange.end ? parse(dateRange.end, 'yyyy-MM-dd', new Date()) : null}
               onChange={(newDate) => setDateRange(prev => ({
                 ...prev,
                 end: newDate ? newDate.toISOString().split('T')[0] : ''
