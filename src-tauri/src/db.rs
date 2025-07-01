@@ -828,13 +828,45 @@ pub fn delete_category(app: AppHandle, id: i64) -> Result<Vec<Category>, String>
 #[tauri::command]
 pub fn backup_database(app: AppHandle, save_path: String) -> Result<(), String> {
     let db_path = get_db_path(&app);
+    println!("[backup_database] Source DB path: {:?}", db_path);
+    println!("[backup_database] Destination path: {}", save_path);
+    
     let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    
+    // Check source database tables and data
+    let tables: Vec<String> = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'")
+        .map_err(|e| e.to_string())?
+        .query_map([], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<String>, _>>().map_err(|e| e.to_string())?;
+    
+    println!("[backup_database] Source tables: {:?}", tables);
+    
+    // Check categories in source
+    let category_count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    println!("[backup_database] Source categories count: {}", category_count);
+    
     let mut dest = rusqlite::Connection::open(&save_path).map_err(|e| e.to_string())?;
     {
         let backup = rusqlite::backup::Backup::new(&conn, &mut dest).map_err(|e| e.to_string())?;
         backup.step(-1).map_err(|e| e.to_string())?;
         // backup은 여기서 drop됨
     }
+    
+    // Verify backup was successful
+    let dest_tables: Vec<String> = dest.prepare("SELECT name FROM sqlite_master WHERE type='table'")
+        .map_err(|e| e.to_string())?
+        .query_map([], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<String>, _>>().map_err(|e| e.to_string())?;
+    
+    println!("[backup_database] Destination tables: {:?}", dest_tables);
+    
+    let dest_category_count: i64 = dest.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    println!("[backup_database] Destination categories count: {}", dest_category_count);
+    
     match dest.close() {
         Ok(_) => Ok(()),
         Err((_, e)) => Err(format!("Failed to close backup DB: {}", e)),
@@ -858,6 +890,9 @@ pub fn export_database(app: AppHandle) -> Result<Vec<u8>, String> {
 #[tauri::command]
 pub fn import_database(app: AppHandle, data: Vec<u8>) -> Result<(), String> {
   let db_path = get_db_path(&app);
+  println!("[import_database] Target DB path: {:?}", db_path);
+  println!("[import_database] Data size: {} bytes", data.len());
+  
   // 파일 쓰기 전 권한 체크 (cross-platform)
   match std::fs::metadata(&db_path) {
     Ok(meta) => {
@@ -869,8 +904,27 @@ pub fn import_database(app: AppHandle, data: Vec<u8>) -> Result<(), String> {
       println!("[import_database] metadata error: {}", e);
     }
   }
+  
   match std::fs::write(&db_path, data) {
-    Ok(_) => Ok(()),
+    Ok(_) => {
+      println!("[import_database] Database file written successfully");
+      
+      // Verify the imported database
+      let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+      let tables: Vec<String> = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'")
+          .map_err(|e| e.to_string())?
+          .query_map([], |row| row.get(0))
+          .map_err(|e| e.to_string())?
+          .collect::<Result<Vec<String>, _>>().map_err(|e| e.to_string())?;
+      
+      println!("[import_database] Imported tables: {:?}", tables);
+      
+      let category_count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
+          .map_err(|e| e.to_string())?;
+      println!("[import_database] Imported categories count: {}", category_count);
+      
+      Ok(())
+    },
     Err(e) => {
       println!("[import_database] write error: {}", e);
       Err(format!("Failed to write database file: {}", e))
