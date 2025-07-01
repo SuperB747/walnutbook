@@ -216,19 +216,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
   // 표시용 금액 변환 함수
   const getDisplayAmount = (transaction: Transaction) => {
-    const account = accounts.find(a => a.id === transaction.account_id);
-    const isCredit = account && account.type === 'credit';
-    let amount = transaction.amount;
-    
-    // 백엔드에서 이미 올바른 부호로 저장된 금액을 그대로 사용
-    // (expense는 -amount, income은 +amount, adjust는 category에 따라, transfer는 출발/도착에 따라)
-    
-    // Credit 계좌에서는 Transfer 거래만 부호를 반대로 표시
-    // (Transfer는 출발/도착에 따라 이미 올바른 부호로 저장되어 있음)
-    if (isCredit && transaction.type === 'transfer') {
-      amount = -amount;
-    }
-    return amount;
+    // Transfer, expense, income, adjust 모두 백엔드에서 저장된 amount를 그대로 사용
+    return transaction.amount;
   };
 
   // Transfer payee 포맷을 사용자 친화적으로 변환
