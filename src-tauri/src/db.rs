@@ -359,7 +359,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let mut rows = sel.query_map(params![transaction.id], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, String>(2)?))
     }).map_err(|e| e.to_string())?;
-    let (old_type, old_amount, old_category) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
+    let (old_type, old_amount, _old_category) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
     let old_effect = if old_type == "expense" { 
         -old_amount 
     } else if old_type == "transfer" {
@@ -418,7 +418,7 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
     let mut rows = sel.query_map(params![id], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, i64>(2)?, row.get::<_, String>(3)?))
     }).map_err(|e| e.to_string())?;
-    let (old_type, old_amount, acct_id, old_category) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
+    let (old_type, old_amount, acct_id, _old_category) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
     let balance_change = if old_type == "expense" { 
         old_amount 
     } else if old_type == "transfer" {
