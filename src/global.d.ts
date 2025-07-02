@@ -85,46 +85,9 @@ declare global {
   }
 }
 
-declare module 'qif2json' {
-  interface QIFTransaction {
-    date: Date;
-    amount: number;
-    payee: string;
-    category?: string;
-    memo?: string;
-  }
 
-  interface QIFData {
-    transactions: QIFTransaction[];
-  }
 
-  export function parse(content: string): QIFData;
-}
 
-declare module 'ofx' {
-  interface OFXTransaction {
-    DTPOSTED: string;
-    TRNAMT: string;
-    NAME?: string;
-    MEMO?: string;
-  }
-
-  interface OFXData {
-    OFX: {
-      BANKMSGSRSV1: {
-        STMTTRNRS: {
-          STMTRS: {
-            BANKTRANLIST: {
-              STMTTRN: OFXTransaction[];
-            };
-          };
-        };
-      };
-    };
-  }
-
-  export function parse(content: string): OFXData;
-}
 
 
 

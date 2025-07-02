@@ -22,8 +22,6 @@ import {
 import { useDropzone } from 'react-dropzone';
 import Papa from 'papaparse';
 import { Transaction, Account, TransactionType } from '../db';
-import * as ofx from 'ofx';
-import * as qif2json from 'qif2json';
 import { format, parse, isValid } from 'date-fns';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -35,12 +33,7 @@ interface ImportExportDialogProps {
   transactions: Transaction[];
 }
 
-interface FileFormat {
-  id: string;
-  name: string;
-  extensions: string[];
-  description: string;
-}
+
 
 interface ImportStatus {
   status: 'ready' | 'processing' | 'success' | 'error';
@@ -57,20 +50,7 @@ interface ParsedTransaction {
   account_id: number;
 }
 
-interface OFXTransaction {
-  DTPOSTED: string;
-  TRNAMT: string;
-  NAME?: string;
-  MEMO?: string;
-}
 
-interface QIFTransaction {
-  date: Date;
-  amount: number;
-  payee: string;
-  category?: string;
-  memo?: string;
-}
 
 interface CSVTransaction {
   Date: string;
@@ -80,26 +60,7 @@ interface CSVTransaction {
   Notes?: string;
 }
 
-const FILE_FORMATS: FileFormat[] = [
-  {
-    id: 'qif',
-    name: 'Quicken Interchange Format (QIF)',
-    extensions: ['.qif'],
-    description: 'Import transactions from Quicken or other QIF files'
-  },
-  {
-    id: 'ofx',
-    name: 'Open Financial Exchange (OFX)',
-    extensions: ['.ofx', '.qfx'],
-    description: 'Import transactions from bank or credit card OFX/QFX files'
-  },
-  {
-    id: 'csv',
-    name: 'Comma Separated Values (CSV)',
-    extensions: ['.csv'],
-    description: 'Import transactions from CSV spreadsheet files'
-  }
-];
+
 
 const PAYMENT_KEYWORDS = [
   'payment', 
@@ -113,45 +74,7 @@ const PAYMENT_KEYWORDS = [
   'interac payment'
 ];
 
-// Simple OFX parser function
-function parseOFXContent(ofxContent: string): OFXTransaction[] {
-  const transactions: OFXTransaction[] = [];
-  // Split by STMTTRN (opening tag) to get each record after header
-  const parts = ofxContent.split(/<STMTTRN>/i);
-  parts.shift(); // drop header before first transaction
-  parts.forEach(part => {
-    // Limit segment to end of this record before next STMTTRN start or closing tag
-    const segment = part.split(/<\/?STMTTRN>/i)[0];
-    // extract fields
-    const dtMatch = /<DTPOSTED>([^<\r\n]+)/i.exec(segment);
-    const amtMatch = /<TRNAMT>([^<\r\n]+)/i.exec(segment);
-    const nameMatch = /<NAME>([^<\r\n]+)/i.exec(segment);
-    // Extract memo: try full XML-style <MEMO>...</MEMO>
-    let memo: string | undefined;
-    const xmlMemoMatch = /<MEMO>([\s\S]*?)<\/MEMO>/i.exec(segment);
-    if (xmlMemoMatch) {
-      memo = xmlMemoMatch[1].trim();
-    } else {
-      // Fallback: manual substring after <MEMO> up to next tag
-      const tagIndex = segment.search(/<MEMO>/i);
-      if (tagIndex >= 0) {
-        let rawMemo = segment.substring(tagIndex + 6);
-        const nextTag = rawMemo.search(/<\w+/);
-        if (nextTag >= 0) rawMemo = rawMemo.substring(0, nextTag);
-        memo = rawMemo.trim();
-      }
-    }
-    if (dtMatch && amtMatch) {
-      transactions.push({
-        DTPOSTED: dtMatch[1].trim(),
-        TRNAMT: amtMatch[1].trim(),
-        NAME: nameMatch ? nameMatch[1].trim() : undefined,
-        MEMO: memo,
-      });
-    }
-  });
-  return transactions;
-}
+
 
 const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   open,
@@ -163,7 +86,6 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   const [activeTab, setActiveTab] = useState(0);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFormat, setSelectedFormat] = useState<string>('csv');
   const [removeDuplicates, setRemoveDuplicates] = useState(true);
   const [duplicatesFound, setDuplicatesFound] = useState(0);
   const [transferConflicts, setTransferConflicts] = useState(0);
@@ -182,15 +104,12 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       if (file) {
         // Auto-select format based on extension
         const ext = file.name.split('.').pop()?.toLowerCase();
-        if (ext === 'qif') {
-          setSelectedFormat('qif');
-        } else if (ext === 'csv') {
-          setSelectedFormat('csv');
-        } else if (ext === 'ofx' || ext === 'qfx') {
-          setSelectedFormat('ofx');
+        if (ext === 'csv') {
+          setSelectedFile(file);
+          setImportStatus({ status: 'ready', message: '' });
+        } else {
+          setError('Only CSV files are supported for import.');
         }
-        setSelectedFile(file);
-        setImportStatus({ status: 'ready', message: '' });
       }
     },
   });
@@ -372,38 +291,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     };
   };
 
-  const parseQFXData = async (text: string): Promise<Partial<Transaction>[]> => {
-    try {
-      const transactions = parseOFXContent(text) as OFXTransaction[];
-      
-      return transactions.map((trn: OFXTransaction) => ({
-        date: trn.DTPOSTED,
-        type: (parseFloat(trn.TRNAMT) >= 0 ? 'income' : 'expense') as TransactionType,
-        amount: Math.abs(parseFloat(trn.TRNAMT)),
-        payee: trn.NAME || trn.MEMO || 'Unknown Payee',
-        notes: `${trn.MEMO || ''}`.trim(),
-        category: 'Uncategorized'
-      }));
-    } catch (error) {
-      console.error('Error parsing QFX:', error);
-      throw new Error('Failed to parse QFX file. Please check the file format.');
-    }
-  };
 
-  const parseQIFData = async (text: string): Promise<Partial<Transaction>[]> => {
-    const qifData = qif2json.parse(text) as { transactions: QIFTransaction[] };
-    
-    const parsedTransactions = qifData.transactions.map((trn: QIFTransaction) => ({
-      date: trn.date.toISOString().split('T')[0],
-      type: (trn.amount >= 0 ? 'income' : 'expense') as TransactionType,
-      amount: Math.abs(trn.amount),
-      payee: trn.payee,
-      category: trn.category || 'Uncategorized',
-      notes: trn.memo || '',
-    }));
-
-    return removeDuplicateTransactions(parsedTransactions, []);
-  };
 
   const handleError = (error: Error | unknown) => {
     console.error('Import error:', error);
@@ -443,66 +331,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     }
   };
 
-  const handleQifImport = async (content: string): Promise<void> => {
-    try {
-      const data = qif2json.parse(content);
-      const transactions = data.transactions.map((t: QIFTransaction) => ({
-        date: t.date.toISOString().split('T')[0],
-        amount: t.amount,
-        payee: t.payee,
-        category: t.category || '',
-        notes: t.memo || '',
-        type: t.amount < 0 ? 'expense' : 'income' as TransactionType,
-        account_id: selectedAccount || 0,
-      }));
 
-      await handleImport(transactions);
-    } catch (error) {
-      handleError(error);
-    }
-  };
-
-  const handleOfxImport = async (content: string): Promise<void> => {
-    console.log('[ImportExportDialog] Starting OFX import');
-    console.log('[ImportExportDialog] OFX file content (first 200 chars):', content.slice(0, 200));
-    try {
-      const transactions = parseOFXContent(content);
-      console.log('[ImportExportDialog] parseOFXContent returned', transactions.length, 'records:', transactions);
-      // Map OFX records to ParsedTransaction, combining NAME and MEMO description
-      const parsedTransactions: ParsedTransaction[] = transactions.map((t: OFXTransaction) => {
-        // Extract raw date string before fractional seconds and timezone
-        const rawPosted = t.DTPOSTED.split('.')[0];
-        const rawMemo = t.MEMO || '';
-        const nameDesc = t.NAME ? t.NAME.trim() : '';
-        let memoDesc = '';
-        let memoNotes = '';
-        if (rawMemo.trim()) {
-          const parts = rawMemo.trim().split(/\s{2,}/);
-          memoDesc = parts[0] || '';
-          if (parts.length > 1) {
-            memoNotes = parts.slice(1).join(' ').trim();
-          }
-        }
-        // Combine NAME and MEMO description without extra spaces
-        const combined = (nameDesc + memoDesc).trim();
-        const payee = combined || 'Unknown Payee';
-        const notes = memoNotes;
-        return {
-          date: parseDate(rawPosted),
-          amount: Math.abs(parseFloat(t.TRNAMT)),
-          payee,
-          notes,
-          type: parseFloat(t.TRNAMT) < 0 ? 'expense' : 'income' as TransactionType,
-          account_id: selectedAccount || 0,
-          category: '',
-        };
-      });
-      console.log('[ImportExportDialog] parsedTransactions for import', parsedTransactions.length, parsedTransactions);
-      await handleImport(parsedTransactions);
-    } catch (error) {
-      handleError(error);
-    }
-  };
 
   const handleCsvImport = async (content: string): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -782,23 +611,13 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       const content = await selectedFile.text();
       const fileType = selectedFile.name.split('.').pop()?.toLowerCase();
 
-      switch (fileType) {
-        case 'qif':
-          await handleQifImport(content);
-          break;
-        case 'ofx':
-        case 'qfx':
-          // Support both OFX and QFX extensions
-          await handleOfxImport(content);
-          break;
-        case 'csv':
-          await handleCsvImport(content);
-          break;
-        default:
-          setImportStatus({
-            status: 'error',
-            message: 'Unsupported file type',
-          });
+      if (fileType === 'csv') {
+        await handleCsvImport(content);
+      } else {
+        setImportStatus({
+          status: 'error',
+          message: 'Only CSV files are supported for import.',
+        });
       }
     } catch (error) {
       handleError(error);
@@ -889,20 +708,12 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         </Box>
 
         <TabPanel value={activeTab} index={0}>
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel>File Format</InputLabel>
-            <Select
-              value={selectedFormat}
-              onChange={(e) => setSelectedFormat(e.target.value)}
-              label="File Format"
-            >
-              {FILE_FORMATS.map((format) => (
-                <MenuItem key={format.id} value={format.id}>
-                  {format.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Typography variant="h6" gutterBottom>
+            Import CSV File
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Import transactions from a CSV file. The file should contain columns for Date, Amount, and Description/Payee.
+          </Typography>
 
           <FormControlLabel
             control={
@@ -958,10 +769,10 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             ) : (
               <>
                 <Typography>
-                  Drag and drop a {FILE_FORMATS.find(f => f.id === selectedFormat)?.name} file here, or click to select a file
+                  Drag and drop a CSV file here, or click to select a file
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {FILE_FORMATS.find(f => f.id === selectedFormat)?.description}
+                  Import transactions from CSV spreadsheet files
                 </Typography>
               </>
             )}
