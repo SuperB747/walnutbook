@@ -181,8 +181,6 @@ pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
       |r| r.get(0),
     ).unwrap_or(0.0);
     let balance = sum;
-    // 디버깅을 위한 로그
-    println!("Account {} ({}): sum={}, balance={}", name, account_type, sum, balance);
     Ok(Account { id, name, account_type, balance, created_at })
   }).map_err(|e| e.to_string())?;
   let mut accounts = Vec::new();
@@ -828,8 +826,6 @@ pub fn delete_category(app: AppHandle, id: i64) -> Result<Vec<Category>, String>
 #[tauri::command]
 pub fn backup_database(app: AppHandle, save_path: String) -> Result<(), String> {
     let db_path = get_db_path(&app);
-    println!("[backup_database] Source DB path: {:?}", db_path);
-    println!("[backup_database] Destination path: {}", save_path);
     
     let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
     
@@ -840,12 +836,9 @@ pub fn backup_database(app: AppHandle, save_path: String) -> Result<(), String> 
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<String>, _>>().map_err(|e| e.to_string())?;
     
-    println!("[backup_database] Source tables: {:?}", tables);
-    
     // Check categories in source
     let category_count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
         .map_err(|e| e.to_string())?;
-    println!("[backup_database] Source categories count: {}", category_count);
     
     let mut dest = rusqlite::Connection::open(&save_path).map_err(|e| e.to_string())?;
     {
@@ -861,11 +854,8 @@ pub fn backup_database(app: AppHandle, save_path: String) -> Result<(), String> 
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<String>, _>>().map_err(|e| e.to_string())?;
     
-    println!("[backup_database] Destination tables: {:?}", dest_tables);
-    
     let dest_category_count: i64 = dest.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
         .map_err(|e| e.to_string())?;
-    println!("[backup_database] Destination categories count: {}", dest_category_count);
     
     match dest.close() {
         Ok(_) => Ok(()),
@@ -890,8 +880,6 @@ pub fn export_database(app: AppHandle) -> Result<Vec<u8>, String> {
 #[tauri::command]
 pub fn import_database(app: AppHandle, data: Vec<u8>) -> Result<(), String> {
   let db_path = get_db_path(&app);
-  println!("[import_database] Target DB path: {:?}", db_path);
-  println!("[import_database] Data size: {} bytes", data.len());
   
   // 파일 쓰기 전 권한 체크 (cross-platform)
   match std::fs::metadata(&db_path) {
@@ -900,33 +888,27 @@ pub fn import_database(app: AppHandle, data: Vec<u8>) -> Result<(), String> {
         return Err("Database file is read-only. Please check permissions.".to_string());
       }
     },
-    Err(e) => {
-      println!("[import_database] metadata error: {}", e);
+    Err(_) => {
+      // Ignore metadata errors
     }
   }
   
   match std::fs::write(&db_path, data) {
     Ok(_) => {
-      println!("[import_database] Database file written successfully");
-      
       // Verify the imported database
       let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
-      let tables: Vec<String> = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'")
+      let _tables: Vec<String> = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'")
           .map_err(|e| e.to_string())?
           .query_map([], |row| row.get(0))
           .map_err(|e| e.to_string())?
           .collect::<Result<Vec<String>, _>>().map_err(|e| e.to_string())?;
       
-      println!("[import_database] Imported tables: {:?}", tables);
-      
-      let category_count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
+      let _category_count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
           .map_err(|e| e.to_string())?;
-      println!("[import_database] Imported categories count: {}", category_count);
       
       Ok(())
     },
     Err(e) => {
-      println!("[import_database] write error: {}", e);
       Err(format!("Failed to write database file: {}", e))
     }
   }
@@ -958,8 +940,6 @@ pub fn update_account_import_settings(app: AppHandle, account_id: i64, csv_sign_
   let path = get_db_path(&app);
   let conn = Connection::open(path).map_err(|e| e.to_string())?;
   
-  println!("[update_account_import_settings] Updating account {} with csv_sign_logic: {}", account_id, csv_sign_logic);
-  
   // Check if settings exist for this account
   let exists: i64 = conn.query_row(
     "SELECT COUNT(*) FROM account_import_settings WHERE account_id = ?1",
@@ -967,25 +947,20 @@ pub fn update_account_import_settings(app: AppHandle, account_id: i64, csv_sign_
     |r| r.get(0),
   ).map_err(|e| e.to_string())?;
   
-  println!("[update_account_import_settings] Settings exist: {}", exists);
-  
   if exists > 0 {
     // Update existing settings
-    println!("[update_account_import_settings] Updating existing settings");
     conn.execute(
       "UPDATE account_import_settings SET csv_sign_logic = ?1 WHERE account_id = ?2",
       params![csv_sign_logic, account_id],
     ).map_err(|e| e.to_string())?;
   } else {
     // Insert new settings
-    println!("[update_account_import_settings] Inserting new settings");
     conn.execute(
       "INSERT INTO account_import_settings (account_id, csv_sign_logic) VALUES (?1, ?2)",
       params![account_id, csv_sign_logic],
     ).map_err(|e| e.to_string())?;
   }
   
-  println!("[update_account_import_settings] Settings updated successfully");
   get_account_import_settings(app)
 }
 
@@ -994,8 +969,6 @@ pub fn get_csv_sign_logic_for_account(app: AppHandle, account_id: i64) -> Result
   let path = get_db_path(&app);
   let conn = Connection::open(path).map_err(|e| e.to_string())?;
   
-  println!("[get_csv_sign_logic_for_account] Getting settings for account: {}", account_id);
-  
   // Get the CSV sign logic for the account, default to 'standard' if not set
   let csv_sign_logic: String = conn.query_row(
     "SELECT csv_sign_logic FROM account_import_settings WHERE account_id = ?1",
@@ -1003,7 +976,52 @@ pub fn get_csv_sign_logic_for_account(app: AppHandle, account_id: i64) -> Result
     |r| r.get(0),
   ).unwrap_or("standard".to_string());
   
-  println!("[get_csv_sign_logic_for_account] Retrieved csv_sign_logic: {}", csv_sign_logic);
-  
   Ok(csv_sign_logic)
+}
+
+// Function to find OneDrive path
+#[tauri::command]
+pub fn get_onedrive_path() -> Result<String, String> {
+    // Try to find OneDrive path from environment variables
+    if let Ok(onedrive) = env::var("ONEDRIVE") {
+        return Ok(onedrive);
+    }
+    
+    // Try OneDrive for Business
+    if let Ok(onedrive_business) = env::var("ONEDRIVECOMMERCIAL") {
+        return Ok(onedrive_business);
+    }
+    
+    // Try to find OneDrive in common locations
+    let user_profile = env::var("USERPROFILE").unwrap_or_else(|_| "".to_string());
+    if !user_profile.is_empty() {
+        let possible_paths = vec![
+            format!("{}\\OneDrive", user_profile),
+            format!("{}\\OneDrive - Personal", user_profile),
+            format!("{}\\OneDrive - Company", user_profile),
+        ];
+        
+        for path in possible_paths {
+            if std::path::Path::new(&path).exists() {
+                return Ok(path);
+            }
+        }
+    }
+    
+    // If OneDrive is not found, return an error
+    Err("OneDrive path not found".to_string())
+}
+
+// Function to create backup folder
+#[tauri::command]
+pub fn create_backup_folder(folder_path: String) -> Result<(), String> {
+    match std::fs::create_dir_all(&folder_path) {
+        Ok(_) => {
+              Ok(())
+        },
+        Err(e) => {
+            println!("[create_backup_folder] Failed to create folder: {}", e);
+            Err(format!("Failed to create backup folder: {}", e))
+        }
+    }
 } 

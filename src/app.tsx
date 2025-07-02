@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   CssBaseline,
@@ -23,6 +23,11 @@ import { desktopDir } from '@tauri-apps/api/path';
 import AccountsPage from './components/AccountsPage';
 import TransactionsPage from './components/TransactionsPage';
 import BudgetsPage from './components/BudgetsPage';
+import CategoryManagementDialog from './components/CategoryManagementDialog';
+import BulkTransactionEdit from './components/BulkTransactionEdit';
+import ImportExportDialog from './components/ImportExportDialog';
+import BackupRestoreDialog from './components/BackupRestoreDialog';
+import { Account, Transaction } from './db';
 
 const theme = createTheme({
   palette: {
@@ -207,20 +212,50 @@ const App: React.FC = () => {
   const [toolsAnchorEl, setToolsAnchorEl] = useState<null | HTMLElement>(null);
   const openToolsMenu = (event: React.MouseEvent<HTMLElement>) => setToolsAnchorEl(event.currentTarget);
   const closeToolsMenu = () => setToolsAnchorEl(null);
+  
+  // Dialog states
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
+  const [importExportDialogOpen, setImportExportDialogOpen] = useState(false);
+  const [backupRestoreDialogOpen, setBackupRestoreDialogOpen] = useState(false);
+  
+  // Data states for dialogs
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+
+  // Function to find OneDrive path and create backup folder
+  const findOneDrivePath = async (): Promise<string> => {
+    try {
+      // Try to find OneDrive path from environment variables
+      const oneDrivePath = await invoke<string>('get_onedrive_path');
+      if (oneDrivePath) {
+        // Create WalnutBook backup folder in OneDrive
+        const backupFolder = `${oneDrivePath}/WalnutBook_Backups`;
+        await invoke('create_backup_folder', { folderPath: backupFolder });
+        return backupFolder;
+      }
+    } catch (error) {
+      console.log('Could not get OneDrive path from environment:', error);
+    }
+
+    // Fallback to desktop if OneDrive not found
+    return await desktopDir();
+  };
 
   const handleBackup = async () => {
     try {
-      const desktop = await desktopDir();
+      const backupDir = await findOneDrivePath();
       const now = new Date();
       const pad = (n: number) => n.toString().padStart(2, '0');
       const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-      const savePath = `${desktop}/walnutbook_backup_${timestamp}.db`;
+      const savePath = `${backupDir}/walnutbook_backup_${timestamp}.db`;
       
       await invoke('backup_database', { savePath });
       
       setSnackbar({
         open: true,
-        message: `Backup saved: ${savePath}`,
+        message: `Backup saved to OneDrive/WalnutBook_Backups: ${savePath}`,
         severity: 'success',
       });
     } catch (err) {
@@ -243,6 +278,29 @@ const App: React.FC = () => {
         return 0;
     }
   };
+
+  // Load data for dialogs
+  const loadDialogData = async () => {
+    try {
+      const [accountsData, transactionsData, categoriesData] = await Promise.all([
+        invoke<Account[]>('get_accounts'),
+        invoke<Transaction[]>('get_transactions'),
+        invoke<string[]>('get_categories')
+      ]);
+      setAccounts(accountsData);
+      setTransactions(transactionsData);
+      setCategories(categoriesData);
+    } catch (error) {
+      console.error('Failed to load dialog data:', error);
+    }
+  };
+
+  // Load data when dialogs open
+  useEffect(() => {
+    if (categoryDialogOpen || bulkEditDialogOpen || importExportDialogOpen) {
+      loadDialogData();
+    }
+  }, [categoryDialogOpen, bulkEditDialogOpen, importExportDialogOpen]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -335,16 +393,28 @@ const App: React.FC = () => {
             horizontal: 'right',
           }}
         >
-          <MenuItem onClick={closeToolsMenu}>
+          <MenuItem onClick={() => {
+            closeToolsMenu();
+            setCategoryDialogOpen(true);
+          }}>
             Manage Categories
           </MenuItem>
-          <MenuItem onClick={closeToolsMenu}>
+          <MenuItem onClick={() => {
+            closeToolsMenu();
+            setBulkEditDialogOpen(true);
+          }}>
             Bulk Edit
           </MenuItem>
-          <MenuItem onClick={closeToolsMenu}>
+          <MenuItem onClick={() => {
+            closeToolsMenu();
+            setImportExportDialogOpen(true);
+          }}>
             Import/Export
           </MenuItem>
-          <MenuItem onClick={closeToolsMenu}>
+          <MenuItem onClick={() => {
+            closeToolsMenu();
+            setBackupRestoreDialogOpen(true);
+          }}>
             Backup & Restore
           </MenuItem>
         </Menu>
@@ -362,6 +432,76 @@ const App: React.FC = () => {
             {snackbar.message}
           </Alert>
         </Snackbar>
+
+        {/* Dialogs */}
+        <CategoryManagementDialog
+          open={categoryDialogOpen}
+          onClose={() => setCategoryDialogOpen(false)}
+          onChange={loadDialogData}
+        />
+        
+        <BulkTransactionEdit
+          open={bulkEditDialogOpen}
+          onClose={() => setBulkEditDialogOpen(false)}
+          onSave={async (updates) => {
+            try {
+              await invoke('bulk_update_transactions', updates);
+              await loadDialogData();
+              setSnackbar({
+                open: true,
+                message: `Updated ${updates.transactionIds.length} transaction(s)`,
+                severity: 'success',
+              });
+            } catch (error) {
+              setSnackbar({
+                open: true,
+                message: 'Failed to update transactions: ' + String(error),
+                severity: 'error',
+              });
+            }
+          }}
+          transactions={transactions}
+          accounts={accounts}
+          categories={categories}
+        />
+        
+        <ImportExportDialog
+          open={importExportDialogOpen}
+          onClose={() => setImportExportDialogOpen(false)}
+          onImport={async (transactions) => {
+            try {
+              for (const transaction of transactions) {
+                await invoke('create_transaction', transaction);
+              }
+              await loadDialogData();
+              setSnackbar({
+                open: true,
+                message: `Imported ${transactions.length} transaction(s)`,
+                severity: 'success',
+              });
+            } catch (error) {
+              setSnackbar({
+                open: true,
+                message: 'Failed to import transactions: ' + String(error),
+                severity: 'error',
+              });
+            }
+          }}
+          accounts={accounts}
+          transactions={transactions}
+        />
+        
+        <BackupRestoreDialog
+          open={backupRestoreDialogOpen}
+          onClose={() => setBackupRestoreDialogOpen(false)}
+          onRestore={() => {
+            setSnackbar({
+              open: true,
+              message: 'Database restored successfully. Please refresh the page.',
+              severity: 'success',
+            });
+          }}
+        />
       </Box>
     </ThemeProvider>
   );

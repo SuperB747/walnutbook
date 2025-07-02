@@ -12,18 +12,37 @@ interface BackupRestoreDialogProps {
 const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose, onRestore }) => {
   const [status, setStatus] = useState<{ message: string; error: boolean } | null>(null);
 
-  const handleBackup = async () => {
-    setStatus({ message: 'Backing up...', error: false });
+  // Function to find OneDrive path and create backup folder
+  const findOneDrivePath = async (): Promise<string> => {
     try {
-      // Determine Desktop path
-      const desktop = await desktopDir();
+      // Try to find OneDrive path from environment variables
+      const oneDrivePath = await invoke<string>('get_onedrive_path');
+      if (oneDrivePath) {
+        // Create WalnutBook backup folder in OneDrive
+        const backupFolder = `${oneDrivePath}/WalnutBook_Backups`;
+        await invoke('create_backup_folder', { folderPath: backupFolder });
+        return backupFolder;
+      }
+    } catch (error) {
+      console.log('Could not get OneDrive path from environment:', error);
+    }
+
+    // Fallback to desktop if OneDrive not found
+    return await desktopDir();
+  };
+
+  const handleBackup = async () => {
+    setStatus({ message: 'Backing up to OneDrive...', error: false });
+    try {
+      // Determine OneDrive path
+      const backupDir = await findOneDrivePath();
       const now = new Date();
       const pad = (n: number) => n.toString().padStart(2, '0');
       const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-      const savePath = `${desktop}/walnutbook_backup_${timestamp}.db`;
-      // Invoke Rust to copy the DB file to Desktop
+      const savePath = `${backupDir}/walnutbook_backup_${timestamp}.db`;
+      // Invoke Rust to copy the DB file to OneDrive
       await invoke('backup_database', { savePath });
-      setStatus({ message: `Backup saved: ${savePath}`, error: false });
+      setStatus({ message: `Backup saved to OneDrive/WalnutBook_Backups: ${savePath}`, error: false });
     } catch (err) {
       console.error('Backup failed:', err);
       setStatus({ message: 'Backup failed: ' + String(err), error: true });
