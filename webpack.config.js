@@ -96,6 +96,10 @@ const rendererConfig = {
         exclude: /node_modules/,
       },
       {
+        test: /\.(png|jpe?g|gif|svg)$/i,
+        type: 'asset/resource',
+      },
+      {
         test: /\.wasm$/,
         type: 'asset/resource',
       },

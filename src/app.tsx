@@ -28,6 +28,7 @@ import BulkTransactionEdit from './components/BulkTransactionEdit';
 import ImportExportDialog from './components/ImportExportDialog';
 import BackupRestoreDialog from './components/BackupRestoreDialog';
 import { Account, Transaction } from './db';
+import logo from './logo.png';
 
 const theme = createTheme({
   palette: {
@@ -308,6 +309,7 @@ const App: React.FC = () => {
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default', backgroundColor: '#fafbfc !important' }}>
         <AppBar position="static">
           <Box sx={{ 
+            position: 'relative',
             display: 'flex', 
             alignItems: 'stretch',
             background: 'linear-gradient(90deg, #234075 0%, #1976d2 100%)',
@@ -316,84 +318,38 @@ const App: React.FC = () => {
             boxShadow: 'none',
             minHeight: 112, // Toolbar(64px) + Tabs(48px) = 112px
           }}>
-            {/* 로고 영역 - 왼쪽에 Toolbar와 탭바 높이를 합친 크기로 배치 */}
+            {/* 로고 영역 - 왼쪽 */}
             <Box sx={{ 
               flexShrink: 0, 
-              width: 240, // 로고 너비 (600px -> 240px로 축소)
+              width: 240, 
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               px: 2,
             }}>
               <img 
-                src="/logo.png" 
+                src={logo} 
                 alt="WalnutBook Logo" 
                 style={{
-                  height: '100px', // 로고 높이 (250px -> 100px로 축소)
+                  height: '100px',
                   width: 'auto',
                   objectFit: 'contain',
                 }}
               />
             </Box>
-            
-            {/* 중간 영역 - 탭들 */}
-            <Box sx={{ 
-              flexGrow: 1, 
-              display: 'flex', 
-              alignItems: 'flex-end',
-              justifyContent: 'center',
-              minHeight: 112, // 전체 높이
-              pb: 0, // 아래쪽 여백 제거
-            }}>
-              <Tabs 
-                value={getActiveTab()} 
-                sx={{
-                  '& .MuiTabs-indicator': {
-                    backgroundColor: '#ffffff',
-                  },
-                  '& .MuiTab-root': {
-                    color: '#234075',
-                    backgroundColor: 'rgba(255,255,255,0.12)',
-                    fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
-                    fontWeight: 700,
-                    fontSize: '1rem',
-                    letterSpacing: '0.15px',
-                    textTransform: 'none',
-                    minHeight: '48px',
-                    padding: '12px 28px',
-                    borderRadius: '12px 12px 0 0',
-                    margin: '0 4px',
-                    transition: 'background-color 0.2s, color 0.2s, box-shadow 0.2s',
-                    '&:hover': {
-                      backgroundColor: 'rgba(255,255,255,0.12)',
-                      color: '#fff',
-                    },
-                    '&.Mui-selected': {
-                      color: '#234075',
-                      backgroundColor: '#fafbfc', // 메인 프레임과 같은 배경색
-                      boxShadow: '0 2px 12px rgba(35, 64, 117, 0.10)',
-                      zIndex: 1,
-                      borderBottom: 'none', // 하단 테두리 제거
-                    },
-                  },
-                }}
-              >
-                <Tab label="Accounts" component={Link} to="/" />
-                <Tab label="Transactions" component={Link} to="/transactions" />
-                <Tab label="Budgets" component={Link} to="/budgets" />
-              </Tabs>
-            </Box>
-            
+
             {/* 오른쪽 영역 - 툴 버튼들 */}
             <Box sx={{ 
               flexShrink: 0, 
-              width: 120, // 버튼 영역 너비
+              width: 120, 
               display: 'flex', 
               alignItems: 'flex-end',
               justifyContent: 'flex-end',
               px: 2,
-              pb: 1, // 아래쪽 여백
-              minHeight: 112, // 전체 높이
+              pb: 1,
+              minHeight: 112,
+              ml: 'auto',
+              position: 'static',
             }}>
               <Box sx={{ display: 'flex', gap: 1, flexDirection: 'row' }}>
                 <IconButton
@@ -424,6 +380,61 @@ const App: React.FC = () => {
                 </IconButton>
               </Box>
             </Box>
+
+            {/* 중앙 영역 - 탭들 */}
+            <Box
+              sx={{
+                position: 'absolute',
+                left: '50%',
+                bottom: 0,
+                transform: 'translateX(-50%)',
+                zIndex: 2,
+                minHeight: 48,
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'center',
+                width: 'auto',
+              }}
+            >
+              <Tabs 
+                value={getActiveTab()} 
+                sx={{
+                  '& .MuiTabs-indicator': {
+                    backgroundColor: '#ffffff',
+                  },
+                  '& .MuiTab-root': {
+                    color: '#234075',
+                    backgroundColor: 'rgba(255,255,255,0.12)',
+                    fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+                    fontWeight: 700,
+                    fontSize: '1rem',
+                    letterSpacing: '0.15px',
+                    textTransform: 'none',
+                    minHeight: '48px',
+                    padding: '12px 28px',
+                    borderRadius: '12px 12px 0 0',
+                    margin: '0 4px',
+                    transition: 'background-color 0.2s, color 0.2s, box-shadow 0.2s',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255,255,255,0.12)',
+                      color: '#fff',
+                    },
+                    '&.Mui-selected': {
+                      color: '#234075',
+                      backgroundColor: '#fafbfc',
+                      boxShadow: '0 2px 12px rgba(35, 64, 117, 0.10)',
+                      zIndex: 1,
+                      borderBottom: 'none',
+                    },
+                  },
+                }}
+              >
+                <Tab label="Accounts" component={Link} to="/" />
+                <Tab label="Transactions" component={Link} to="/transactions" />
+                <Tab label="Budgets" component={Link} to="/budgets" />
+              </Tabs>
+            </Box>
+
           </Box>
         </AppBar>
           <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
