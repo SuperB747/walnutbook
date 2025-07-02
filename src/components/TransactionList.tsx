@@ -143,9 +143,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
     setDateRange({ start: '', end: '' });
   };
 
-  // 모든 고유 카테고리 추출
+  // 모든 고유 카테고리 추출 (transfer, adjust 타입 제외)
   const uniqueCategories = useMemo(() => {
-    return Array.from(new Set(transactions.map(t => t.category)));
+    return Array.from(new Set(
+      transactions
+        .filter(t => t.type !== 'transfer' && t.type !== 'adjust')
+        .map(t => t.category)
+    ));
   }, [transactions]);
 
   // 필터링된 거래 내역
@@ -332,7 +336,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
             )}
             MenuProps={{ MenuListProps: { dense: true } }}
           >
-            {uniqueCategories.map((category) => (
+            {uniqueCategories.sort().map((category) => (
               <MenuItem key={category} value={category} dense>
                 <Checkbox checked={selectedCategories.indexOf(category) > -1} size="small" />
                 <ListItemText primary={category} />

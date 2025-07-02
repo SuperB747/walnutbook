@@ -315,42 +315,70 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     <Box sx={{ mb: 2 }}>
       <Grid container spacing={3}>
         {/* 총계 */}
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={3}>
           <Paper sx={{ p: 2, height: '100%' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Typography variant="h6" gutterBottom>
-                Summary
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Select
-                  value={year}
-                  size="small"
-                  onChange={e => {
-                    setYear(e.target.value);
-                    handleMonthChange(e.target.value, month);
-                  }}
-                  sx={{ width: 90 }}
-                >
-                  {years.map(y => (
-                    <MenuItem key={y} value={String(y)}>{y}</MenuItem>
-                  ))}
-                </Select>
-                <Select
-                  value={month}
-                  size="small"
-                  onChange={e => {
-                    setMonth(e.target.value);
-                    handleMonthChange(year, e.target.value);
-                  }}
-                  sx={{ width: 120 }}
-                >
-                  {months.map(m => (
-                    <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
-                  ))}
-                </Select>
-              </Box>
+            <Typography variant="h6" gutterBottom>
+              Summary
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <Select
+                value={year}
+                size="small"
+                onChange={e => {
+                  setYear(e.target.value);
+                  handleMonthChange(e.target.value, month);
+                }}
+                sx={{ 
+                  width: 90,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    border: 'none'
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    border: 'none'
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    border: 'none'
+                  },
+                  backgroundColor: 'transparent',
+                  '& .MuiSelect-icon': {
+                    color: 'text.secondary'
+                  }
+                }}
+              >
+                {years.map(y => (
+                  <MenuItem key={y} value={String(y)}>{y}</MenuItem>
+                ))}
+              </Select>
+              <Select
+                value={month}
+                size="small"
+                onChange={e => {
+                  setMonth(e.target.value);
+                  handleMonthChange(year, e.target.value);
+                }}
+                sx={{ 
+                  width: 120,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    border: 'none'
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    border: 'none'
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    border: 'none'
+                  },
+                  backgroundColor: 'transparent',
+                  '& .MuiSelect-icon': {
+                    color: 'text.secondary'
+                  }
+                }}
+              >
+                {months.map(m => (
+                  <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
+                ))}
+              </Select>
             </Box>
-            <Box sx={{ mt: 2 }}>
+            <Box>
               <Typography variant="subtitle1" color="success.main">
                 Total Income: {formatCurrency(totals.income)}
               </Typography>
@@ -366,7 +394,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
         </Grid>
 
         {/* 카테고리별 지출 */}
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={5}>
           <Paper sx={{ p: 2, height: '100%' }}>
             <Typography variant="h6" gutterBottom>
               Expenses by Category
