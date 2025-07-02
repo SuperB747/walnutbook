@@ -201,44 +201,25 @@ const TransactionsPage: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
-        <Typography variant="h4" component="h1">
-          Transactions
-        </Typography>
-        <Box sx={{ flexGrow: 1 }} />
-        <ButtonGroup variant="contained">
-          <Button
-            startIcon={<AddIcon />}
-            onClick={() => setFormOpen(true)}
-          >
-            Add Transaction
-          </Button>
-          <Button
-            size="small"
-            endIcon={<ArrowDropDownIcon />}
-            onClick={openActionsMenu}
-          />
-        </ButtonGroup>
-        <Menu
-          anchorEl={actionsAnchorEl}
-          open={Boolean(actionsAnchorEl)}
-          onClose={closeActionsMenu}
-        >
-          <MenuItem onClick={() => { setCategoriesOpen(true); closeActionsMenu(); }}>
-            Manage Categories
-          </MenuItem>
-          <MenuItem onClick={() => { setBulkEditOpen(true); closeActionsMenu(); }}>
-            Bulk Edit
-          </MenuItem>
-          <MenuItem onClick={() => { setImportExportOpen(true); closeActionsMenu(); }}>
-            Import/Export
-          </MenuItem>
+      <Menu
+        anchorEl={actionsAnchorEl}
+        open={Boolean(actionsAnchorEl)}
+        onClose={closeActionsMenu}
+      >
+        <MenuItem onClick={() => { setCategoriesOpen(true); closeActionsMenu(); }}>
+          Manage Categories
+        </MenuItem>
+        <MenuItem onClick={() => { setBulkEditOpen(true); closeActionsMenu(); }}>
+          Bulk Edit
+        </MenuItem>
+        <MenuItem onClick={() => { setImportExportOpen(true); closeActionsMenu(); }}>
+          Import/Export
+        </MenuItem>
 
-          <MenuItem onClick={() => { setBackupOpen(true); closeActionsMenu(); }}>
-            Backup & Restore
-          </MenuItem>
-        </Menu>
-      </Stack>
+        <MenuItem onClick={() => { setBackupOpen(true); closeActionsMenu(); }}>
+          Backup & Restore
+        </MenuItem>
+      </Menu>
       
       {/* Summary with month selector inside component */}
       <TransactionSummary
@@ -272,6 +253,7 @@ const TransactionsPage: React.FC = () => {
         }}
         onDescriptionChange={handleDescriptionChange}
         initialSelectedIds={importedIds}
+        onAddTransaction={() => setFormOpen(true)}
         />
 
         <TransactionForm

@@ -31,6 +31,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   FilterList as FilterIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
 import { Transaction, Account } from '../db';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
@@ -46,6 +47,7 @@ export interface TransactionListProps {
   onCategoryChange: (id: number, category: string) => Promise<void>;
   onDescriptionChange?: (id: number, description: string) => Promise<void>;
   initialSelectedIds?: number[];
+  onAddTransaction?: () => void;
 }
 
 const TransactionList: React.FC<TransactionListProps> = ({
@@ -57,6 +59,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   onCategoryChange,
   onDescriptionChange,
   initialSelectedIds = [],
+  onAddTransaction,
 }) => {
   // 검색 및 필터 상태
   const [searchTerm, setSearchTerm] = useState('');
@@ -359,17 +362,32 @@ const TransactionList: React.FC<TransactionListProps> = ({
       </Box>
 
       {/* Bulk action buttons */}
-      <Box sx={{ display: 'flex', gap: 1, p: 0.5 }}>
-        <Button variant="outlined" disabled={selectedIds.length === 0} onClick={(e) => handleBulkDelete(e)}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, p: 0.5 }}>
+        <Button variant="outlined" disabled={selectedIds.length === 0} onClick={handleBulkDelete}>
           Delete Selected
         </Button>
+        {onAddTransaction && (
+          <Button variant="contained" onClick={onAddTransaction} startIcon={<AddIcon />}>
+            Add Transaction
+          </Button>
+        )}
       </Box>
 
-      <TableContainer component={Paper} elevation={2} sx={{ width: '100%' }}>
-        <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
+      <TableContainer component={Paper} elevation={2} sx={{ 
+        width: '100%',
+        overflowX: 'auto',
+        '& .MuiTable-root': {
+          minWidth: '100%',
+        }
+      }}>
+        <Table size="small" sx={{ 
+          tableLayout: 'fixed', 
+          width: '100%',
+          minWidth: '800px'
+        }}>
         <TableHead>
           <TableRow>
-              <TableCell padding="checkbox" sx={{ width: 40 }}>
+              <TableCell padding="checkbox" sx={{ width: 50, minWidth: 50 }}>
                 <Checkbox
                   indeterminate={selectedIds.length > 0 && selectedIds.length < filteredTransactions.length}
                   checked={filteredTransactions.length > 0 && selectedIds.length === filteredTransactions.length}
@@ -382,13 +400,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   }}
                 />
               </TableCell>
-              <TableCell sx={{ width: 100, whiteSpace: 'nowrap' }}>Date</TableCell>
-              <TableCell sx={{ width: 120, whiteSpace: 'nowrap' }}>Account</TableCell>
+              <TableCell align="left" sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap' }}>Date</TableCell>
+              <TableCell align="left" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}>Account</TableCell>
               <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Description</TableCell>
-              <TableCell sx={{ width: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>Category</TableCell>
-              <TableCell sx={{ width: 100, whiteSpace: 'nowrap' }}>Amount</TableCell>
-              <TableCell sx={{ width: 100, whiteSpace: 'nowrap' }}>Type</TableCell>
-              <TableCell align="right" sx={{ width: 100, whiteSpace: 'nowrap' }}>Actions</TableCell>
+              <TableCell align="center" sx={{ width: 180, minWidth: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>Category</TableCell>
+              <TableCell align="center"sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap', pr: 4 }}>Amount</TableCell>
+              <TableCell align="center"sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap' }}>Type</TableCell>
+              <TableCell align="center" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}>Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -403,7 +421,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           ) : (
               filteredTransactions.map((transaction) => (
               <TableRow key={transaction.id}>
-                  <TableCell padding="checkbox" sx={{ width: 40 }}>
+                  <TableCell padding="checkbox" sx={{ width: 50, minWidth: 50 }}>
                     <Checkbox
                       checked={selectedIds.includes(transaction.id)}
                       onChange={(e) => {
@@ -414,8 +432,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       }}
                     />
                   </TableCell>
-                  <TableCell sx={{ width: 100, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{transaction.date}</TableCell>
-                  <TableCell sx={{ width: 120, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{getAccountName(transaction.account_id)}</TableCell>
+                  <TableCell sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{transaction.date}</TableCell>
+                  <TableCell sx={{ width: 100, minWidth: 100, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{getAccountName(transaction.account_id)}</TableCell>
                   <TableCell
                     sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                     onClick={() => {
@@ -465,7 +483,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       <Typography noWrap sx={{ fontSize: '0.9rem' }}>{getDisplayPayee(transaction)}</Typography>
                     )}
                   </TableCell>
-                  <TableCell sx={{ width: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>
+                  <TableCell align="center" sx={{ width: 180, minWidth: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>
                     {(transaction.type === 'income' || transaction.type === 'expense') ? (
                       <Select
                         value={transaction.category}
@@ -495,7 +513,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       ''
                     )}
                   </TableCell>
-                  <TableCell sx={{ width: 100, whiteSpace: 'nowrap', px: 1 }}>
+                  <TableCell align="right" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap', px: 1, pr: 4 }}>
                     <Typography
                       sx={{ fontSize: '0.9rem' }}
                       color={
@@ -507,7 +525,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       {formatCurrency(getDisplayAmount(transaction))}
                     </Typography>
                   </TableCell>
-                  <TableCell sx={{ width: 100, whiteSpace: 'nowrap', px: 1 }}>
+                  <TableCell align="center" sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap', px: 1 }}>
                     <Chip
                       label={transaction.type === 'adjust' ? 'Adjust' : transaction.type}
                       size="small"
@@ -531,17 +549,29 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       }
                     />
                   </TableCell>
-                  <TableCell align="right" sx={{ width: 100, whiteSpace: 'nowrap' }}>
+                  <TableCell align="right" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}>
                   <IconButton
                     size="small"
                       onClick={() => onEdit(transaction)}
-                    sx={{ mr: 1 }}
+                    sx={{ 
+                      mr: 1,
+                      backgroundColor: 'transparent',
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                      }
+                    }}
                   >
                     <EditIcon />
                   </IconButton>
                   <IconButton
                     size="small"
                       onClick={(e) => handleSingleDelete(transaction.id, e)}
+                    sx={{ 
+                      backgroundColor: 'transparent',
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                      }
+                    }}
                   >
                     <DeleteIcon />
                   </IconButton>

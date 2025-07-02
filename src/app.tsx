@@ -12,9 +12,12 @@ import {
   IconButton,
   Snackbar,
   Alert,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import { Link, Route, Routes, useLocation } from 'react-router-dom';
 import BackupIcon from '@mui/icons-material/Backup';
+import BuildIcon from '@mui/icons-material/Build';
 import { invoke } from '@tauri-apps/api/core';
 import { desktopDir } from '@tauri-apps/api/path';
 import AccountsPage from './components/AccountsPage';
@@ -36,8 +39,8 @@ const theme = createTheme({
       dark: '#004ba0',
     },
     background: {
-      default: '#F5F6FA',
-      paper: '#F0F1F5',
+      default: '#f4f5f7',
+      paper: '#e3eafc',
     },
     text: {
       primary: '#222831',
@@ -68,11 +71,31 @@ const theme = createTheme({
     MuiTypography: {
       styleOverrides: {
         h6: {
-          fontFamily: '"Segoe UI", "Roboto", "Helvetica Neue", sans-serif',
-          fontWeight: 700,
-          letterSpacing: '0.5px',
+          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+          fontWeight: 600,
+          letterSpacing: '0.3px',
           textShadow: 'none',
           fontSize: '1.25rem',
+        },
+        h5: {
+          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+          fontWeight: 600,
+          letterSpacing: '0.2px',
+        },
+        h4: {
+          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+          fontWeight: 600,
+          letterSpacing: '0.2px',
+        },
+        body1: {
+          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+          fontWeight: 400,
+          letterSpacing: '0.1px',
+        },
+        body2: {
+          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+          fontWeight: 400,
+          letterSpacing: '0.1px',
         },
       },
     },
@@ -81,9 +104,10 @@ const theme = createTheme({
         root: {
           color: '#234075',
           backgroundColor: 'rgba(255,255,255,0.12)',
-          fontWeight: 600,
-          fontSize: '1.05rem',
-          letterSpacing: '0.2px',
+          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+          fontWeight: 700,
+          fontSize: '1rem',
+          letterSpacing: '0.15px',
           textTransform: 'none',
           minHeight: '48px',
           padding: '12px 28px',
@@ -91,15 +115,15 @@ const theme = createTheme({
           margin: '0 4px',
           transition: 'background-color 0.2s, color 0.2s, box-shadow 0.2s',
           '&:hover': {
-            backgroundColor: 'rgba(255,255,255,0.22)',
+            backgroundColor: 'rgba(255,255,255,0.12)',
             color: '#fff',
           },
-          '&.Mui-selected': {
-            color: '#234075',
-            backgroundColor: '#fff',
-            boxShadow: '0 2px 12px rgba(35, 64, 117, 0.10)',
-            zIndex: 1,
-          },
+                      '&.Mui-selected': {
+              color: '#234075',
+              backgroundColor: '#f4f5f7',
+              boxShadow: '0 2px 12px rgba(35, 64, 117, 0.10)',
+              zIndex: 1,
+            },
         },
       },
     },
@@ -120,10 +144,11 @@ const theme = createTheme({
           backgroundColor: 'rgba(35, 64, 117, 0.06)',
           borderRadius: '16px',
           padding: '10px',
+          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
           transition: 'background-color 0.2s, color 0.2s',
           '&:hover': {
-            backgroundColor: 'rgba(25, 118, 210, 0.12)',
-            color: '#1976d2',
+            backgroundColor: 'rgba(35, 64, 117, 0.06)',
+            color: '#fff',
           },
         },
       },
@@ -131,38 +156,36 @@ const theme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: {
-          background: 'linear-gradient(135deg, #e3eafc 0%, #f0f4ff 100%)',
-          backgroundColor: '#e3eafc',
+          backgroundColor: '#fff',
           borderRadius: 16,
-          boxShadow: '0 2px 12px rgba(35, 64, 117, 0.08)',
+          boxShadow: '0 4px 20px rgba(35, 64, 117, 0.12)',
         },
       },
     },
     MuiCard: {
       styleOverrides: {
         root: {
-          background: 'linear-gradient(135deg, #e3eafc 0%, #f0f4ff 100%)',
-          backgroundColor: '#e3eafc',
+          backgroundColor: '#fff',
           borderRadius: 16,
-          boxShadow: '0 2px 12px rgba(35, 64, 117, 0.08)',
-          border: '1px solid #dbeafe',
+          boxShadow: '0 4px 20px rgba(35, 64, 117, 0.12)',
+          border: 'none',
         },
       },
     },
     MuiTableCell: {
       styleOverrides: {
         root: {
-          backgroundColor: 'rgba(227, 234, 252, 0.7)',
-          borderColor: '#dbeafe',
+          backgroundColor: '#fff',
+          borderColor: 'rgba(35, 64, 117, 0.1)',
         },
       },
     },
     MuiChip: {
       styleOverrides: {
         root: {
-          backgroundColor: '#e0e3e8',
-          color: '#234075',
+          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
           fontWeight: 500,
+          letterSpacing: '0.1px',
           borderRadius: 8,
         },
       },
@@ -181,6 +204,9 @@ const App: React.FC = () => {
     message: '',
     severity: 'success',
   });
+  const [toolsAnchorEl, setToolsAnchorEl] = useState<null | HTMLElement>(null);
+  const openToolsMenu = (event: React.MouseEvent<HTMLElement>) => setToolsAnchorEl(event.currentTarget);
+  const closeToolsMenu = () => setToolsAnchorEl(null);
 
   const handleBackup = async () => {
     try {
@@ -221,10 +247,14 @@ const App: React.FC = () => {
   return (
     <ThemeProvider theme={theme}>
         <CssBaseline />
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
         <AppBar position="static">
-          <Toolbar>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+          <Toolbar sx={{ minHeight: 64, px: 4, py: 0 }}>
+            <Typography variant="h6" component="div" sx={{ 
+              fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+              fontWeight: 700,
+              color: 'white'
+            }}>
               WalnutBook
             </Typography>
           </Toolbar>
@@ -254,20 +284,34 @@ const App: React.FC = () => {
               <Tab label="Transactions" component={Link} to="/transactions" />
               <Tab label="Budgets" component={Link} to="/budgets" />
             </Tabs>
-            <IconButton
-              color="inherit"
-              onClick={handleBackup}
-              sx={{ 
-                position: 'absolute',
-                right: 24,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                backdropFilter: 'blur(8px)',
-              }}
-              title="Backup Database"
-            >
-              <BackupIcon />
-            </IconButton>
+            <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
+              <IconButton
+                color="inherit"
+                onClick={openToolsMenu}
+                sx={{ 
+                  backdropFilter: 'blur(8px)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  },
+                }}
+                title="Tools"
+              >
+                <BuildIcon />
+              </IconButton>
+              <IconButton
+                color="inherit"
+                onClick={handleBackup}
+                sx={{ 
+                  backdropFilter: 'blur(8px)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  },
+                }}
+                title="Backup Database"
+              >
+                <BackupIcon />
+              </IconButton>
+            </Box>
           </Box>
         </AppBar>
           <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
@@ -277,6 +321,32 @@ const App: React.FC = () => {
             <Route path="/budgets" element={<BudgetsPage />} />
           </Routes>
         </Box>
+        <Menu
+          anchorEl={toolsAnchorEl}
+          open={Boolean(toolsAnchorEl)}
+          onClose={closeToolsMenu}
+          anchorOrigin={{
+            vertical: 'bottom',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+        >
+          <MenuItem onClick={closeToolsMenu}>
+            Manage Categories
+          </MenuItem>
+          <MenuItem onClick={closeToolsMenu}>
+            Bulk Edit
+          </MenuItem>
+          <MenuItem onClick={closeToolsMenu}>
+            Import/Export
+          </MenuItem>
+          <MenuItem onClick={closeToolsMenu}>
+            Backup & Restore
+          </MenuItem>
+        </Menu>
         <Snackbar
           open={snackbar.open}
           autoHideDuration={6000}

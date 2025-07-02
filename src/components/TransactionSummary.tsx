@@ -371,23 +371,23 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
             <Typography variant="h6" gutterBottom>
               Expenses by Category
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 1 }}>
               {/* 왼쪽 범례 */}
-              <Box sx={{ minWidth: 120, mr: 2 }}>
+              <Box sx={{ minWidth: 100, maxWidth: 120 }}>
                 {leftLegend.map((label) => (
                   <Box 
                     key={label} 
-                    sx={{ display: 'flex', alignItems: 'center', mb: 1, cursor: 'pointer' }}
+                    sx={{ display: 'flex', alignItems: 'center', mb: 0.5, cursor: 'pointer' }}
                     onMouseEnter={() => handleLegendHover(label)}
                     onMouseLeave={handleLegendLeave}
                   >
-                    <Box sx={{ width: 12, height: 12, bgcolor: getCategoryColor(label), mr: 1, borderRadius: '2px' }} />
-                    <Typography variant="body2" noWrap>{label}</Typography>
+                    <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColor(label), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>{label}</Typography>
                   </Box>
                 ))}
               </Box>
               {/* 도넛 그래프 */}
-              <Box sx={{ width: 180, height: 180 }}>
+              <Box sx={{ width: 180, height: 180, flexShrink: 0 }}>
                 <Doughnut
                   ref={doughnutRef}
                   data={{
@@ -422,16 +422,16 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                 />
               </Box>
               {/* 오른쪽 범례 */}
-              <Box sx={{ minWidth: 120, ml: 2 }}>
+              <Box sx={{ minWidth: 100, maxWidth: 120 }}>
                 {rightLegend.map((label) => (
                   <Box 
                     key={label} 
-                    sx={{ display: 'flex', alignItems: 'center', mb: 1, cursor: 'pointer' }}
+                    sx={{ display: 'flex', alignItems: 'center', mb: 0.5, cursor: 'pointer' }}
                     onMouseEnter={() => handleLegendHover(label)}
                     onMouseLeave={handleLegendLeave}
                   >
-                    <Box sx={{ width: 12, height: 12, bgcolor: getCategoryColor(label), mr: 1, borderRadius: '2px' }} />
-                    <Typography variant="body2" noWrap>{label}</Typography>
+                    <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColor(label), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>{label}</Typography>
                   </Box>
                 ))}
               </Box>
