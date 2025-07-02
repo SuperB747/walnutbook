@@ -247,7 +247,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           onChange={(e) => setSearchTerm(e.target.value)}
           sx={{ minWidth: 120, flex: 1 }}
         />
-        <FormControl size="small" sx={{ minWidth: 100 }}>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel sx={{ px: 0.5 }}>Account</InputLabel>
           <Select
             multiple
@@ -256,9 +256,15 @@ const TransactionList: React.FC<TransactionListProps> = ({
               typeof e.target.value === 'string' ? e.target.value.split(',').map(Number) : e.target.value
             )}
             input={<OutlinedInput label="Account" />}
-            sx={{ backgroundColor: 'transparent' }}
+            sx={{ 
+              backgroundColor: 'transparent',
+              '& .MuiSelect-icon': {
+                right: 8,
+                position: 'absolute'
+              }
+            }}
             renderValue={(selected) => (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, pr: 2 }}>
                 {selected.map((value) => (
                   <Chip key={value} label={getAccountName(value)} size="small" sx={{ backgroundColor: 'transparent', boxShadow: 'none', border: 'none' }} />
                 ))}
@@ -301,7 +307,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
             ))}
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: 100 }}>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel sx={{ px: 0.5 }}>Category</InputLabel>
           <Select
             multiple
@@ -310,9 +316,15 @@ const TransactionList: React.FC<TransactionListProps> = ({
               typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
             )}
             input={<OutlinedInput label="Category" />}
-            sx={{ backgroundColor: 'transparent' }}
+            sx={{ 
+              backgroundColor: 'transparent',
+              '& .MuiSelect-icon': {
+                right: 8,
+                position: 'absolute'
+              }
+            }}
             renderValue={(selected) => (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, pr: 2 }}>
                 {selected.map((value) => (
                   <Chip key={value} label={value} size="small" sx={{ backgroundColor: 'transparent', boxShadow: 'none', border: 'none' }} />
                 ))}
@@ -336,7 +348,20 @@ const TransactionList: React.FC<TransactionListProps> = ({
               ...prev,
               start: newDate ? newDate.toISOString().split('T')[0] : ''
             }))}
-            slotProps={{ textField: { size: 'small' } }}
+            slotProps={{ 
+              textField: { 
+                size: 'small',
+                sx: {
+                  width: 140,
+                  '& .MuiInputAdornment-root': {
+                    backgroundColor: 'transparent'
+                  },
+                  '& .MuiIconButton-root': {
+                    backgroundColor: 'transparent'
+                  }
+                }
+              } 
+            }}
           />
           <DatePicker
             label="To Date"
@@ -345,7 +370,20 @@ const TransactionList: React.FC<TransactionListProps> = ({
               ...prev,
               end: newDate ? newDate.toISOString().split('T')[0] : ''
             }))}
-            slotProps={{ textField: { size: 'small' } }}
+            slotProps={{ 
+              textField: { 
+                size: 'small',
+                sx: {
+                  width: 140,
+                  '& .MuiInputAdornment-root': {
+                    backgroundColor: 'transparent'
+                  },
+                  '& .MuiIconButton-root': {
+                    backgroundColor: 'transparent'
+                  }
+                }
+              } 
+            }}
           />
         </LocalizationProvider>
         <Button
