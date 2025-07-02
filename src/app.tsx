@@ -307,69 +307,122 @@ const App: React.FC = () => {
         <CssBaseline />
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default', backgroundColor: '#fafbfc !important' }}>
         <AppBar position="static">
-          <Toolbar sx={{ minHeight: 64, px: 4, py: 0 }}>
-            <Typography variant="h6" component="div" sx={{ 
-              fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
-              fontWeight: 700,
-              color: 'white'
-            }}>
-              WalnutBook
-            </Typography>
-          </Toolbar>
           <Box sx={{ 
             display: 'flex', 
-            alignItems: 'center', 
-            px: 4, 
-            pb: 0, 
-            pt: 0,
-            position: 'relative',
+            alignItems: 'stretch',
             background: 'linear-gradient(90deg, #234075 0%, #1976d2 100%)',
             borderBottom: 'none',
             borderRadius: '0 0 20px 20px',
             boxShadow: 'none',
+            minHeight: 112, // Toolbar(64px) + Tabs(48px) = 112px
           }}>
-            <Box sx={{ flexShrink: 0, width: 88 }} /> {/* 좌측 여백을 위한 더미 박스 */}
-            <Tabs 
-              value={getActiveTab()} 
-              centered
-              sx={{
-                flexGrow: 1,
-                '& .MuiTabs-indicator': {
-                  backgroundColor: '#ffffff',
-                },
-              }}
-            >
-              <Tab label="Accounts" component={Link} to="/" />
-              <Tab label="Transactions" component={Link} to="/transactions" />
-              <Tab label="Budgets" component={Link} to="/budgets" />
-            </Tabs>
-            <Box sx={{ display: 'flex', gap: 1, ml: 2, flexShrink: 0 }}>
-              <IconButton
-                color="inherit"
-                onClick={openToolsMenu}
-                sx={{ 
-                  backdropFilter: 'blur(8px)',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            {/* 로고 영역 - 왼쪽에 Toolbar와 탭바 높이를 합친 크기로 배치 */}
+            <Box sx={{ 
+              flexShrink: 0, 
+              width: 240, // 로고 너비 (600px -> 240px로 축소)
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              px: 2,
+            }}>
+              <img 
+                src="/logo.png" 
+                alt="WalnutBook Logo" 
+                style={{
+                  height: '100px', // 로고 높이 (250px -> 100px로 축소)
+                  width: 'auto',
+                  objectFit: 'contain',
+                }}
+              />
+            </Box>
+            
+            {/* 중간 영역 - 탭들 */}
+            <Box sx={{ 
+              flexGrow: 1, 
+              display: 'flex', 
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+              minHeight: 112, // 전체 높이
+              pb: 0, // 아래쪽 여백 제거
+            }}>
+              <Tabs 
+                value={getActiveTab()} 
+                sx={{
+                  '& .MuiTabs-indicator': {
+                    backgroundColor: '#ffffff',
+                  },
+                  '& .MuiTab-root': {
+                    color: '#234075',
+                    backgroundColor: 'rgba(255,255,255,0.12)',
+                    fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+                    fontWeight: 700,
+                    fontSize: '1rem',
+                    letterSpacing: '0.15px',
+                    textTransform: 'none',
+                    minHeight: '48px',
+                    padding: '12px 28px',
+                    borderRadius: '12px 12px 0 0',
+                    margin: '0 4px',
+                    transition: 'background-color 0.2s, color 0.2s, box-shadow 0.2s',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255,255,255,0.12)',
+                      color: '#fff',
+                    },
+                    '&.Mui-selected': {
+                      color: '#234075',
+                      backgroundColor: '#fafbfc', // 메인 프레임과 같은 배경색
+                      boxShadow: '0 2px 12px rgba(35, 64, 117, 0.10)',
+                      zIndex: 1,
+                      borderBottom: 'none', // 하단 테두리 제거
+                    },
                   },
                 }}
-                title="Tools"
               >
-                <BuildIcon />
-              </IconButton>
-              <IconButton
-                color="inherit"
-                onClick={handleBackup}
-                sx={{ 
-                  backdropFilter: 'blur(8px)',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                  },
-                }}
-                title="Backup Database"
-              >
-                <BackupIcon />
-              </IconButton>
+                <Tab label="Accounts" component={Link} to="/" />
+                <Tab label="Transactions" component={Link} to="/transactions" />
+                <Tab label="Budgets" component={Link} to="/budgets" />
+              </Tabs>
+            </Box>
+            
+            {/* 오른쪽 영역 - 툴 버튼들 */}
+            <Box sx={{ 
+              flexShrink: 0, 
+              width: 120, // 버튼 영역 너비
+              display: 'flex', 
+              alignItems: 'flex-end',
+              justifyContent: 'flex-end',
+              px: 2,
+              pb: 1, // 아래쪽 여백
+              minHeight: 112, // 전체 높이
+            }}>
+              <Box sx={{ display: 'flex', gap: 1, flexDirection: 'row' }}>
+                <IconButton
+                  color="inherit"
+                  onClick={openToolsMenu}
+                  sx={{ 
+                    backdropFilter: 'blur(8px)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    },
+                  }}
+                  title="Tools"
+                >
+                  <BuildIcon />
+                </IconButton>
+                <IconButton
+                  color="inherit"
+                  onClick={handleBackup}
+                  sx={{ 
+                    backdropFilter: 'blur(8px)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    },
+                  }}
+                  title="Backup Database"
+                >
+                  <BackupIcon />
+                </IconButton>
+              </Box>
             </Box>
           </Box>
         </AppBar>

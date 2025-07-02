@@ -8,6 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 const AccountsPage: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<Account | undefined>();
   const [snackbar, setSnackbar] = useState<{
@@ -25,6 +26,7 @@ const AccountsPage: React.FC = () => {
 
   const loadAccounts = async () => {
     try {
+      setIsLoading(true);
       const result = await invoke('get_accounts') as Account[];
       setAccounts(result);
     } catch (error) {
@@ -34,6 +36,8 @@ const AccountsPage: React.FC = () => {
         message: 'Failed to load accounts.',
         severity: 'error',
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -142,6 +146,7 @@ const AccountsPage: React.FC = () => {
           accounts={accounts}
           onEdit={handleEditAccount}
           onDelete={handleDeleteAccount}
+          isLoading={isLoading}
         />
 
         <AccountForm

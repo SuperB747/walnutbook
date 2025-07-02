@@ -27,6 +27,7 @@ export interface AccountListProps {
   accounts: Account[];
   onEdit: (account: Account) => void;
   onDelete: (id: number) => void;
+  isLoading?: boolean;
 }
 
 // Helper: format numbers as CAD currency with comma separators
@@ -54,6 +55,7 @@ const AccountList: React.FC<AccountListProps> = ({
   accounts,
   onEdit,
   onDelete,
+  isLoading = false,
 }) => {
   // 알파벳 순서로 정렬
   const sortedAccounts = [...accounts].sort((a, b) => a.name.localeCompare(b.name));
@@ -70,40 +72,53 @@ const AccountList: React.FC<AccountListProps> = ({
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={4}>
           <Card elevation={3} sx={{ display: 'flex', alignItems: 'center', p: 2 }}>
-            <AccountBalanceWalletIcon sx={{ fontSize: 40, color: availableFunds < 0 ? '#d32f2f' : '#388e3c', mr: 2 }} />
+            <AccountBalanceWalletIcon sx={{ fontSize: 40, color: isLoading ? 'grey.400' : (availableFunds < 0 ? '#d32f2f' : '#388e3c'), mr: 2 }} />
             <CardContent sx={{ p: 0 }}>
               <Typography variant="subtitle2" color="text.secondary">Available Funds</Typography>
-              <Typography variant="h6" sx={{ color: availableFunds < 0 ? '#d32f2f' : '#388e3c', fontWeight: 700 }}>
-                {safeFormatCurrency(availableFunds)}
-              </Typography>
+              {isLoading ? (
+                <Box sx={{ width: '80%', height: 24, bgcolor: 'grey.200', borderRadius: 1, mt: 0.5 }} />
+              ) : (
+                <Typography variant="h6" sx={{ color: availableFunds < 0 ? '#d32f2f' : '#388e3c', fontWeight: 700 }}>
+                  {safeFormatCurrency(availableFunds)}
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} md={4}>
           <Card elevation={3} sx={{ display: 'flex', alignItems: 'center', p: 2 }}>
-            <CreditCardIcon sx={{ fontSize: 40, color: creditCardBalance < 0 ? '#d32f2f' : '#388e3c', mr: 2 }} />
+            <CreditCardIcon sx={{ fontSize: 40, color: isLoading ? 'grey.400' : (creditCardBalance < 0 ? '#d32f2f' : '#388e3c'), mr: 2 }} />
             <CardContent sx={{ p: 0 }}>
               <Typography variant="subtitle2" color="text.secondary">Credit Card Balance</Typography>
-              <Typography variant="h6" sx={{ color: creditCardBalance < 0 ? '#d32f2f' : '#388e3c', fontWeight: 700 }}>
-                {safeFormatCurrency(creditCardBalance)}
-              </Typography>
+              {isLoading ? (
+                <Box sx={{ width: '80%', height: 24, bgcolor: 'grey.200', borderRadius: 1, mt: 0.5 }} />
+              ) : (
+                <Typography variant="h6" sx={{ color: creditCardBalance < 0 ? '#d32f2f' : '#388e3c', fontWeight: 700 }}>
+                  {safeFormatCurrency(creditCardBalance)}
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} md={4}>
           <Card elevation={3} sx={{ display: 'flex', alignItems: 'center', p: 2 }}>
-            <CalculateIcon sx={{ fontSize: 40, color: totalBalance < 0 ? '#d32f2f' : '#388e3c', mr: 2 }} />
+            <CalculateIcon sx={{ fontSize: 40, color: isLoading ? 'grey.400' : (totalBalance < 0 ? '#d32f2f' : '#388e3c'), mr: 2 }} />
             <CardContent sx={{ p: 0 }}>
               <Typography variant="subtitle2" color="text.secondary">Net Balance</Typography>
-              <Typography variant="h6" sx={{ color: totalBalance < 0 ? '#d32f2f' : '#388e3c', fontWeight: 700 }}>
-                {safeFormatCurrency(totalBalance)}
-              </Typography>
+              {isLoading ? (
+                <Box sx={{ width: '80%', height: 24, bgcolor: 'grey.200', borderRadius: 1, mt: 0.5 }} />
+              ) : (
+                <Typography variant="h6" sx={{ color: totalBalance < 0 ? '#d32f2f' : '#388e3c', fontWeight: 700 }}>
+                  {safeFormatCurrency(totalBalance)}
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>
       </Grid>
       <TableContainer component={Paper}>
         <Table size="small" sx={{
+          tableLayout: 'fixed', // 테이블 레이아웃 고정
           '& .MuiTableCell-root': {
             fontSize: '0.92rem',
             py: 0.5,
@@ -120,17 +135,39 @@ const AccountList: React.FC<AccountListProps> = ({
         }}>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ width: 130, minWidth: 130 }}>Name</TableCell>
-              <TableCell sx={{ minWidth: 200, flexGrow: 1 }}>Description</TableCell>
-              <TableCell align="center" sx={{ width: 80, minWidth: 80 }}>Type</TableCell>
-              <TableCell align="right" sx={{ width: 100, minWidth: 100 }}>Balance</TableCell>
-              <TableCell align="center" sx={{ width: 120, minWidth: 120 }}>Actions</TableCell>
+              <TableCell sx={{ width: 130, minWidth: 130, maxWidth: 130 }}>Name</TableCell>
+              <TableCell sx={{ minWidth: 200, maxWidth: 'none' }}>Description</TableCell>
+              <TableCell align="center" sx={{ width: 80, minWidth: 80, maxWidth: 80 }}>Type</TableCell>
+              <TableCell align="right" sx={{ width: 100, minWidth: 100, maxWidth: 100 }}>Balance</TableCell>
+              <TableCell align="center" sx={{ width: 120, minWidth: 120, maxWidth: 120 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-          {sortedAccounts.map((account) => (
+          {isLoading ? (
+            // 로딩 중일 때 스켈레톤 행들 표시
+            Array.from({ length: 5 }).map((_, index) => (
+              <TableRow key={`loading-${index}`}>
+                <TableCell sx={{ width: 130, minWidth: 130, maxWidth: 130 }}>
+                  <Box sx={{ width: '80%', height: 16, bgcolor: 'grey.200', borderRadius: 1 }} />
+                </TableCell>
+                <TableCell sx={{ minWidth: 200, maxWidth: 'none' }}>
+                  <Box sx={{ width: '60%', height: 16, bgcolor: 'grey.200', borderRadius: 1 }} />
+                </TableCell>
+                <TableCell align="center" sx={{ width: 80, minWidth: 80, maxWidth: 80 }}>
+                  <Box sx={{ width: '70%', height: 16, bgcolor: 'grey.200', borderRadius: 1, mx: 'auto' }} />
+                </TableCell>
+                <TableCell align="right" sx={{ width: 100, minWidth: 100, maxWidth: 100 }}>
+                  <Box sx={{ width: '60%', height: 16, bgcolor: 'grey.200', borderRadius: 1, ml: 'auto' }} />
+                </TableCell>
+                <TableCell align="center" sx={{ width: 120, minWidth: 120, maxWidth: 120 }}>
+                  <Box sx={{ width: '80%', height: 16, bgcolor: 'grey.200', borderRadius: 1, mx: 'auto' }} />
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            sortedAccounts.map((account) => (
               <TableRow key={account.id}>
-                <TableCell sx={{ width: 150, minWidth: 150 }}>
+                <TableCell sx={{ width: 130, minWidth: 130, maxWidth: 130 }}>
                   <Typography variant="body2" sx={{ 
                     overflow: 'hidden', 
                     textOverflow: 'ellipsis', 
@@ -139,7 +176,7 @@ const AccountList: React.FC<AccountListProps> = ({
                     {account.name}
                   </Typography>
                 </TableCell>
-                <TableCell sx={{ minWidth: 200, flexGrow: 1 }}>
+                <TableCell sx={{ minWidth: 200, maxWidth: 'none' }}>
                   <Typography variant="body2" color="text.secondary" sx={{ 
                     overflow: 'hidden', 
                     textOverflow: 'ellipsis', 
@@ -185,7 +222,8 @@ const AccountList: React.FC<AccountListProps> = ({
                 </IconButton>
                 </TableCell>
               </TableRow>
-          ))}
+            ))
+          )}
           </TableBody>
         </Table>
       </TableContainer>
