@@ -270,6 +270,7 @@ const App: React.FC = () => {
             borderRadius: '0 0 20px 20px',
             boxShadow: 'none',
           }}>
+            <Box sx={{ flexShrink: 0, width: 88 }} /> {/* 좌측 여백을 위한 더미 박스 */}
             <Tabs 
               value={getActiveTab()} 
               centered
@@ -284,7 +285,7 @@ const App: React.FC = () => {
               <Tab label="Transactions" component={Link} to="/transactions" />
               <Tab label="Budgets" component={Link} to="/budgets" />
             </Tabs>
-            <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1, ml: 2, flexShrink: 0 }}>
               <IconButton
                 color="inherit"
                 onClick={openToolsMenu}
