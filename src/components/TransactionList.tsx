@@ -245,7 +245,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           sx={{ minWidth: 120, flex: 1 }}
         />
         <FormControl size="small" sx={{ minWidth: 100 }}>
-          <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Account</InputLabel>
+          <InputLabel sx={{ px: 0.5 }}>Account</InputLabel>
           <Select
             multiple
             value={selectedAccounts}
@@ -253,10 +253,11 @@ const TransactionList: React.FC<TransactionListProps> = ({
               typeof e.target.value === 'string' ? e.target.value.split(',').map(Number) : e.target.value
             )}
             input={<OutlinedInput label="Account" />}
+            sx={{ backgroundColor: 'transparent' }}
             renderValue={(selected) => (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                 {selected.map((value) => (
-                  <Chip key={value} label={getAccountName(value)} size="small" />
+                  <Chip key={value} label={getAccountName(value)} size="small" sx={{ backgroundColor: 'transparent', boxShadow: 'none', border: 'none' }} />
                 ))}
               </Box>
             )}
@@ -271,7 +272,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 100 }}>
-          <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Type</InputLabel>
+          <InputLabel sx={{ px: 0.5 }}>Type</InputLabel>
           <Select
             multiple
             value={selectedTypes}
@@ -279,10 +280,11 @@ const TransactionList: React.FC<TransactionListProps> = ({
               typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
             )}
             input={<OutlinedInput label="Type" />}
+            sx={{ backgroundColor: 'transparent' }}
             renderValue={(selected) => (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                 {selected.map((value) => (
-                  <Chip key={value} label={value} size="small" />
+                  <Chip key={value} label={value} size="small" sx={{ backgroundColor: 'transparent', boxShadow: 'none', border: 'none' }} />
                 ))}
               </Box>
             )}
@@ -297,7 +299,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 100 }}>
-          <InputLabel sx={{ backgroundColor: 'background.paper', px: 0.5 }}>Category</InputLabel>
+          <InputLabel sx={{ px: 0.5 }}>Category</InputLabel>
           <Select
             multiple
             value={selectedCategories}
@@ -305,10 +307,11 @@ const TransactionList: React.FC<TransactionListProps> = ({
               typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
             )}
             input={<OutlinedInput label="Category" />}
+            sx={{ backgroundColor: 'transparent' }}
             renderValue={(selected) => (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                 {selected.map((value) => (
-                  <Chip key={value} label={value} size="small" />
+                  <Chip key={value} label={value} size="small" sx={{ backgroundColor: 'transparent', boxShadow: 'none', border: 'none' }} />
                 ))}
               </Box>
             )}
