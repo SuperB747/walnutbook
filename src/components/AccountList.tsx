@@ -113,35 +113,73 @@ const AccountList: React.FC<AccountListProps> = ({
           '& .MuiTableRow-root': {
             height: '32px',
           },
+          '& .MuiTableHead-root .MuiTableCell-root': {
+            fontWeight: 600,
+            color: 'text.primary',
+          },
         }}>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Type</TableCell>
-              <TableCell align="right">Balance</TableCell>
-              <TableCell align="right">Actions</TableCell>
+              <TableCell sx={{ width: 130, minWidth: 130 }}>Name</TableCell>
+              <TableCell sx={{ minWidth: 200, flexGrow: 1 }}>Description</TableCell>
+              <TableCell align="center" sx={{ width: 80, minWidth: 80 }}>Type</TableCell>
+              <TableCell align="right" sx={{ width: 100, minWidth: 100 }}>Balance</TableCell>
+              <TableCell align="center" sx={{ width: 120, minWidth: 120 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
           {sortedAccounts.map((account) => (
               <TableRow key={account.id}>
-                <TableCell>{account.name}</TableCell>
-                <TableCell>{account.type}</TableCell>
+                <TableCell sx={{ width: 150, minWidth: 150 }}>
+                  <Typography variant="body2" sx={{ 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis', 
+                    whiteSpace: 'nowrap' 
+                  }}>
+                    {account.name}
+                  </Typography>
+                </TableCell>
+                <TableCell sx={{ minWidth: 200, flexGrow: 1 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis', 
+                    whiteSpace: 'nowrap' 
+                  }}>
+                    {account.description || '-'}
+                  </Typography>
+                </TableCell>
+                <TableCell align="center">{account.type}</TableCell>
                 <TableCell align="right">
                   <Typography color={account.balance < 0 ? 'error.main' : 'inherit'}>
                     {formatCreditBalance(account)}
                   </Typography>
                 </TableCell>
-                <TableCell align="right">
+                <TableCell align="center">
                   <IconButton
                       size="small"
                     onClick={() => onEdit(account)}
+                    sx={{ 
+                      backgroundColor: 'transparent',
+                      color: 'primary.main',
+                      '&:hover': {
+                        backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                        color: 'primary.dark'
+                      }
+                    }}
                 >
                   <EditIcon />
                 </IconButton>
                 <IconButton
                     size="small"
                     onClick={() => onDelete(account.id)}
+                    sx={{ 
+                      backgroundColor: 'transparent',
+                      color: 'error.main',
+                      '&:hover': {
+                        backgroundColor: 'rgba(244, 67, 54, 0.08)',
+                        color: 'error.dark'
+                      }
+                    }}
                 >
                   <DeleteIcon />
                 </IconButton>

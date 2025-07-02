@@ -22,6 +22,7 @@ export interface Account {
   name: string;
   type: AccountType;
   balance: number;
+  description?: string;
   created_at: string;
 }
 
@@ -67,6 +68,7 @@ const SCHEMA = `
     name TEXT NOT NULL,
     type TEXT NOT NULL,
     balance REAL NOT NULL DEFAULT 0,
+    description TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 

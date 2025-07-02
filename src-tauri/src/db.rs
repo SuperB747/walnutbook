@@ -33,6 +33,7 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
       name TEXT NOT NULL,
       type TEXT NOT NULL,
       balance REAL NOT NULL DEFAULT 0,
+      description TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS transactions (
@@ -66,6 +67,11 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
   // Migrate: add created_at to accounts if missing
   let _ = conn.execute(
     "ALTER TABLE accounts ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+    [],
+  );
+  // Migrate: add description to accounts if missing
+  let _ = conn.execute(
+    "ALTER TABLE accounts ADD COLUMN description TEXT",
     [],
   );
   // Migrate: add created_at to budgets if missing
@@ -127,7 +133,7 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
 
 // Data model definitions
 #[derive(Serialize, Deserialize)]
-pub struct Account { pub id: i64, pub name: String, #[serde(rename = "type")] pub account_type: String, pub balance: f64, pub created_at: String }
+pub struct Account { pub id: i64, pub name: String, #[serde(rename = "type")] pub account_type: String, pub balance: f64, pub description: Option<String>, pub created_at: String }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Transaction {
@@ -168,12 +174,13 @@ pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
   let path = get_db_path(&app);
   let conn = Connection::open(path).map_err(|e| e.to_string())?;
   // 알파벳 순서로 계좌 조회
-  let mut stmt = conn.prepare("SELECT id, name, type, created_at FROM accounts ORDER BY name").map_err(|e| e.to_string())?;
+  let mut stmt = conn.prepare("SELECT id, name, type, description, created_at FROM accounts ORDER BY name").map_err(|e| e.to_string())?;
   let rows = stmt.query_map([], |row| {
     let id: i64 = row.get(0)?;
     let name: String = row.get(1)?;
     let account_type: String = row.get(2)?;
-    let created_at: String = row.get(3)?;
+    let description: Option<String> = row.get(3)?;
+    let created_at: String = row.get(4)?;
     // 거래 합계로 잔액 계산
     let sum: f64 = conn.query_row(
       "SELECT IFNULL(SUM(amount), 0) FROM transactions WHERE account_id = ?1",
@@ -181,7 +188,7 @@ pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
       |r| r.get(0),
     ).unwrap_or(0.0);
     let balance = sum;
-    Ok(Account { id, name, account_type, balance, created_at })
+    Ok(Account { id, name, account_type, balance, description, created_at })
   }).map_err(|e| e.to_string())?;
   let mut accounts = Vec::new();
   for account in rows {
@@ -198,8 +205,8 @@ pub fn create_account(app: AppHandle, name: String, account_type: String, balanc
     // Insert new account with initial balance (default to 0 if not provided)
     let initial_balance = balance.unwrap_or(0.0);
     conn.execute(
-        "INSERT INTO accounts (name, type, balance) VALUES (?1, ?2, ?3)",
-        params![name, account_type, initial_balance],
+        "INSERT INTO accounts (name, type, balance, description) VALUES (?1, ?2, ?3, ?4)",
+        params![name, account_type, initial_balance, None::<String>],
     )
     .map_err(|e| e.to_string())?;
     // Return updated account list
@@ -211,8 +218,8 @@ pub fn update_account(app: AppHandle, account: Account) -> Result<Vec<Account>, 
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     conn.execute(
-        "UPDATE accounts SET name = ?1, type = ?2, balance = ?3 WHERE id = ?4",
-        params![account.name, account.account_type, account.balance, account.id],
+        "UPDATE accounts SET name = ?1, type = ?2, balance = ?3, description = ?4 WHERE id = ?5",
+        params![account.name, account.account_type, account.balance, account.description, account.id],
     )
     .map_err(|e| e.to_string())?;
     get_accounts(app)
@@ -830,14 +837,14 @@ pub fn backup_database(app: AppHandle, save_path: String) -> Result<(), String> 
     let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
     
     // Check source database tables and data
-    let tables: Vec<String> = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'")
+    let _tables: Vec<String> = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'")
         .map_err(|e| e.to_string())?
         .query_map([], |row| row.get(0))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<String>, _>>().map_err(|e| e.to_string())?;
     
     // Check categories in source
-    let category_count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
+    let _category_count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
         .map_err(|e| e.to_string())?;
     
     let mut dest = rusqlite::Connection::open(&save_path).map_err(|e| e.to_string())?;
@@ -848,13 +855,13 @@ pub fn backup_database(app: AppHandle, save_path: String) -> Result<(), String> 
     }
     
     // Verify backup was successful
-    let dest_tables: Vec<String> = dest.prepare("SELECT name FROM sqlite_master WHERE type='table'")
+    let _dest_tables: Vec<String> = dest.prepare("SELECT name FROM sqlite_master WHERE type='table'")
         .map_err(|e| e.to_string())?
         .query_map([], |row| row.get(0))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<String>, _>>().map_err(|e| e.to_string())?;
     
-    let dest_category_count: i64 = dest.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
+    let _dest_category_count: i64 = dest.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
         .map_err(|e| e.to_string())?;
     
     match dest.close() {

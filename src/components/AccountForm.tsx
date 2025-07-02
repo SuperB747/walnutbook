@@ -41,6 +41,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
   const [formData, setFormData] = useState<Partial<Account>>({
     name: '',
     type: 'checking' as AccountType,
+    description: '',
   });
   const [csvSignLogic, setCsvSignLogic] = useState<string>('standard');
 
@@ -49,6 +50,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
       setFormData({
         name: account.name,
         type: account.type,
+        description: account.description || '',
       });
       // Load CSV import settings for existing account
       loadCsvImportSettings(account.id);
@@ -56,6 +58,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
       setFormData({
         name: '',
         type: 'checking' as AccountType,
+        description: '',
       });
       setCsvSignLogic('standard');
     }
@@ -117,6 +120,17 @@ const AccountForm: React.FC<AccountFormProps> = ({
               name="name"
               value={formData.name}
               onChange={handleChange}
+            />
+
+            <TextField
+              fullWidth
+              label="Description"
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              multiline
+              rows={2}
+              placeholder="Optional description for this account"
             />
 
           <FormControl fullWidth>

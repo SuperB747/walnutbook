@@ -44,8 +44,8 @@ const theme = createTheme({
       dark: '#004ba0',
     },
     background: {
-      default: '#f4f5f7',
-      paper: '#e3eafc',
+      default: '#fafbfc',
+      paper: '#ffffff',
     },
     text: {
       primary: '#222831',
@@ -305,7 +305,7 @@ const App: React.FC = () => {
   return (
     <ThemeProvider theme={theme}>
         <CssBaseline />
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default', backgroundColor: '#fafbfc !important' }}>
         <AppBar position="static">
           <Toolbar sx={{ minHeight: 64, px: 4, py: 0 }}>
             <Typography variant="h6" component="div" sx={{ 

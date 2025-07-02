@@ -93,6 +93,7 @@ const AccountsPage: React.FC = () => {
             name: accountData.name!,
             type: accountData.type!,
             balance: selectedAccount.balance,
+            description: accountData.description,
             created_at: selectedAccount.created_at,
           }
         });

@@ -594,8 +594,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     sx={{ 
                       mr: 1,
                       backgroundColor: 'transparent',
+                      color: 'primary.main',
                       '&:hover': {
-                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                        backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                        color: 'primary.dark'
                       }
                     }}
                   >
@@ -606,8 +608,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       onClick={(e) => handleSingleDelete(transaction.id, e)}
                     sx={{ 
                       backgroundColor: 'transparent',
+                      color: 'error.main',
                       '&:hover': {
-                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                        backgroundColor: 'rgba(244, 67, 54, 0.08)',
+                        color: 'error.dark'
                       }
                     }}
                   >
