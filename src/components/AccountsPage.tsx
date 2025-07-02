@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Box, Button, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Container, Box, Button, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Typography } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import AccountList from './AccountList';
 import AccountForm from './AccountForm';
@@ -131,7 +131,8 @@ const AccountsPage: React.FC = () => {
   return (
     <Container maxWidth="md">
       <Box sx={{ py: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>Account Summary</Typography>
           <Button
             variant="contained"
             color="primary"

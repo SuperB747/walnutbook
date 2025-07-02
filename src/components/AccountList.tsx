@@ -68,7 +68,6 @@ const AccountList: React.FC<AccountListProps> = ({
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>Account Summary</Typography>
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={4}>
           <Card elevation={3} sx={{ display: 'flex', alignItems: 'center', p: 2 }}>
