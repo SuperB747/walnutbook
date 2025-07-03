@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use std::env;
 use std::fs;
 use std::collections::HashSet;
+use chrono::Utc;
 
 
 
@@ -257,9 +258,15 @@ pub fn get_transactions(app: AppHandle) -> Result<Vec<Transaction>, String> {
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| {
+            let date: Option<String> = row.get(1)?;
+            let date = date.unwrap_or_else(|| {
+                // NULL인 경우 현재 날짜를 기본값으로 사용
+                Utc::now().format("%Y-%m-%d").to_string()
+            });
+            
             Ok(Transaction {
                 id: row.get(0)?,
-                date: row.get(1)?,
+                date: date,
                 account_id: row.get(2)?,
                 transaction_type: row.get(3)?,
                 category: row.get(4)?,

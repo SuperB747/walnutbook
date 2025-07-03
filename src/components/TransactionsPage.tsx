@@ -313,11 +313,14 @@ const TransactionsPage: React.FC = () => {
       setAccounts(newAccounts);
       setTransactions(newTransactions);
       
-      // 이벤트 발생 제거 - 로컬 상태 업데이트로 대체했으므로 불필요
-      // window.dispatchEvent(new Event('accountsUpdated'));
-      
-      setImportedIds(createdList.map(t => t.id));
+      // 새로 임포트된 거래들의 ID를 설정 (새로운 거래 목록에서 찾기)
+      const newImportedIds = createdList.map(t => t.id);
+      setImportedIds(newImportedIds);
       setImportedDuplicateCount(duplicateCount);
+      
+      // 다른 페이지가 거래 변경을 인식하도록 이벤트 발생
+      window.dispatchEvent(new Event('transactionsUpdated'));
+      
       setSnackbar({
         open: true,
         message: `Imported ${importedCount} transactions, skipped ${duplicateCount} duplicates.`,
@@ -378,7 +381,7 @@ const TransactionsPage: React.FC = () => {
 
   // Filter transactions by selected month (YYYY-MM)
   const filteredByMonth = selectedMonth
-    ? transactions.filter((t) => t.date.startsWith(selectedMonth))
+    ? transactions.filter((t) => t.date && t.date.startsWith(selectedMonth))
     : transactions;
 
   return (
