@@ -438,6 +438,37 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 // Transfer 쌍을 찾았으므로 함께 업데이트
                 let tx = conn.transaction().map_err(|e| e.to_string())?;
                 
+                // 기존 도착 계좌 ID 찾기
+                let old_to_account_id = if transfer_pairs[0].1 == transaction.account_id {
+                    transfer_pairs[1].1
+                } else {
+                    transfer_pairs[0].1
+                };
+                
+                // 새로운 도착 계좌 ID (notes에서 추출)
+                let new_to_account_id = if let Some(notes) = &transaction.notes {
+                    if let Some(to_match) = notes.strip_prefix("[To: ") {
+                        if let Some(to_account_name) = to_match.strip_suffix("]") {
+                            // 계좌 이름으로 ID 찾기
+                            if let Ok(account_id) = tx.query_row(
+                                "SELECT id FROM accounts WHERE name = ?1",
+                                params![to_account_name],
+                                |r| r.get::<_, i64>(0)
+                            ) {
+                                account_id
+                            } else {
+                                old_to_account_id // 찾지 못하면 기존 계좌 유지
+                            }
+                        } else {
+                            old_to_account_id
+                        }
+                    } else {
+                        old_to_account_id
+                    }
+                } else {
+                    old_to_account_id
+                };
+                
                 // 계좌 이름 조회
                 let from_account_name: String = tx.query_row(
                     "SELECT name FROM accounts WHERE id = ?1",
@@ -445,35 +476,71 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     |r| r.get(0),
                 ).map_err(|e| e.to_string())?;
                 
-                let to_account_id = if transfer_pairs[0].1 == transaction.account_id {
-                    transfer_pairs[1].1
-                } else {
-                    transfer_pairs[0].1
-                };
-                
-                let to_account_name: String = tx.query_row(
+                let new_to_account_name: String = tx.query_row(
                     "SELECT name FROM accounts WHERE id = ?1",
-                    params![to_account_id],
+                    params![new_to_account_id],
                     |r| r.get(0),
                 ).map_err(|e| e.to_string())?;
                 
-                // 출발 계좌 거래 업데이트
-                let from_note = format!("[To: {}]", to_account_name);
-                tx.execute(
-                    "UPDATE transactions SET payee = ?1, notes = ?2 WHERE id = ?3",
-                    params![transaction.notes.clone().unwrap_or_default(), from_note, transaction.id],
-                ).map_err(|e| e.to_string())?;
+                // To Account가 변경된 경우
+                if new_to_account_id != old_to_account_id {
+                    // 기존 도착 계좌 거래 삭제
+                    let old_to_transaction_id = if transfer_pairs[0].0 == transaction.id {
+                        transfer_pairs[1].0
+                    } else {
+                        transfer_pairs[0].0
+                    };
+                    
+                    // 기존 도착 계좌 잔액 조정 (거래 삭제 효과)
+                    let account_type: String = tx.query_row(
+                        "SELECT type FROM accounts WHERE id = ?1",
+                        params![old_to_account_id],
+                        |r| r.get(0),
+                    ).map_err(|e| e.to_string())?;
+                    
+                    let old_balance_change = if account_type == "credit" {
+                        -transaction.amount.abs()  // Credit 계좌: Transfer 삭제 시 반대 부호
+                    } else {
+                        -transaction.amount.abs()  // 일반 계좌: Transfer 삭제 시 반대 부호
+                    };
+                    
+                    tx.execute("DELETE FROM transactions WHERE id = ?1", params![old_to_transaction_id]).map_err(|e| e.to_string())?;
+                    tx.execute(
+                        "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
+                        params![old_balance_change, old_to_account_id],
+                    ).map_err(|e| e.to_string())?;
+                    
+                    // 새로운 도착 계좌 거래 생성
+                    let new_to_note = format!("[From: {}]", from_account_name);
+                    tx.execute(
+                        "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        params![transaction.date, new_to_account_id, "transfer", "Transfer", transaction.amount.abs(), transaction.payee, new_to_note],
+                    ).map_err(|e| e.to_string())?;
+                    
+                    // 새로운 도착 계좌 잔액 조정
+                    let new_account_type: String = tx.query_row(
+                        "SELECT type FROM accounts WHERE id = ?1",
+                        params![new_to_account_id],
+                        |r| r.get(0),
+                    ).map_err(|e| e.to_string())?;
+                    
+                    let new_balance_change = if new_account_type == "credit" {
+                        transaction.amount.abs()  // Credit 계좌: Transfer 생성 시 양수
+                    } else {
+                        transaction.amount.abs()  // 일반 계좌: Transfer 생성 시 양수
+                    };
+                    
+                    tx.execute(
+                        "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
+                        params![new_balance_change, new_to_account_id],
+                    ).map_err(|e| e.to_string())?;
+                }
                 
-                // 도착 계좌 거래 업데이트
-                let to_note = format!("[From: {}]", from_account_name);
-                let to_transaction_id = if transfer_pairs[0].0 == transaction.id {
-                    transfer_pairs[1].0
-                } else {
-                    transfer_pairs[0].0
-                };
+                // 출발 계좌 거래 업데이트 (description만 변경)
+                let from_note = format!("[To: {}]", new_to_account_name);
                 tx.execute(
                     "UPDATE transactions SET payee = ?1, notes = ?2 WHERE id = ?3",
-                    params![transaction.notes.unwrap_or_default(), to_note, to_transaction_id],
+                    params![transaction.payee, from_note, transaction.id],
                 ).map_err(|e| e.to_string())?;
                 
                 tx.commit().map_err(|e| e.to_string())?;

@@ -97,6 +97,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         date: transaction.date,
       });
       setAmountInputValue(transaction.amount?.toString() || '');
+      
+      // Transfer 거래의 경우 notes에서 "To Account" 정보 추출
+      if (transaction.type === 'transfer' && transaction.notes) {
+        const toAccountMatch = transaction.notes.match(/\[To: (.+?)\]/);
+        if (toAccountMatch) {
+          const toAccountName = toAccountMatch[1];
+          const toAccount = accounts.find(acc => acc.name === toAccountName);
+          if (toAccount) {
+            setToAccountId(toAccount.id);
+          }
+        }
+      }
     } else {
       // In continuous mode, preserve most fields and only reset amount and notes
       setFormData({
@@ -105,6 +117,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         notes: '',
       });
       setAmountInputValue('');
+      setToAccountId(undefined);
     }
     setErrors({});
   }, [transaction, accounts, preservedValues]);
@@ -206,8 +219,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         ...formData,
         amount: fixAmountSign(formData.amount, formData.type, formData.category)
       };
-      // Transfer 거래의 경우 description을 notes에 저장하고, payee는 백엔드에서 자동 설정
-      if (formData.type === 'transfer' && toAccountId) {
+      
+      // Transfer 거래 수정 시
+      if (transaction?.type === 'transfer') {
+        // description은 payee에 저장, To Account 정보는 notes에 저장
+        finalTransaction.payee = formData.payee || '';
+        // notes는 이미 To Account 변경 시 업데이트됨
+      }
+      // 새로운 Transfer 거래 생성 시
+      else if (formData.type === 'transfer' && toAccountId) {
         const description = formData.payee || '';
         finalTransaction.notes = description;
         finalTransaction.payee = `${formData.account_id} → ${toAccountId}`; // 백엔드에서 계좌 이름으로 대체됨
@@ -367,6 +387,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     value={formData.account_id?.toString() || ''}
                     onChange={handleChange}
                     label="Account"
+                    disabled={transaction?.type === 'transfer'}
                   >
                     {accounts.map((account) => (
                       <MenuItem key={account.id} value={account.id.toString()}>
@@ -385,7 +406,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <InputLabel>To Account</InputLabel>
                     <Select
                       value={toAccountId?.toString() || ''}
-                      onChange={(e) => setToAccountId(parseInt(e.target.value, 10))}
+                      onChange={(e) => {
+                        const newToAccountId = parseInt(e.target.value, 10);
+                        setToAccountId(newToAccountId);
+                        
+                        // To Account 변경 시 notes 업데이트
+                        if (newToAccountId) {
+                          const toAccount = accounts.find(acc => acc.id === newToAccountId);
+                          if (toAccount) {
+                            setFormData(prev => ({
+                              ...prev,
+                              notes: `[To: ${toAccount.name}]`
+                            }));
+                          }
+                        }
+                      }}
                       label="To Account"
                     >
                       {accounts

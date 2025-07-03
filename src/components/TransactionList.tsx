@@ -254,6 +254,14 @@ const TransactionList: React.FC<TransactionListProps> = ({
     return transaction.payee;
   };
 
+  // Check if this is a transfer transaction that can be edited (from account)
+  const isEditableTransfer = (transaction: Transaction) => {
+    if (transaction.type !== 'transfer') return true;
+    
+    // Transfer 거래에서 출발 계좌인지 확인 (음수 금액이거나 [To: account] 형식의 notes)
+    return transaction.amount < 0 || (transaction.notes && transaction.notes.includes('[To:'));
+  };
+
   return (
     <>
       <Box sx={{ mb: 1, p: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, minHeight: 56 }}>
@@ -723,21 +731,23 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     />
                   </TableCell>
                   <TableCell align="right" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}>
-                  <IconButton
-                    size="small"
-                      onClick={() => onEdit(transaction)}
-                    sx={{ 
-                      mr: 1,
-                      backgroundColor: 'transparent',
-                      color: 'primary.main',
-                      '&:hover': {
-                        backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                        color: 'primary.dark'
-                      }
-                    }}
-                  >
-                    <EditIcon />
-                  </IconButton>
+                  {isEditableTransfer(transaction) && (
+                    <IconButton
+                      size="small"
+                        onClick={() => onEdit(transaction)}
+                      sx={{ 
+                        mr: 1,
+                        backgroundColor: 'transparent',
+                        color: 'primary.main',
+                        '&:hover': {
+                          backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                          color: 'primary.dark'
+                        }
+                      }}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                  )}
                   <IconButton
                     size="small"
                       onClick={(e) => handleSingleDelete(transaction.id, e)}
