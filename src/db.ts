@@ -40,6 +40,7 @@ export interface Budget {
   amount: number;
   month: string;
   notes?: string;
+  created_at: string;
 }
 
 let database: Database.Database | null = null;

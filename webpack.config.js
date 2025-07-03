@@ -114,7 +114,23 @@ const rendererConfig = {
       "buffer": require.resolve("buffer/"),
       "crypto": require.resolve("crypto-browserify"),
       "fs": false,
-      "os": require.resolve("os-browserify/browser")
+      "os": require.resolve("os-browserify/browser"),
+      "process": require.resolve("process/browser"),
+      "module": false,
+      "zlib": false,
+      "assert": false,
+      "constants": false,
+      "events": false,
+      "http": false,
+      "https": false,
+      "url": false,
+      "querystring": false,
+      "punycode": false,
+      "string_decoder": false,
+      "timers": false,
+      "tty": false,
+      "vm": false,
+      "worker_threads": false
     }
   },
   plugins: [

@@ -47,6 +47,7 @@ pub fn run() {
       db::get_account_import_settings,
       db::update_account_import_settings,
       db::get_csv_sign_logic_for_account,
+      db::home_dir,
       db::get_onedrive_path,
       db::create_backup_folder,
     ])

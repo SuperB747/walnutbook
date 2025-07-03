@@ -53,7 +53,11 @@ const TransactionsPage: React.FC = () => {
     message: '',
     severity: 'success',
   });
-  const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    // localStorage에서 저장된 달을 가져오거나, 없으면 현재 달 사용
+    const savedMonth = localStorage.getItem('walnutbook_selected_month');
+    return savedMonth || format(new Date(), 'yyyy-MM');
+  });
   const [importedIds, setImportedIds] = useState<number[]>([]);
   const [importedDuplicateCount, setImportedDuplicateCount] = useState<number>(0);
   const [backupOpen, setBackupOpen] = useState(false);
@@ -194,6 +198,12 @@ const TransactionsPage: React.FC = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
+  // Handle month change and save to localStorage
+  const handleMonthChange = (month: string) => {
+    setSelectedMonth(month);
+    localStorage.setItem('walnutbook_selected_month', month);
+  };
+
   // Filter transactions by selected month (YYYY-MM)
   const filteredByMonth = selectedMonth
     ? transactions.filter((t) => t.date.startsWith(selectedMonth))
@@ -226,7 +236,7 @@ const TransactionsPage: React.FC = () => {
         monthTransactions={filteredByMonth}
         allTransactions={transactions}
         selectedMonth={selectedMonth}
-        onMonthChange={setSelectedMonth}
+        onMonthChange={handleMonthChange}
       />
 
         <TransactionList

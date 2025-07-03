@@ -12,13 +12,14 @@ import {
   IconButton,
   Box,
 } from '@mui/material';
-import { Edit as EditIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Budget, Transaction } from '../db';
 
 interface BudgetListProps {
   budgets: Budget[];
   transactions: Transaction[];
   onEditBudget: (budget: Budget) => void;
+  onDeleteBudget: (budget: Budget) => void;
   month: string;
 }
 
@@ -26,6 +27,7 @@ const BudgetList: React.FC<BudgetListProps> = ({
   budgets,
   transactions,
   onEditBudget,
+  onDeleteBudget,
   month,
 }) => {
   const formatCurrency = (amount: number) => {
@@ -55,38 +57,61 @@ const BudgetList: React.FC<BudgetListProps> = ({
 
   return (
     <TableContainer component={Paper} elevation={2}>
-      <Table>
+      <Table sx={{ 
+        tableLayout: 'fixed',
+        '& .MuiTableRow-root': {
+          '&:hover': {
+            backgroundColor: 'transparent'
+          },
+          '&.Mui-selected': {
+            backgroundColor: 'transparent'
+          },
+          '&.Mui-selected:hover': {
+            backgroundColor: 'transparent'
+          }
+        }
+      }}>
         <TableHead>
-          <TableRow>
-            <TableCell>Category</TableCell>
-            <TableCell align="right">Budget</TableCell>
-            <TableCell align="right">Spent</TableCell>
-            <TableCell align="right">Remaining</TableCell>
-            <TableCell>Progress</TableCell>
-            <TableCell align="right">Actions</TableCell>
+          <TableRow sx={{ userSelect: 'none' }}>
+            <TableCell sx={{ width: 250, minWidth: 250 }}>Category</TableCell>
+            <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>Budget</TableCell>
+            <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>Spent</TableCell>
+            <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>Remaining</TableCell>
+            <TableCell sx={{ minWidth: 0 }}>Progress</TableCell>
+            <TableCell align="right" sx={{ width: 130, minWidth: 130 }}>Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {budgets.map((budget) => {
+          {budgets
+            .sort((a, b) => a.category.localeCompare(b.category))
+            .map((budget) => {
             const spent = calculateSpentAmount(budget.category);
             const remaining = budget.amount - spent;
-            const progress = (spent / budget.amount) * 100;
+            const progress = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
 
             return (
-              <TableRow key={budget.id}>
-                <TableCell>
+              <TableRow 
+                key={budget.id}
+                sx={{ 
+                  userSelect: 'none',
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                  }
+                }}
+              >
+                <TableCell sx={{ width: 250, minWidth: 250 }}>
                   <Box>
-                    <Typography variant="body1">{budget.category}</Typography>
+                    <Typography variant="body1" noWrap>{budget.category}</Typography>
                     {budget.notes && (
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color="text.secondary" noWrap>
                         {budget.notes}
                       </Typography>
                     )}
                   </Box>
                 </TableCell>
-                <TableCell align="right">{formatCurrency(budget.amount)}</TableCell>
-                <TableCell align="right">{formatCurrency(spent)}</TableCell>
-                <TableCell align="right">
+                <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>{formatCurrency(budget.amount)}</TableCell>
+                <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>{formatCurrency(spent)}</TableCell>
+                <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>
                   <Typography
                     color={remaining < 0 ? 'error' : 'success'}
                     fontWeight="bold"
@@ -94,7 +119,7 @@ const BudgetList: React.FC<BudgetListProps> = ({
                     {formatCurrency(remaining)}
                   </Typography>
                 </TableCell>
-                <TableCell>
+                <TableCell sx={{ minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Box sx={{ width: '100%', mr: 1 }}>
                       <LinearProgress
@@ -110,19 +135,26 @@ const BudgetList: React.FC<BudgetListProps> = ({
                     </Box>
                   </Box>
                 </TableCell>
-                <TableCell align="right">
+                <TableCell align="right" sx={{ width: 130, minWidth: 130 }}>
                   <IconButton
                     size="small"
                     onClick={() => onEditBudget(budget)}
                   >
                     <EditIcon />
                   </IconButton>
+                  <IconButton
+                    size="small"
+                    onClick={() => onDeleteBudget(budget)}
+                    color="error"
+                  >
+                    <DeleteIcon />
+                  </IconButton>
                 </TableCell>
               </TableRow>
             );
           })}
           {budgets.length === 0 && (
-            <TableRow>
+            <TableRow sx={{ userSelect: 'none' }}>
               <TableCell colSpan={6} align="center">
                 <Typography variant="body1" color="text.secondary" sx={{ py: 2 }}>
                   No budgets set for this month.

@@ -27,6 +27,7 @@ import CategoryManagementDialog from './components/CategoryManagementDialog';
 import BulkTransactionEdit from './components/BulkTransactionEdit';
 import ImportExportDialog from './components/ImportExportDialog';
 import BackupRestoreDialog from './components/BackupRestoreDialog';
+
 import { Account, Transaction } from './db';
 import logo from './logo.png';
 
@@ -219,6 +220,7 @@ const App: React.FC = () => {
   const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
   const [importExportDialogOpen, setImportExportDialogOpen] = useState(false);
   const [backupRestoreDialogOpen, setBackupRestoreDialogOpen] = useState(false);
+
   
   // Data states for dialogs
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -237,7 +239,7 @@ const App: React.FC = () => {
         return backupFolder;
       }
     } catch (error) {
-      console.log('Could not get OneDrive path from environment:', error);
+      console.log('OneDrive path not found, falling back to desktop:', error);
     }
 
     // Fallback to desktop if OneDrive not found
@@ -254,11 +256,14 @@ const App: React.FC = () => {
       
       await invoke('backup_database', { savePath });
       
-      setSnackbar({
-        open: true,
-        message: `Backup saved to OneDrive/WalnutBook_Backups: ${savePath}`,
-        severity: 'success',
-      });
+              const isOneDrive = savePath.includes('OneDrive') || savePath.includes('WalnutBook_Backups');
+        setSnackbar({
+          open: true,
+          message: isOneDrive 
+            ? `Backup saved to OneDrive/WalnutBook_Backups: ${savePath.split('/').pop()}`
+            : `Backup saved to Desktop: ${savePath.split('/').pop()}`,
+          severity: 'success',
+        });
     } catch (err) {
       console.error('Backup failed:', err);
       setSnackbar({
@@ -481,6 +486,7 @@ const App: React.FC = () => {
           }}>
             Backup & Restore
           </MenuItem>
+
         </Menu>
         <Snackbar
           open={snackbar.open}
@@ -555,17 +561,19 @@ const App: React.FC = () => {
           transactions={transactions}
         />
         
-        <BackupRestoreDialog
-          open={backupRestoreDialogOpen}
-          onClose={() => setBackupRestoreDialogOpen(false)}
-          onRestore={() => {
-            setSnackbar({
-              open: true,
-              message: 'Database restored successfully. Please refresh the page.',
-              severity: 'success',
-            });
-          }}
-        />
+                 <BackupRestoreDialog
+           open={backupRestoreDialogOpen}
+           onClose={() => setBackupRestoreDialogOpen(false)}
+           onRestore={() => {
+             setSnackbar({
+               open: true,
+               message: 'Database restored successfully. Please refresh the page.',
+               severity: 'success',
+             });
+           }}
+         />
+         
+
       </Box>
     </ThemeProvider>
   );

@@ -8,6 +8,7 @@ use std::fs;
 use std::collections::HashSet;
 
 
+
 /// Helper: get path to SQLite database
 fn get_db_path(app: &AppHandle) -> PathBuf {
   // Use OS-specific user data directory to avoid dev watch restarts
@@ -425,68 +426,32 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
         |r| r.get(0),
     ).map_err(|e| e.to_string())?;
     
-    let old_effect = if account_type == "credit" {
-        // Credit 계좌: 빚이 늘어나면 양수, 줄어들면 음수
-        if old_type == "expense" { 
-            _old_amount  // 빚 증가
-        } else if old_type == "transfer" {
-            _old_amount  // Transfer 거래는 이미 올바른 부호로 저장되어 있음
-        } else if old_type == "adjust" {
-            if _old_category == "Subtract" {
-                _old_amount  // 빚 증가
-            } else {
-                -_old_amount  // 빚 감소
-            }
-        } else { 
-            -_old_amount  // 빚 감소
-        }
-    } else {
-        // 일반 계좌: 기존 로직
-        if old_type == "expense" { 
-            -_old_amount 
-        } else if old_type == "transfer" {
-            _old_amount
-        } else if old_type == "adjust" {
-            if _old_category == "Subtract" {
-                -_old_amount
-            } else {
-                _old_amount
-            }
-        } else { 
-            _old_amount 
-        }
+    // Compute old_effect based on existing transaction
+    let old_effect = match (account_type.as_str(), old_type.as_str(), _old_category.as_str()) {
+        ("credit", "expense", _) => _old_amount,
+        ("credit", "transfer", _) => _old_amount,
+        ("credit", "adjust", "Subtract") => _old_amount,
+        ("credit", "adjust", _) => -_old_amount,
+        ("credit", _, _) => -_old_amount,
+        (_, "expense", _) => _old_amount,
+        (_, "transfer", _) => -_old_amount,
+        (_, "adjust", "Subtract") => _old_amount,
+        (_, "adjust", _) => -_old_amount,
+        _ => _old_amount,
     };
     
-    let new_effect = if account_type == "credit" {
-        // Credit 계좌: 빚이 늘어나면 양수, 줄어들면 음수
-        if transaction.transaction_type == "expense" { 
-            transaction.amount  // 빚 증가
-        } else if transaction.transaction_type == "transfer" {
-            transaction.amount  // Transfer 거래는 이미 올바른 부호로 저장되어 있음
-        } else if transaction.transaction_type == "adjust" {
-            if transaction.category == "Subtract" {
-                transaction.amount  // 빚 증가
-            } else {
-                -transaction.amount  // 빚 감소
-            }
-        } else { 
-            -transaction.amount  // 빚 감소
-        }
-    } else {
-        // 일반 계좌: 기존 로직
-        if transaction.transaction_type == "expense" { 
-            -transaction.amount 
-        } else if transaction.transaction_type == "transfer" {
-            transaction.amount
-        } else if transaction.transaction_type == "adjust" {
-            if transaction.category == "Subtract" {
-                -transaction.amount
-            } else {
-                transaction.amount
-            }
-        } else { 
-            transaction.amount 
-        }
+    // Compute new_effect based on transaction and account type
+    let new_effect = match (account_type.as_str(), transaction.transaction_type.as_str(), transaction.category.as_str()) {
+        ("credit", "expense", _) => transaction.amount,
+        ("credit", "transfer", _) => transaction.amount,
+        ("credit", "adjust", "Subtract") => transaction.amount,
+        ("credit", "adjust", _) => -transaction.amount,
+        ("credit", _, _) => -transaction.amount,
+        (_, "expense", _) => -transaction.amount,
+        (_, "transfer", _) => transaction.amount,
+        (_, "adjust", "Subtract") => -transaction.amount,
+        (_, "adjust", _) => transaction.amount,
+        _ => transaction.amount,
     };
     let net = new_effect - old_effect;
     // Update transaction record
@@ -754,9 +719,49 @@ pub fn get_categories(app: AppHandle) -> Result<Vec<String>, String> {
 pub fn get_spending_by_category(app: AppHandle, start_date: String, end_date: String) -> Result<Value, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare("SELECT category, SUM(amount) as total FROM transactions WHERE type = 'expense' AND date BETWEEN ?1 AND ?2 GROUP BY category ORDER BY total DESC").map_err(|e| e.to_string())?;
-    let rows = stmt.query_map(params![start_date, end_date], |r| Ok(json!({ "category": r.get::<_, String>(0)?, "total": r.get::<_, f64>(1)? }))).map_err(|e| e.to_string())?;
-    let mut out = Vec::new(); for r in rows { out.push(r.map_err(|e| e.to_string())?); }
+    
+    // Debug: Log the date range and query parameters
+    println!("get_spending_by_category: start_date={}, end_date={}", start_date, end_date);
+    
+    // First, let's see what transactions exist in the date range
+    let mut debug_stmt = conn.prepare("SELECT date, category, amount, type FROM transactions WHERE date BETWEEN ?1 AND ?2 ORDER BY date").map_err(|e| e.to_string())?;
+    let debug_rows = debug_stmt.query_map(params![start_date, end_date], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, f64>(2)?, r.get::<_, String>(3)?))
+    }).map_err(|e| e.to_string())?;
+    
+    println!("All transactions in date range:");
+    for row in debug_rows {
+        let (date, category, amount, ttype) = row.map_err(|e| e.to_string())?;
+        println!("  {} | {} | {} | {}", date, category, amount, ttype);
+    }
+    
+    // Now get expense transactions specifically
+    let mut expense_stmt = conn.prepare("SELECT date, category, amount FROM transactions WHERE type = 'expense' AND date BETWEEN ?1 AND ?2 ORDER BY date").map_err(|e| e.to_string())?;
+    let expense_rows = expense_stmt.query_map(params![start_date, end_date], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, f64>(2)?))
+    }).map_err(|e| e.to_string())?;
+    
+    println!("Expense transactions in date range:");
+    for row in expense_rows {
+        let (date, category, amount) = row.map_err(|e| e.to_string())?;
+        println!("  {} | {} | {}", date, category, amount);
+    }
+    
+    // Use ABS(amount) to handle negative expense amounts correctly
+    let mut stmt = conn.prepare("SELECT category, SUM(ABS(amount)) as total FROM transactions WHERE type = 'expense' AND date BETWEEN ?1 AND ?2 GROUP BY category ORDER BY total DESC").map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(params![start_date, end_date], |r| {
+        let category: String = r.get(0)?;
+        let total: f64 = r.get(1)?;
+        println!("Found spending: category='{}', total={}", category, total);
+        Ok(json!({ "category": category, "total": total }))
+    }).map_err(|e| e.to_string())?;
+    
+    let mut out = Vec::new(); 
+    for r in rows { 
+        out.push(r.map_err(|e| e.to_string())?); 
+    }
+    
+    println!("get_spending_by_category: returning {} results", out.len());
     Ok(json!(out))
 }
 
@@ -986,26 +991,53 @@ pub fn get_csv_sign_logic_for_account(app: AppHandle, account_id: i64) -> Result
   Ok(csv_sign_logic)
 }
 
+// Function to get home directory
+#[tauri::command]
+pub fn home_dir() -> Result<String, String> {
+    if let Ok(home) = env::var("HOME") {
+        Ok(home)
+    } else {
+        Err("Home directory not found".to_string())
+    }
+}
+
 // Function to find OneDrive path
 #[tauri::command]
 pub fn get_onedrive_path() -> Result<String, String> {
-    // Try to find OneDrive path from environment variables
+    // Try to find OneDrive path from environment variables (Windows)
     if let Ok(onedrive) = env::var("ONEDRIVE") {
         return Ok(onedrive);
     }
     
-    // Try OneDrive for Business
+    // Try OneDrive for Business (Windows)
     if let Ok(onedrive_business) = env::var("ONEDRIVECOMMERCIAL") {
         return Ok(onedrive_business);
     }
     
-    // Try to find OneDrive in common locations
-    let user_profile = env::var("USERPROFILE").unwrap_or_else(|_| "".to_string());
-    if !user_profile.is_empty() {
+    // Try to find OneDrive in common Windows locations
+    if let Ok(user_profile) = env::var("USERPROFILE") {
         let possible_paths = vec![
             format!("{}\\OneDrive", user_profile),
             format!("{}\\OneDrive - Personal", user_profile),
             format!("{}\\OneDrive - Company", user_profile),
+        ];
+        
+        for path in possible_paths {
+            if std::path::Path::new(&path).exists() {
+                return Ok(path);
+            }
+        }
+    }
+    
+    // Try to find OneDrive in macOS common locations
+    if let Ok(home_dir) = env::var("HOME") {
+        let possible_paths = vec![
+            format!("{}/OneDrive", home_dir),
+            format!("{}/OneDrive - Personal", home_dir),
+            format!("{}/OneDrive - Company", home_dir),
+            format!("{}/Library/CloudStorage/OneDrive-Personal", home_dir),
+            format!("{}/Library/CloudStorage/OneDrive-Business", home_dir),
+            format!("{}/Library/CloudStorage/OneDrive", home_dir),
         ];
         
         for path in possible_paths {
@@ -1031,4 +1063,6 @@ pub fn create_backup_folder(folder_path: String) -> Result<(), String> {
             Err(format!("Failed to create backup folder: {}", e))
         }
     }
-} 
+}
+
+ 

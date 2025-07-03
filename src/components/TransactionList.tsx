@@ -409,7 +409,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           Delete Selected
         </Button>
         {onAddTransaction && (
-          <Button variant="contained" onClick={onAddTransaction} startIcon={<AddIcon />}>
+          <Button variant="contained" color="secondary" onClick={onAddTransaction} startIcon={<AddIcon />}>
             Add Transaction
           </Button>
         )}

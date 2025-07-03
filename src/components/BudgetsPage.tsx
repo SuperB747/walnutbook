@@ -13,7 +13,7 @@ import {
   Select,
   MenuItem,
 } from '@mui/material';
-import { Add as AddIcon, History as HistoryIcon } from '@mui/icons-material';
+import { Add as AddIcon, History as HistoryIcon, AutoAwesome as AutoAwesomeIcon } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ko } from 'date-fns/locale';
@@ -22,7 +22,7 @@ import BudgetForm from './BudgetForm';
 import { Budget, Transaction } from '../db';
 import { enCA } from 'date-fns/locale';
 import { invoke } from '@tauri-apps/api/core';
-import { subMonths, format as formatDateFns } from 'date-fns';
+
 
 const BudgetsPage: React.FC = () => {
   const now = new Date();
@@ -102,10 +102,36 @@ const BudgetsPage: React.FC = () => {
     setIsFormOpen(true);
   };
 
+  const handleDeleteBudget = async (budget: Budget) => {
+    try {
+      await invoke<Budget[]>('delete_budget', { id: budget.id });
+      await loadBudgets();
+      setSnackbar({
+        open: true,
+        message: 'Budget deleted successfully.',
+        severity: 'success',
+      });
+    } catch (error) {
+      console.error('Failed to delete budget:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to delete budget.',
+        severity: 'error',
+      });
+    }
+  };
+
   const handleSaveBudget = async (budgetData: Partial<Budget>) => {
     try {
       if (selectedBudget) {
-        await invoke<Budget[]>('update_budget', { budget: { id: selectedBudget.id, category: budgetData.category!, amount: budgetData.amount!, month: selectedMonth, notes: budgetData.notes } });
+        await invoke<Budget[]>('update_budget', { budget: { 
+          id: selectedBudget.id, 
+          category: budgetData.category!, 
+          amount: budgetData.amount!, 
+          month: selectedMonth, 
+          notes: budgetData.notes,
+          created_at: selectedBudget.created_at
+        }});
       } else {
         await invoke<Budget[]>('add_budget', { category: budgetData.category!, amount: budgetData.amount!, month: selectedMonth, notes: budgetData.notes });
       }
@@ -156,28 +182,113 @@ const BudgetsPage: React.FC = () => {
     }).format(amount);
   };
 
-  const handleImportLastMonth = async () => {
+
+
+  const handleAutoGenerateBudget = async () => {
     try {
-      const prevMonthDate = subMonths(new Date(`${year}-${month}-01`), 1);
-      const prevMonth = formatDateFns(prevMonthDate, 'yyyy-MM');
-      const prevBudgets = await invoke<Budget[]>('get_budgets', { month: prevMonth });
-      if (!prevBudgets.length) {
-        setSnackbar({ open: true, message: "No budgets found for last month.", severity: 'info' });
-        return;
+      // Determine last month's date range
+      const currentYear = parseInt(year);
+      const currentMonth = parseInt(month);
+      
+      // Calculate previous month
+      let prevYear = currentYear;
+      let prevMonth = currentMonth - 1;
+      
+      if (prevMonth === 0) {
+        prevMonth = 12;
+        prevYear = currentYear - 1;
       }
-      const existingCategories = new Set(budgets.map(b => b.category));
-      const toImport = prevBudgets.filter(b => !existingCategories.has(b.category));
-      if (!toImport.length) {
-        setSnackbar({ open: true, message: "All last month's budgets already exist.", severity: 'info' });
-        return;
+      
+      const prevMonthStr = `${prevYear}-${prevMonth.toString().padStart(2, '0')}`;
+      
+      // Step 1: Import last month's budgets first
+      const prevBudgets = await invoke<Budget[]>('get_budgets', { month: prevMonthStr });
+      if (prevBudgets.length > 0) {
+        const existingCategories = new Set(budgets.map(b => b.category));
+        const toImport = prevBudgets.filter(b => !existingCategories.has(b.category));
+        
+        if (toImport.length > 0) {
+          for (const b of toImport) {
+            await invoke('add_budget', { category: b.category, amount: b.amount, month: selectedMonth, notes: b.notes });
+          }
+          console.log(`Imported ${toImport.length} budget(s) from last month`);
+        }
       }
-      for (const b of toImport) {
-        await invoke('add_budget', { category: b.category, amount: b.amount, month: selectedMonth, notes: b.notes });
-      }
+      
+      // Reload budgets after import
       await loadBudgets();
-      setSnackbar({ open: true, message: `Imported ${toImport.length} budget(s) from last month.`, severity: 'success' });
+      
+      // Step 2: Get last month's expense transactions for auto-generation
+      const lastMonthExpenses = transactions.filter(t => 
+        t.type === 'expense' && 
+        t.date.startsWith(prevMonthStr)
+      );
+      
+      // Calculate spending by category
+      const spendingByCategory = new Map<string, number>();
+      for (const t of lastMonthExpenses) {
+        const category = t.category;
+        const amount = Math.abs(t.amount);
+        spendingByCategory.set(category, (spendingByCategory.get(category) || 0) + amount);
+      }
+      
+      // Get all expense categories from database
+      const allCategories = await invoke<{ id: number; name: string; type: string }[]>('get_categories_full');
+      
+      // Categories to exclude from budget generation
+      const excludedCategories = [
+        'Reimbursement',
+        'Reimbursement [G]',
+        'Reimbursement [U]', 
+        'Reimbursement [E]',
+        'Reimbursement [WCST]',
+        'Transfer',
+        'Adjust'
+      ];
+      
+      // Get eligible expense categories
+      const eligibleCategories = allCategories
+        .filter(category => category.type === 'expense')
+        .filter(category => 
+          !excludedCategories.some(excluded => category.name.includes(excluded))
+        )
+        .map(category => category.name);
+      
+      // Map existing budgets by category
+      const budgetMap = new Map<string, Budget>(budgets.map(b => [b.category, b]));
+      
+      let createdCount = 0;
+      let skippedCount = 0;
+      
+      // Create budgets for eligible categories
+      for (const category of eligibleCategories) {
+        const amount = spendingByCategory.get(category) || 0;
+        const existing = budgetMap.get(category);
+        
+        if (existing) {
+          skippedCount++;
+        } else {
+          await invoke<Budget[]>('add_budget', { 
+            category, 
+            amount, 
+            month: selectedMonth, 
+            notes: '' 
+          });
+          createdCount++;
+        }
+      }
+      
+      await loadBudgets();
+      
+      let message = `Auto-generate completed: Created ${createdCount} new budget(s)`;
+      if (skippedCount > 0) {
+        message += `, skipped ${skippedCount} existing budget(s)`;
+      }
+      
+      setSnackbar({ open: true, message, severity: 'success' });
     } catch (error) {
-      setSnackbar({ open: true, message: 'Failed to import last month\'s budget.', severity: 'error' });
+      console.error('Auto-generate budgets failed:', error);
+      setSnackbar({ open: true, message: `Auto-generate failed: ${String(error)}`, severity: 'error' });
     }
   };
 
@@ -210,7 +321,7 @@ const BudgetsPage: React.FC = () => {
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button
               variant="contained"
-              color="primary"
+              color="secondary"
               startIcon={<AddIcon />}
               onClick={handleAddBudget}
             >
@@ -218,12 +329,12 @@ const BudgetsPage: React.FC = () => {
             </Button>
             <Button
               variant="contained"
-              color="primary"
-              startIcon={<HistoryIcon />}
-              onClick={handleImportLastMonth}
+              color="secondary"
+              startIcon={<AutoAwesomeIcon />}
+              onClick={handleAutoGenerateBudget}
               sx={{ minWidth: 200 }}
             >
-              Import Last Month's Budget
+              Auto-Generate Budget
             </Button>
           </Box>
         </Box>
@@ -293,6 +404,7 @@ const BudgetsPage: React.FC = () => {
           budgets={budgets}
           transactions={transactions}
           onEditBudget={handleEditBudget}
+          onDeleteBudget={handleDeleteBudget}
           month={selectedMonth}
         />
 

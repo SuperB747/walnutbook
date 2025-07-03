@@ -35,15 +35,21 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
     notes: '',
     month: month,
   });
+  
+  // 금액 입력을 위한 별도 상태 (문자열로 관리)
+  const [amountInput, setAmountInput] = useState<string>('0');
 
   useEffect(() => {
     if (budget) {
+      const amount = Number(budget.amount.toFixed(2));
       setFormData({
         category: budget.category,
-        amount: budget.amount,
+        amount: amount,
         notes: budget.notes || '',
         month: budget.month,
       });
+      // 초기 로드 시에만 통화 형식으로 표시
+      setAmountInput(amount.toFixed(2));
     } else {
       setFormData({
         category: '',
@@ -51,20 +57,38 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
         notes: '',
         month: month,
       });
+      setAmountInput('0.00');
     }
   }, [budget, month]);
 
   const handleChange = (field: keyof Budget) => (
     event: React.ChangeEvent<HTMLInputElement | { value: unknown }>
   ) => {
-    const value = field === 'amount' 
-      ? Number(event.target.value) 
-      : event.target.value as string;
-    
-    setFormData({
-      ...formData,
-      [field]: value,
-    });
+    if (field === 'amount') {
+      const inputValue = event.target.value as string;
+      
+      // 사용자 입력을 그대로 표시 (편집 가능하도록)
+      setAmountInput(inputValue);
+      
+      // 숫자 변환 및 저장
+      if (inputValue === '' || inputValue === '.') {
+        setFormData({
+          ...formData,
+          amount: 0,
+        });
+      } else if (!isNaN(Number(inputValue))) {
+        setFormData({
+          ...formData,
+          amount: Number(inputValue),
+        });
+      }
+    } else {
+      const value = event.target.value as string;
+      setFormData({
+        ...formData,
+        [field]: value,
+      });
+    }
   };
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -89,12 +113,25 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
           />
           <TextField
             label="Amount"
-            type="number"
-            value={formData.amount}
+            type="text"
+            value={amountInput}
             onChange={handleChange('amount')}
+            onBlur={() => {
+              // 포커스를 잃을 때 통화 형식으로 포맷팅
+              if (amountInput !== '' && !isNaN(Number(amountInput))) {
+                const numValue = Number(amountInput);
+                setAmountInput(numValue.toFixed(2));
+              } else if (amountInput === '' || amountInput === '.') {
+                setAmountInput('0.00');
+              }
+            }}
             fullWidth
             required
             margin="normal"
+            inputProps={{
+              inputMode: "decimal",
+              pattern: "[0-9]*[.]?[0-9]*"
+            }}
             InputProps={{
               startAdornment: <InputAdornment position="start">$</InputAdornment>,
             }}

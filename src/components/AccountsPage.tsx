@@ -135,7 +135,7 @@ const AccountsPage: React.FC = () => {
           <Typography variant="h5" sx={{ fontWeight: 700 }}>Account Summary</Typography>
           <Button
             variant="contained"
-            color="primary"
+            color="secondary"
             startIcon={<AddIcon />}
             onClick={handleAddAccount}
           >
