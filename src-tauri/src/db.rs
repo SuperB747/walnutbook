@@ -482,22 +482,8 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             // To Account가 변경된 경우
             if new_to_account_id != old_to_account_id {
                 // 기존 도착 계좌 거래 삭제
-                if let Some((to_id, to_account_id, to_amount)) = to_transaction {
-                    let account_type: String = conn.query_row(
-                        "SELECT type FROM accounts WHERE id = ?1",
-                        params![to_account_id],
-                        |r| r.get(0),
-                    ).map_err(|e| e.to_string())?;
-                    let old_balance_change = if account_type == "credit" {
-                        -to_amount
-                    } else {
-                        -to_amount
-                    };
+                if let Some((to_id, _to_account_id, _)) = to_transaction {
                     conn.execute("DELETE FROM transactions WHERE id = ?1", params![to_id]).map_err(|e| e.to_string())?;
-                    conn.execute(
-                        "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-                        params![old_balance_change, to_account_id],
-                    ).map_err(|e| e.to_string())?;
                 }
                 // 새로운 도착 계좌 거래 생성
                 let new_to_note = format!("[From: {}]", from_account_name);
@@ -505,24 +491,9 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                     params![transaction.date, new_to_account_id, "transfer", "Transfer", transaction.amount.abs(), transaction.payee, new_to_note],
                 ).map_err(|e| e.to_string())?;
-                // 새로운 도착 계좌 잔액 조정
-                let new_account_type: String = conn.query_row(
-                    "SELECT type FROM accounts WHERE id = ?1",
-                    params![new_to_account_id],
-                    |r| r.get(0),
-                ).map_err(|e| e.to_string())?;
-                let new_balance_change = if new_account_type == "credit" {
-                    transaction.amount.abs()
-                } else {
-                    transaction.amount.abs()
-                };
-                conn.execute(
-                    "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-                    params![new_balance_change, new_to_account_id],
-                ).map_err(|e| e.to_string())?;
             }
             // 출발 계좌 거래의 기존 정보 모두 DB에서 읽어온다
-            let (from_date, from_account_id, from_amount): (String, i64, f64) = conn.query_row(
+            let (from_date, _from_account_id, from_amount): (String, i64, f64) = conn.query_row(
                 "SELECT date, account_id, amount FROM transactions WHERE id = ?1",
                 params![transaction.id],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
@@ -544,6 +515,9 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     ).map_err(|e| e.to_string())?;
                 }
             }
+            
+            // Transfer 거래는 특별한 처리만 하고 끝
+            return get_transactions(app);
         }
     }
 
@@ -637,17 +611,10 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
         drop(sel);
         
         let tx = conn.transaction().map_err(|e| e.to_string())?;
-        // 출발 거래 정보 조회
-        let from_transaction: (String, i64, f64, String, Option<String>) = tx.query_row(
-            "SELECT date, account_id, amount, payee, notes FROM transactions WHERE id = ?1",
-            params![id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
-        ).map_err(|e| e.to_string())?;
-        let (date, from_account_id, amount, payee, _notes) = from_transaction;
-        // 출발 계좌 이름
+        // 출발 계좌 정보 조회
         let from_account_name: String = tx.query_row(
             "SELECT name FROM accounts WHERE id = ?1",
-            params![from_account_id],
+            params![acct_id],
             |r| r.get(0),
         ).map_err(|e| e.to_string())?;
         // 도착 거래 찾기: 같은 날짜, 같은 금액, type=transfer, account_id 다르고, notes=[From: 출발계좌이름], payee 동일
@@ -655,42 +622,44 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
             "SELECT id, account_id, amount FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2 AND account_id != ?3 AND notes = ?4 AND payee = ?5 LIMIT 1"
         ).ok()
         .and_then(|mut stmt| stmt.query_row(
-            params![date, amount.abs(), from_account_id, format!("[From: {}]", from_account_name), payee],
+            params![_old_date, old_amount.abs(), acct_id, format!("[From: {}]", from_account_name), _old_payee],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         ).ok());
         // 출발 거래 삭제
-        let account_type: String = tx.query_row(
-            "SELECT type FROM accounts WHERE id = ?1",
-            params![from_account_id],
+        tx.execute("DELETE FROM transactions WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        // 도착 거래 삭제
+        if let Some((to_id, _to_account_id, _)) = to_transaction {
+            tx.execute("DELETE FROM transactions WHERE id = ?1", params![to_id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        return get_transactions(app);
+    }
+    
+    // Transfer 거래의 경우 도착 거래(양수) 삭제 시에도 페어 삭제
+    if old_type == "transfer" && old_amount > 0.0 {
+        drop(rows);
+        drop(sel);
+        
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        // 도착 계좌 정보 조회
+        let to_account_name: String = tx.query_row(
+            "SELECT name FROM accounts WHERE id = ?1",
+            params![acct_id],
             |r| r.get(0),
         ).map_err(|e| e.to_string())?;
-        let balance_change = if account_type == "credit" {
-            -amount
-        } else {
-            -amount
-        };
-        tx.execute("DELETE FROM transactions WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
-        tx.execute(
-            "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-            params![balance_change, from_account_id],
-        ).map_err(|e| e.to_string())?;
+        // 출발 거래 찾기: 같은 날짜, 같은 금액, type=transfer, account_id 다르고, notes=[To: 도착계좌이름], payee 동일
+        let from_transaction: Option<(i64, i64, f64)> = tx.prepare(
+            "SELECT id, account_id, amount FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2 AND account_id != ?3 AND notes = ?4 AND payee = ?5 LIMIT 1"
+        ).ok()
+        .and_then(|mut stmt| stmt.query_row(
+            params![_old_date, old_amount.abs(), acct_id, format!("[To: {}]", to_account_name), _old_payee],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        ).ok());
         // 도착 거래 삭제
-        if let Some((to_id, to_account_id, to_amount)) = to_transaction {
-            let to_account_type: String = tx.query_row(
-                "SELECT type FROM accounts WHERE id = ?1",
-                params![to_account_id],
-                |r| r.get(0),
-            ).map_err(|e| e.to_string())?;
-            let to_balance_change = if to_account_type == "credit" {
-                -to_amount
-            } else {
-                -to_amount
-            };
-            tx.execute("DELETE FROM transactions WHERE id = ?1", params![to_id]).map_err(|e| e.to_string())?;
-            tx.execute(
-                "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-                params![to_balance_change, to_account_id],
-            ).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM transactions WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        // 출발 거래 삭제
+        if let Some((from_id, _from_account_id, _)) = from_transaction {
+            tx.execute("DELETE FROM transactions WHERE id = ?1", params![from_id]).map_err(|e| e.to_string())?;
         }
         tx.commit().map_err(|e| e.to_string())?;
         return get_transactions(app);

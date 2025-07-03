@@ -731,38 +731,40 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     />
                   </TableCell>
                   <TableCell align="right" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}>
-                  {isEditableTransfer(transaction) && (
-                    <IconButton
-                      size="small"
-                        onClick={() => onEdit(transaction)}
-                      sx={{ 
-                        mr: 1,
-                        backgroundColor: 'transparent',
-                        color: 'primary.main',
-                        '&:hover': {
-                          backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                          color: 'primary.dark'
-                        }
-                      }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                  )}
-                  <IconButton
-                    size="small"
-                      onClick={(e) => handleSingleDelete(transaction.id, e)}
-                    sx={{ 
-                      backgroundColor: 'transparent',
-                      color: 'error.main',
-                      '&:hover': {
-                        backgroundColor: 'rgba(244, 67, 54, 0.08)',
-                        color: 'error.dark'
-                      }
-                    }}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </TableCell>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                      {isEditableTransfer(transaction) && (
+                        <IconButton
+                          size="small"
+                          onClick={() => onEdit(transaction)}
+                          sx={{ 
+                            mr: 1,
+                            backgroundColor: 'transparent',
+                            color: 'primary.main',
+                            '&:hover': {
+                              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                              color: 'primary.dark'
+                            }
+                          }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      )}
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleSingleDelete(transaction.id, e)}
+                        sx={{ 
+                          backgroundColor: 'transparent',
+                          color: 'error.main',
+                          '&:hover': {
+                            backgroundColor: 'rgba(244, 67, 54, 0.08)',
+                            color: 'error.dark'
+                          }
+                        }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
+                  </TableCell>
               </TableRow>
             ))
           )}
