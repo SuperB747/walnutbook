@@ -422,8 +422,8 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             // 같은 날짜, 같은 금액(절댓값), 같은 계좌에서 transfer 거래를 찾아서 쌍을 업데이트
             let transfer_amount = transaction.amount.abs();
             let transfer_pairs: Vec<(i64, i64, f64)> = {
-                let mut stmt = conn.prepare("SELECT id, account_id, amount FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2 AND (account_id = ?3 OR account_id IN (SELECT account_id FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2 AND account_id != ?3))").map_err(|e| e.to_string())?;
-                let rows = stmt.query_map(params![transaction.date, transfer_amount, transaction.account_id, transaction.date, transfer_amount, transaction.account_id], |row| {
+                let mut stmt = conn.prepare("SELECT id, account_id, amount FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2").map_err(|e| e.to_string())?;
+                let rows = stmt.query_map(params![transaction.date, transfer_amount], |row| {
                     Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, f64>(2)?))
                 }).map_err(|e| e.to_string())?;
                 
