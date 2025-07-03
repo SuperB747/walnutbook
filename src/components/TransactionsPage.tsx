@@ -54,9 +54,21 @@ const TransactionsPage: React.FC = () => {
     severity: 'success',
   });
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    // localStorage에서 저장된 달을 가져오거나, 없으면 현재 달 사용
-    const savedMonth = localStorage.getItem('walnutbook_selected_month');
-    return savedMonth || format(new Date(), 'yyyy-MM');
+    // 앱 시작 시에는 항상 현재 달을 기본으로 사용
+    const currentMonth = format(new Date(), 'yyyy-MM');
+    
+    // 앱이 처음 시작되었는지 확인 (sessionStorage 사용)
+    const isFirstStart = !sessionStorage.getItem('walnutbook_session_started');
+    
+    if (isFirstStart) {
+      // 앱이 처음 시작된 경우 현재 달 사용
+      sessionStorage.setItem('walnutbook_session_started', 'true');
+      return currentMonth;
+    } else {
+      // 앱이 이미 실행 중인 경우 localStorage에서 저장된 달 사용
+      const savedMonth = localStorage.getItem('walnutbook_selected_month');
+      return savedMonth || currentMonth;
+    }
   });
   const [importedIds, setImportedIds] = useState<number[]>([]);
   const [importedDuplicateCount, setImportedDuplicateCount] = useState<number>(0);
