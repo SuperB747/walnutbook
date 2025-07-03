@@ -161,18 +161,17 @@ const TransactionsPage: React.FC = () => {
 
   const handleImport = async (importTxs: Partial<Transaction>[]): Promise<void> => {
     try {
-      const existingIds = transactions.map(t => t.id);
       const createdList = await invoke<Transaction[]>('import_transactions', { transactions: importTxs });
-      const newIds = createdList.map(t => t.id).filter(id => !existingIds.includes(id));
-      const duplicateCount = importTxs.length - newIds.length;
+      const importedCount = createdList.length;
+      const duplicateCount = importTxs.length - importedCount;
       await loadTransactions();
       await loadAccounts();
       window.dispatchEvent(new Event('accountsUpdated'));
-      setImportedIds(newIds);
+      setImportedIds(createdList.map(t => t.id));
       setImportedDuplicateCount(duplicateCount);
       setSnackbar({
         open: true,
-        message: `Imported ${newIds.length} transactions, skipped ${duplicateCount} duplicates.`,
+        message: `Imported ${importedCount} transactions, skipped ${duplicateCount} duplicates.`,
         severity: 'success',
       });
     } catch (error) {
@@ -185,7 +184,12 @@ const TransactionsPage: React.FC = () => {
     try {
       const tx = transactions.find(t => t.id === id);
       if (tx) {
-        await invoke('update_transaction', { transaction: { ...tx, payee: description } });
+        // For transfer transactions, update the payee field (description only)
+        if (tx.type === 'transfer') {
+          await invoke('update_transaction', { transaction: { ...tx, payee: description } });
+        } else {
+          await invoke('update_transaction', { transaction: { ...tx, payee: description } });
+        }
         await loadTransactions();
         showSnackbar('Description updated', 'success');
       }

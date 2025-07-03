@@ -238,6 +238,19 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
   // Transfer payee 포맷을 사용자 친화적으로 변환
   const getDisplayPayee = (transaction: Transaction) => {
+    // For transfer transactions, combine notes (account info) and payee (description)
+    if (transaction.type === 'transfer') {
+      const accountInfo = transaction.notes || '';
+      const description = transaction.payee || '';
+      if (accountInfo && description) {
+        return `${accountInfo} ${description}`;
+      } else if (accountInfo) {
+        return accountInfo;
+      } else if (description) {
+        return description;
+      }
+      return transaction.payee;
+    }
     return transaction.payee;
   };
 
@@ -593,7 +606,12 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                     onClick={() => {
                       setEditDescriptionId(transaction.id);
-                      setEditDescriptionValue(transaction.payee);
+                      // For transfer transactions, only show description (payee) for editing
+                      if (transaction.type === 'transfer') {
+                        setEditDescriptionValue(transaction.payee || '');
+                      } else {
+                        setEditDescriptionValue(transaction.payee);
+                      }
                     }}
                     style={{ cursor: 'text' }}
                   >

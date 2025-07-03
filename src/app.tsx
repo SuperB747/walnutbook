@@ -540,13 +540,13 @@ const App: React.FC = () => {
           onClose={() => setImportExportDialogOpen(false)}
           onImport={async (transactions) => {
             try {
-              for (const transaction of transactions) {
-                await invoke('create_transaction', transaction);
-              }
+              const createdList = await invoke<Transaction[]>('import_transactions', { transactions });
+              const importedCount = createdList.length;
+              const duplicateCount = transactions.length - importedCount;
               await loadDialogData();
               setSnackbar({
                 open: true,
-                message: `Imported ${transactions.length} transaction(s)`,
+                message: `Imported ${importedCount} transactions, skipped ${duplicateCount} duplicates.`,
                 severity: 'success',
               });
             } catch (error) {
