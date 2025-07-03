@@ -599,11 +599,11 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
     let path = get_db_path(&app);
     let mut conn = Connection::open(path).map_err(|e| e.to_string())?;
     // Retrieve transaction to adjust balance
-    let mut sel = conn.prepare("SELECT type, amount, account_id, category, date FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
+    let mut sel = conn.prepare("SELECT type, amount, account_id, category, date, payee FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
     let mut rows = sel.query_map(params![id], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, i64>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?))
+        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, i64>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?, row.get::<_, String>(5)?))
     }).map_err(|e| e.to_string())?;
-    let (old_type, old_amount, acct_id, _old_category, _old_date) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
+    let (old_type, old_amount, acct_id, _old_category, _old_date, _old_payee) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
     
     // Transfer 거래의 경우 출발 거래(음수)만 페어 삭제
     if old_type == "transfer" && old_amount < 0.0 {

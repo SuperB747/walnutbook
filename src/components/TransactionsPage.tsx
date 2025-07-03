@@ -336,7 +336,7 @@ const TransactionsPage: React.FC = () => {
           open={snackbar.open}
         autoHideDuration={10000}
         onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
         >
         <Alert onClose={handleSnackbarClose} severity={snackbar.severity}>
             {snackbar.message}

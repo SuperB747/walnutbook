@@ -161,13 +161,13 @@ const BudgetsPage: React.FC = () => {
   };
 
   const calculateTotalSpent = () => {
-    return transactions
+    return Math.abs(transactions
       .filter(
         (t) =>
           t.type === 'expense' &&
           t.date.startsWith(selectedMonth)
       )
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + t.amount, 0));
   };
 
   const totalBudget = calculateTotalBudget();
@@ -346,7 +346,7 @@ const BudgetsPage: React.FC = () => {
                 <Typography color="textSecondary" gutterBottom>
                   Total Budget
                 </Typography>
-                <Typography variant="h5" component="div">
+                <Typography variant="h5" component="div" color="success.main">
                   {formatCurrency(totalBudget)}
                 </Typography>
               </CardContent>
@@ -358,7 +358,7 @@ const BudgetsPage: React.FC = () => {
                 <Typography color="textSecondary" gutterBottom>
                   Total Spent
                 </Typography>
-                <Typography variant="h5" component="div" color="error">
+                <Typography variant="h5" component="div" color="error.main">
                   {formatCurrency(totalSpent)}
                 </Typography>
               </CardContent>
@@ -373,7 +373,7 @@ const BudgetsPage: React.FC = () => {
                 <Typography
                   variant="h5"
                   component="div"
-                  color={remainingBudget < 0 ? 'error' : 'success'}
+                  color={remainingBudget < 0 ? 'error.main' : 'success.main'}
                 >
                   {formatCurrency(remainingBudget)}
                 </Typography>
@@ -420,7 +420,7 @@ const BudgetsPage: React.FC = () => {
           open={snackbar.open}
           autoHideDuration={6000}
           onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
         >
           <Alert
             onClose={handleCloseSnackbar}
