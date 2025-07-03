@@ -543,7 +543,21 @@ const App: React.FC = () => {
               const createdList = await invoke<Transaction[]>('import_transactions', { transactions });
               const importedCount = createdList.length;
               const duplicateCount = transactions.length - importedCount;
-              await loadDialogData();
+              
+              // 로컬 상태를 즉시 업데이트하여 부드러운 UI 전환
+              const [newAccounts, newTransactions] = await Promise.all([
+                invoke<Account[]>('get_accounts'),
+                invoke<Transaction[]>('get_transactions')
+              ]);
+              
+              setAccounts(newAccounts);
+              setTransactions(newTransactions);
+              
+              // 모든 페이지가 데이터를 새로고침하도록 이벤트 발생
+              window.dispatchEvent(new Event('accountsUpdated'));
+              window.dispatchEvent(new Event('transactionsUpdated'));
+              window.dispatchEvent(new Event('budgetsUpdated'));
+              
               setSnackbar({
                 open: true,
                 message: `Imported ${importedCount} transactions, skipped ${duplicateCount} duplicates.`,
@@ -564,12 +578,36 @@ const App: React.FC = () => {
                  <BackupRestoreDialog
            open={backupRestoreDialogOpen}
            onClose={() => setBackupRestoreDialogOpen(false)}
-           onRestore={() => {
-             setSnackbar({
-               open: true,
-               message: 'Database restored successfully. Please refresh the page.',
-               severity: 'success',
-             });
+           onRestore={async () => {
+             try {
+               // 로컬 상태를 즉시 업데이트하여 부드러운 UI 전환
+               const [newAccounts, newTransactions, newCategories] = await Promise.all([
+                 invoke<Account[]>('get_accounts'),
+                 invoke<Transaction[]>('get_transactions'),
+                 invoke<string[]>('get_categories')
+               ]);
+               
+               setAccounts(newAccounts);
+               setTransactions(newTransactions);
+               setCategories(newCategories);
+               
+               // 모든 페이지가 데이터를 새로고침하도록 이벤트 발생
+               window.dispatchEvent(new Event('accountsUpdated'));
+               window.dispatchEvent(new Event('transactionsUpdated'));
+               window.dispatchEvent(new Event('budgetsUpdated'));
+               
+               setSnackbar({
+                 open: true,
+                 message: 'Database restored successfully!',
+                 severity: 'success',
+               });
+             } catch (error) {
+               setSnackbar({
+                 open: true,
+                 message: 'Failed to refresh data after restore: ' + String(error),
+                 severity: 'error',
+               });
+             }
            }}
          />
          

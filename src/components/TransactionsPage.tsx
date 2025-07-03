@@ -81,8 +81,24 @@ const TransactionsPage: React.FC = () => {
   useEffect(() => {
     loadTransactions();
     loadAccounts();
-
     loadCategories();
+    
+    // 복원 후 데이터 새로고침을 위한 이벤트 리스너
+    const handleDataUpdate = () => {
+      loadTransactions();
+      loadAccounts();
+      loadCategories();
+    };
+    
+    window.addEventListener('transactionsUpdated', handleDataUpdate);
+    window.addEventListener('budgetsUpdated', handleDataUpdate);
+    window.addEventListener('accountsUpdated', handleDataUpdate);
+    
+    return () => {
+      window.removeEventListener('transactionsUpdated', handleDataUpdate);
+      window.removeEventListener('budgetsUpdated', handleDataUpdate);
+      window.removeEventListener('accountsUpdated', handleDataUpdate);
+    };
   }, []);
 
   const loadTransactions = async (): Promise<void> => {
@@ -105,8 +121,6 @@ const TransactionsPage: React.FC = () => {
     }
   };
 
-
-
   const loadCategories = async (): Promise<void> => {
     try {
       const categoryList = await invoke('get_categories') as string[];
@@ -121,14 +135,31 @@ const TransactionsPage: React.FC = () => {
   const handleTransactionSave = async (transaction: Partial<Transaction>): Promise<void> => {
     try {
       if (selectedTransaction) {
-        await invoke('update_transaction', { transaction: { ...selectedTransaction, ...transaction } });
+        const updatedTransaction = await invoke<Transaction>('update_transaction', { 
+          transaction: { ...selectedTransaction, ...transaction } 
+        });
+        
+        // 로컬 상태에서 거래를 업데이트하여 즉시 UI 업데이트
+        setTransactions(prevTransactions => 
+          prevTransactions.map(t => 
+            t.id === selectedTransaction.id ? updatedTransaction : t
+          )
+        );
+        
         setFormOpen(false);
         setSelectedTransaction(undefined);
       } else {
-        await invoke('create_transaction', { transaction });
+        const newTransaction = await invoke<Transaction>('create_transaction', { transaction });
+        
+        // 로컬 상태에 새 거래를 추가하여 즉시 UI 업데이트
+        setTransactions(prevTransactions => [newTransaction, ...prevTransactions]);
+        
         // Always keep the form open for new transactions (continuous mode)
       }
-      await loadTransactions();
+      
+      // 다른 페이지가 거래 변경을 인식하도록 이벤트 발생
+      window.dispatchEvent(new Event('transactionsUpdated'));
+      
       showSnackbar('Transaction saved successfully', 'success');
     } catch (error) {
       console.error('Failed to save transaction:', error);
@@ -138,8 +169,42 @@ const TransactionsPage: React.FC = () => {
 
   const handleTransactionDelete = async (id: number): Promise<void> => {
     try {
+      // 삭제할 거래 정보를 먼저 가져와서 Transfer 페어 확인
+      const transactionToDelete = transactions.find(t => t.id === id);
+      
       await invoke('delete_transaction', { id });
-      await loadTransactions();
+      
+      // 로컬 상태에서 삭제된 거래를 제거하여 즉시 UI 업데이트
+      setTransactions(prevTransactions => {
+        let filtered = prevTransactions.filter(t => t.id !== id);
+        
+        // Transfer 거래인 경우 페어된 거래도 함께 제거
+        if (transactionToDelete && transactionToDelete.type === 'transfer') {
+          if (transactionToDelete.transfer_id) {
+            // transfer_id가 있는 경우 같은 transfer_id를 가진 다른 거래도 제거
+            filtered = filtered.filter(t => t.transfer_id !== transactionToDelete.transfer_id);
+          } else {
+            // transfer_id가 없는 경우 기존 방식으로 페어 찾기
+            const pairTransaction = prevTransactions.find(t => 
+              t.id !== id && 
+              t.type === 'transfer' && 
+              t.date === transactionToDelete.date && 
+              Math.abs(t.amount) === Math.abs(transactionToDelete.amount) &&
+              t.payee === transactionToDelete.payee &&
+              t.account_id !== transactionToDelete.account_id
+            );
+            if (pairTransaction) {
+              filtered = filtered.filter(t => t.id !== pairTransaction.id);
+            }
+          }
+        }
+        
+        return filtered;
+      });
+      
+      // 다른 페이지가 거래 삭제를 인식하도록 이벤트 발생
+      window.dispatchEvent(new Event('transactionsUpdated'));
+      
       showSnackbar('Transaction deleted successfully', 'success');
     } catch (error) {
       console.error('Failed to delete transaction:', error);
@@ -147,10 +212,84 @@ const TransactionsPage: React.FC = () => {
     }
   };
 
+  const handleBulkDelete = async (ids: number[]): Promise<void> => {
+    try {
+      let deletedCount = 0;
+      
+      for (const id of ids) {
+        try {
+          await invoke('delete_transaction', { id });
+          deletedCount++;
+        } catch (error) {
+          console.error(`Failed to delete transaction ${id}:`, error);
+        }
+      }
+      
+      // 로컬 상태에서 삭제된 거래들을 제거하여 즉시 UI 업데이트
+      setTransactions(prevTransactions => {
+        let filtered = prevTransactions.filter(t => !ids.includes(t.id));
+        
+        // Transfer 거래들의 페어도 함께 제거
+        const deletedTransactions = prevTransactions.filter(t => ids.includes(t.id));
+        const transferIdsToRemove = new Set<number>();
+        
+        deletedTransactions.forEach(transaction => {
+          if (transaction.type === 'transfer') {
+            if (transaction.transfer_id) {
+              transferIdsToRemove.add(transaction.transfer_id);
+            } else {
+              // transfer_id가 없는 경우 기존 방식으로 페어 찾기
+              const pairTransaction = prevTransactions.find(t => 
+                !ids.includes(t.id) && 
+                t.type === 'transfer' && 
+                t.date === transaction.date && 
+                Math.abs(t.amount) === Math.abs(transaction.amount) &&
+                t.payee === transaction.payee &&
+                t.account_id !== transaction.account_id
+              );
+              if (pairTransaction) {
+                transferIdsToRemove.add(pairTransaction.id);
+              }
+            }
+          }
+        });
+        
+        // 페어된 Transfer 거래들도 제거
+        if (transferIdsToRemove.size > 0) {
+          filtered = filtered.filter(t => !transferIdsToRemove.has(t.id));
+        }
+        
+        return filtered;
+      });
+      
+      if (deletedCount === ids.length) {
+        showSnackbar(`${deletedCount} transactions deleted successfully`, 'success');
+      } else {
+        showSnackbar(`${deletedCount} out of ${ids.length} transactions deleted successfully`, 'warning');
+      }
+      
+      // 다른 페이지가 거래 삭제를 인식하도록 이벤트 발생
+      window.dispatchEvent(new Event('transactionsUpdated'));
+    } catch (error) {
+      console.error('Failed to delete transactions:', error);
+      showSnackbar('Failed to delete transactions', 'error');
+    }
+  };
+
   const handleBulkEdit = async (updates: { field: string; value: any; transactionIds: number[] }): Promise<void> => {
     try {
-      await invoke('bulk_update_transactions', { updates });
-      await loadTransactions();
+      const updatedTransactions = await invoke<Transaction[]>('bulk_update_transactions', { updates });
+      
+      // 로컬 상태에서 일괄 업데이트된 거래들을 반영하여 즉시 UI 업데이트
+      setTransactions(prevTransactions => {
+        const updatedIds = new Set(updatedTransactions.map(t => t.id));
+        return prevTransactions.map(t => 
+          updatedIds.has(t.id) 
+            ? updatedTransactions.find(ut => ut.id === t.id) || t
+            : t
+        );
+      });
+      
       setBulkEditOpen(false);
       showSnackbar('Transactions updated successfully', 'success');
     } catch (error) {
@@ -164,9 +303,19 @@ const TransactionsPage: React.FC = () => {
       const createdList = await invoke<Transaction[]>('import_transactions', { transactions: importTxs });
       const importedCount = createdList.length;
       const duplicateCount = importTxs.length - importedCount;
-      await loadTransactions();
-      await loadAccounts();
-      window.dispatchEvent(new Event('accountsUpdated'));
+      
+      // 로컬 상태를 즉시 업데이트하여 부드러운 UI 전환
+      const [newAccounts, newTransactions] = await Promise.all([
+        invoke<Account[]>('get_accounts'),
+        invoke<Transaction[]>('get_transactions')
+      ]);
+      
+      setAccounts(newAccounts);
+      setTransactions(newTransactions);
+      
+      // 이벤트 발생 제거 - 로컬 상태 업데이트로 대체했으므로 불필요
+      // window.dispatchEvent(new Event('accountsUpdated'));
+      
       setImportedIds(createdList.map(t => t.id));
       setImportedDuplicateCount(duplicateCount);
       setSnackbar({
@@ -190,7 +339,14 @@ const TransactionsPage: React.FC = () => {
         } else {
           await invoke('update_transaction', { transaction: { ...tx, payee: description } });
         }
-        await loadTransactions();
+        
+        // 로컬 상태에서 설명을 업데이트하여 즉시 UI 업데이트
+        setTransactions(prevTransactions => 
+          prevTransactions.map(t => 
+            t.id === id ? { ...t, payee: description } : t
+          )
+        );
+        
         showSnackbar('Description updated', 'success');
       }
     } catch (error) {
@@ -269,7 +425,14 @@ const TransactionsPage: React.FC = () => {
             const tx = transactions.find(t => t.id === id);
             if (tx) {
               await invoke('update_transaction', { transaction: { ...tx, category: newCategory } });
-              await loadTransactions();
+              
+              // 로컬 상태에서 카테고리를 업데이트하여 즉시 UI 업데이트
+              setTransactions(prevTransactions => 
+                prevTransactions.map(t => 
+                  t.id === id ? { ...t, category: newCategory } : t
+                )
+              );
+              
               showSnackbar('Category updated', 'success');
             }
           } catch (error) {
@@ -280,6 +443,7 @@ const TransactionsPage: React.FC = () => {
         onDescriptionChange={handleDescriptionChange}
         initialSelectedIds={importedIds}
         onAddTransaction={() => setFormOpen(true)}
+        onBulkDelete={handleBulkDelete}
         />
 
         <TransactionForm
@@ -311,24 +475,60 @@ const TransactionsPage: React.FC = () => {
         onImport={handleImport}
       />
 
-
-
       <CategoryManagementDialog
         open={categoriesOpen}
-        onClose={() => {
+        onClose={async () => {
           setCategoriesOpen(false);
-          loadCategories();
+          // 로컬 상태 업데이트
+          try {
+            const newCategories = await invoke<string[]>('get_categories');
+            setCategories(newCategories);
+          } catch (error) {
+            console.error('Failed to refresh categories:', error);
+          }
         }}
-        onChange={loadCategories}
+        onChange={async () => {
+          // 로컬 상태 업데이트
+          try {
+            const newCategories = await invoke<string[]>('get_categories');
+            setCategories(newCategories);
+          } catch (error) {
+            console.error('Failed to refresh categories:', error);
+          }
+        }}
       />
 
       <BackupRestoreDialog
         open={backupOpen}
         onClose={() => setBackupOpen(false)}
-        onRestore={() => {
-          loadAccounts();
-          loadTransactions();
-          window.dispatchEvent(new Event('accountsUpdated'));
+        onRestore={async () => {
+          try {
+            // 로컬 상태를 즉시 업데이트하여 부드러운 UI 전환
+            const [newAccounts, newTransactions, newCategories] = await Promise.all([
+              invoke<Account[]>('get_accounts'),
+              invoke<Transaction[]>('get_transactions'),
+              invoke<string[]>('get_categories')
+            ]);
+            
+            // 로컬 상태 업데이트
+            setAccounts(newAccounts);
+            setTransactions(newTransactions);
+            setCategories(newCategories);
+            
+            // 선택된 월 초기화
+            setSelectedMonth('');
+            localStorage.removeItem('walnutbook_selected_month');
+            
+            // 이벤트 발생 제거 - 로컬 상태 업데이트로 대체했으므로 불필요
+            // window.dispatchEvent(new Event('accountsUpdated'));
+            // window.dispatchEvent(new Event('transactionsUpdated'));
+            // window.dispatchEvent(new Event('budgetsUpdated'));
+            
+            showSnackbar('Database restored successfully!', 'success');
+          } catch (error) {
+            console.error('Failed to refresh data after restore:', error);
+            showSnackbar('Failed to refresh data after restore', 'error');
+          }
         }}
         />
 

@@ -72,6 +72,10 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
         await invoke('import_database', { data: Array.from(new Uint8Array(buffer)) });
         setStatus({ message: 'Restore successful!', error: false });
         onRestore?.();
+        // 복원 완료 후 즉시 다이얼로그 닫기
+        setTimeout(() => {
+          handleClose();
+        }, 1000);
       } catch (e) {
         console.error('Restore failed:', e);
         setStatus({ message: 'Restore failed: ' + String(e), error: true });

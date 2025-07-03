@@ -44,10 +44,16 @@ const AccountsPage: React.FC = () => {
   useEffect(() => {
     // Initial load
     loadAccounts();
-    // Reload whenever accountsUpdated event is fired
+    // 복원 후 데이터 새로고침을 위한 이벤트 리스너
     const handler = () => loadAccounts();
     window.addEventListener('accountsUpdated', handler);
-    return () => window.removeEventListener('accountsUpdated', handler);
+    window.addEventListener('transactionsUpdated', handler);
+    window.addEventListener('budgetsUpdated', handler);
+    return () => {
+      window.removeEventListener('accountsUpdated', handler);
+      window.removeEventListener('transactionsUpdated', handler);
+      window.removeEventListener('budgetsUpdated', handler);
+    };
   }, []);
 
   const handleAddAccount = () => {
@@ -70,8 +76,12 @@ const AccountsPage: React.FC = () => {
   const handleConfirmDelete = async () => {
     if (deleteAccountId == null) return;
     try {
-      await invoke('delete_account', { id: deleteAccountId });
-      await loadAccounts();
+      const updatedAccounts = await invoke<Account[]>('delete_account', { id: deleteAccountId });
+      setAccounts(updatedAccounts);
+      
+      // 다른 페이지가 계정 삭제를 인식하도록 이벤트 발생
+      window.dispatchEvent(new Event('accountsUpdated'));
+      
       setSnackbar({ open: true, message: 'Account deleted successfully.', severity: 'success' });
     } catch (error) {
       console.error('Failed to delete account:', error);
@@ -90,8 +100,10 @@ const AccountsPage: React.FC = () => {
 
   const handleSaveAccount = async (accountData: Partial<Account>) => {
     try {
+      let updatedAccounts: Account[];
+      
       if (selectedAccount) {
-        await invoke<Account[]>('update_account', {
+        updatedAccounts = await invoke<Account[]>('update_account', {
           account: {
             id: selectedAccount.id,
             name: accountData.name!,
@@ -102,13 +114,18 @@ const AccountsPage: React.FC = () => {
           }
         });
       } else {
-        await invoke<Account[]>('create_account', {
+        updatedAccounts = await invoke<Account[]>('create_account', {
           name: accountData.name!,
           accountType: accountData.type!,
         });
       }
-      await loadAccounts();
+      
+      setAccounts(updatedAccounts);
       setIsFormOpen(false);
+      
+      // 다른 페이지가 계정 변경을 인식하도록 이벤트 발생
+      window.dispatchEvent(new Event('accountsUpdated'));
+      
       setSnackbar({
         open: true,
         message: `Account ${selectedAccount ? 'updated' : 'added'} successfully.`,

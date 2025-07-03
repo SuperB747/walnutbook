@@ -92,6 +92,24 @@ const BudgetsPage: React.FC = () => {
     loadTransactions();
   }, [selectedMonth]);
 
+  // Listen for accountsUpdated event to refresh data after backup restore
+  useEffect(() => {
+    // 복원 후 데이터 새로고침을 위한 이벤트 리스너
+    const handleAccountsUpdated = () => {
+      loadBudgets();
+      loadTransactions();
+    };
+    
+    window.addEventListener('accountsUpdated', handleAccountsUpdated);
+    window.addEventListener('transactionsUpdated', handleAccountsUpdated);
+    window.addEventListener('budgetsUpdated', handleAccountsUpdated);
+    return () => {
+      window.removeEventListener('accountsUpdated', handleAccountsUpdated);
+      window.removeEventListener('transactionsUpdated', handleAccountsUpdated);
+      window.removeEventListener('budgetsUpdated', handleAccountsUpdated);
+    };
+  }, []);
+
   const handleAddBudget = () => {
     setSelectedBudget(undefined);
     setIsFormOpen(true);
@@ -104,8 +122,12 @@ const BudgetsPage: React.FC = () => {
 
   const handleDeleteBudget = async (budget: Budget) => {
     try {
-      await invoke<Budget[]>('delete_budget', { id: budget.id });
-      await loadBudgets();
+      const updatedBudgets = await invoke<Budget[]>('delete_budget', { id: budget.id });
+      setBudgets(updatedBudgets);
+      
+      // 다른 페이지가 예산 삭제를 인식하도록 이벤트 발생
+      window.dispatchEvent(new Event('budgetsUpdated'));
+      
       setSnackbar({
         open: true,
         message: 'Budget deleted successfully.',
@@ -123,30 +145,44 @@ const BudgetsPage: React.FC = () => {
 
   const handleSaveBudget = async (budgetData: Partial<Budget>) => {
     try {
+      let updatedBudgets: Budget[];
+      
       if (selectedBudget) {
-        await invoke<Budget[]>('update_budget', { budget: { 
-          id: selectedBudget.id, 
-          category: budgetData.category!, 
-          amount: budgetData.amount!, 
-          month: selectedMonth, 
-          notes: budgetData.notes,
-          created_at: selectedBudget.created_at
-        }});
+        updatedBudgets = await invoke<Budget[]>('update_budget', {
+          budget: {
+            id: selectedBudget.id,
+            category: budgetData.category!,
+            amount: budgetData.amount!,
+            month: selectedMonth,
+            notes: budgetData.notes,
+            created_at: selectedBudget.created_at,
+          }
+        });
       } else {
-        await invoke<Budget[]>('add_budget', { category: budgetData.category!, amount: budgetData.amount!, month: selectedMonth, notes: budgetData.notes });
+        updatedBudgets = await invoke<Budget[]>('add_budget', {
+          category: budgetData.category!,
+          amount: budgetData.amount!,
+          month: selectedMonth,
+          notes: budgetData.notes,
+        });
       }
-      await loadBudgets();
+      
+      setBudgets(updatedBudgets);
       setIsFormOpen(false);
+      
+      // 다른 페이지가 예산 변경을 인식하도록 이벤트 발생
+      window.dispatchEvent(new Event('budgetsUpdated'));
+      
       setSnackbar({
         open: true,
-        message: `Budget ${selectedBudget ? 'updated' : 'set'} successfully.`,
+        message: `Budget ${selectedBudget ? 'updated' : 'added'} successfully.`,
         severity: 'success',
       });
     } catch (error) {
       console.error('Failed to save budget:', error);
       setSnackbar({
         open: true,
-        message: `Failed to ${selectedBudget ? 'update' : 'set'} budget.`,
+        message: `Failed to ${selectedBudget ? 'update' : 'add'} budget.`,
         severity: 'error',
       });
     }
@@ -216,7 +252,8 @@ const BudgetsPage: React.FC = () => {
       }
       
       // Reload budgets after import
-      await loadBudgets();
+      const updatedBudgets = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
+      setBudgets(updatedBudgets);
       
       // Step 2: Get last month's expense transactions for auto-generation
       const lastMonthExpenses = transactions.filter(t => 
@@ -278,7 +315,9 @@ const BudgetsPage: React.FC = () => {
         }
       }
       
-      await loadBudgets();
+      // Update local state with final budgets
+      const finalBudgets = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
+      setBudgets(finalBudgets);
       
       let message = `Auto-generate completed: Created ${createdCount} new budget(s)`;
       if (skippedCount > 0) {

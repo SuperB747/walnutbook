@@ -14,6 +14,7 @@ export interface Transaction {
   amount: number;
   payee: string;
   notes?: string;
+  transfer_id?: number;
   created_at: string;
 }
 
@@ -60,6 +61,7 @@ const SCHEMA = `
     amount REAL NOT NULL,
     payee TEXT NOT NULL,
     notes TEXT,
+    transfer_id INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts (id)
   );
@@ -147,6 +149,11 @@ export async function initializeDatabase(): Promise<void> {
     if (!cols.some(c => c.name === 'created_at')) {
       db.prepare("ALTER TABLE transactions ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP").run();
     }
+    
+    // Migration: ensure transactions table has a transfer_id column
+    if (!cols.some(c => c.name === 'transfer_id')) {
+      db.prepare("ALTER TABLE transactions ADD COLUMN transfer_id INTEGER").run();
+    }
 
     // Check if we need to insert initial data
     const accountCount = db.prepare('SELECT COUNT(*) as count FROM accounts').get() as { count: number };
@@ -162,12 +169,12 @@ export async function initializeDatabase(): Promise<void> {
 // Transactions
 export async function getTransactions(): Promise<Transaction[]> {
   const db = getDatabase();
-  return db.prepare('SELECT * FROM transactions ORDER BY date DESC').all() as Transaction[];
+  return db.prepare('SELECT id, date, account_id, type, category, amount, payee, notes, transfer_id, created_at FROM transactions ORDER BY date DESC').all() as Transaction[];
 }
 
 export async function getTransaction(id: number): Promise<Transaction | null> {
   const db = getDatabase();
-  return db.prepare('SELECT * FROM transactions WHERE id = ?').get(id) as Transaction | null;
+  return db.prepare('SELECT id, date, account_id, type, category, amount, payee, notes, transfer_id, created_at FROM transactions WHERE id = ?').get(id) as Transaction | null;
   }
 
 export async function addTransaction(transaction: Omit<Transaction, 'id'>): Promise<void> {
@@ -176,8 +183,8 @@ export async function addTransaction(transaction: Omit<Transaction, 'id'>): Prom
   try {
     db.prepare(`
       INSERT INTO transactions (
-        date, account_id, type, category, amount, payee, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        date, account_id, type, category, amount, payee, notes, transfer_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       transaction.date,
       transaction.account_id,
@@ -185,7 +192,8 @@ export async function addTransaction(transaction: Omit<Transaction, 'id'>): Prom
       transaction.category,
       transaction.amount,
       transaction.payee,
-      transaction.notes || ''
+      transaction.notes || '',
+      transaction.transfer_id || null
     );
 
     // Update account balance based on transaction type and category
@@ -240,7 +248,7 @@ export async function updateTransaction(transaction: Transaction): Promise<void>
     db.transaction(() => {
       db.prepare(`
         UPDATE transactions 
-        SET date = ?, account_id = ?, type = ?, category = ?, amount = ?, payee = ?, notes = ?
+        SET date = ?, account_id = ?, type = ?, category = ?, amount = ?, payee = ?, notes = ?, transfer_id = ?
         WHERE id = ?
       `).run(
         transaction.date,
@@ -250,6 +258,7 @@ export async function updateTransaction(transaction: Transaction): Promise<void>
         transaction.amount,
         transaction.payee,
         transaction.notes || '',
+        transaction.transfer_id || null,
         transaction.id
       );
 

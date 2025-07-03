@@ -44,6 +44,7 @@ export interface TransactionListProps {
   categories: string[];
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: number) => Promise<void>;
+  onBulkDelete?: (ids: number[]) => Promise<void>;
   onCategoryChange: (id: number, category: string) => Promise<void>;
   onDescriptionChange?: (id: number, description: string) => Promise<void>;
   initialSelectedIds?: number[];
@@ -56,6 +57,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   categories,
   onEdit,
   onDelete,
+  onBulkDelete,
   onCategoryChange,
   onDescriptionChange,
   initialSelectedIds = [],
@@ -87,6 +89,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
     targetId?: number;
     anchorPosition?: { top: number; left: number };
   }>({ open: false, type: null });
+  
+  // 삭제 진행 상태 추적
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Pre-select newly imported transactions
   useEffect(() => {
@@ -122,15 +127,29 @@ const TransactionList: React.FC<TransactionListProps> = ({
     });
   };
   const handleConfirm = async () => {
-    if (confirmDialog.type === 'single' && confirmDialog.targetId !== undefined) {
-      await onDelete(confirmDialog.targetId);
-    } else if (confirmDialog.type === 'bulk') {
-      for (const id of selectedIds) {
-        await onDelete(id);
+    try {
+      setIsDeleting(true);
+      
+      if (confirmDialog.type === 'single' && confirmDialog.targetId !== undefined) {
+        await onDelete(confirmDialog.targetId);
+      } else if (confirmDialog.type === 'bulk') {
+        if (onBulkDelete) {
+          await onBulkDelete(selectedIds);
+        } else {
+          // Fallback to individual deletions if onBulkDelete is not provided
+          for (const id of selectedIds) {
+            await onDelete(id);
+          }
+        }
+        setSelectedIds([]);
       }
-      setSelectedIds([]);
+      
+      setConfirmDialog({ open: false, type: null });
+    } catch (error) {
+      console.error('Delete failed:', error);
+    } finally {
+      setIsDeleting(false);
     }
-    setConfirmDialog({ open: false, type: null });
   };
   const handleCancel = () => setConfirmDialog({ open: false, type: null });
 
@@ -539,11 +558,21 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
       {/* Bulk action buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, p: 0.5 }}>
-        <Button variant="outlined" disabled={selectedIds.length === 0} onClick={handleBulkDelete}>
-          Delete Selected
+        <Button 
+          variant="outlined" 
+          disabled={selectedIds.length === 0 || isDeleting} 
+          onClick={handleBulkDelete}
+        >
+          {isDeleting ? 'Deleting...' : 'Delete Selected'}
         </Button>
         {onAddTransaction && (
-          <Button variant="contained" color="secondary" onClick={onAddTransaction} startIcon={<AddIcon />}>
+          <Button 
+            variant="contained" 
+            color="secondary" 
+            onClick={onAddTransaction} 
+            startIcon={<AddIcon />}
+            disabled={isDeleting}
+          >
             Add Transaction
           </Button>
         )}
@@ -752,12 +781,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       <IconButton
                         size="small"
                         onClick={(e) => handleSingleDelete(transaction.id, e)}
+                        disabled={isDeleting}
                         sx={{ 
                           backgroundColor: 'transparent',
-                          color: 'error.main',
+                          color: isDeleting ? 'action.disabled' : 'error.main',
                           '&:hover': {
-                            backgroundColor: 'rgba(244, 67, 54, 0.08)',
-                            color: 'error.dark'
+                            backgroundColor: isDeleting ? 'transparent' : 'rgba(244, 67, 54, 0.08)',
+                            color: isDeleting ? 'action.disabled' : 'error.dark'
                           }
                         }}
                       >
@@ -794,8 +824,15 @@ const TransactionList: React.FC<TransactionListProps> = ({
         </Typography>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleCancel} color="inherit">Cancel</Button>
-        <Button onClick={handleConfirm} color="error" variant="contained">Delete</Button>
+        <Button onClick={handleCancel} color="inherit" disabled={isDeleting}>Cancel</Button>
+        <Button 
+          onClick={handleConfirm} 
+          color="error" 
+          variant="contained"
+          disabled={isDeleting}
+        >
+          {isDeleting ? 'Deleting...' : 'Delete'}
+        </Button>
       </DialogActions>
     </Popover>
     </>
