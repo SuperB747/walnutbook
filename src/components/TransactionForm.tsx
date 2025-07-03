@@ -237,8 +237,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       
       // Transfer 거래 수정 시
       if (transaction?.type === 'transfer') {
-        // description은 payee에 저장, To Account 정보는 notes에 저장
-        finalTransaction.notes = finalTransaction.payee;
+        // To Account 정보를 notes에 설정
+        if (toAccountId) {
+          const toAccount = accounts.find(acc => acc.id === toAccountId);
+          if (toAccount) {
+            finalTransaction.notes = `[To: ${toAccount.name}]`;
+          }
+        }
       }
       // 새로운 Transfer 거래 생성 시
       else if (formData.type === 'transfer' && toAccountId) {
