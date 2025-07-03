@@ -77,8 +77,8 @@ const BudgetList: React.FC<BudgetListProps> = ({
             <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>Budget</TableCell>
             <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>Spent</TableCell>
             <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>Remaining</TableCell>
-            <TableCell sx={{ minWidth: 0 }}>Progress</TableCell>
-            <TableCell align="right" sx={{ width: 130, minWidth: 130 }}>Actions</TableCell>
+            <TableCell align="center" sx={{ minWidth: 0 }}>Progress</TableCell>
+            <TableCell align="center" sx={{ width: 130, minWidth: 130 }}>Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>

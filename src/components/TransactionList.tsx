@@ -249,10 +249,43 @@ const TransactionList: React.FC<TransactionListProps> = ({
           size="small"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          sx={{ minWidth: 120, flex: 1 }}
+          sx={{
+            minWidth: 120,
+            flex: 1,
+            '& .MuiInputLabel-root': {
+              backgroundColor: '#fafbfc',
+              px: 0.75,
+              zIndex: 2,
+              transition: 'background-color 0.2s, padding 0.2s',
+              '&.MuiInputLabel-shrink': {
+                backgroundColor: '#fafbfc',
+                px: 0.75,
+                zIndex: 2,
+              },
+            },
+            '& .MuiOutlinedInput-notchedOutline': {
+              transition: 'border-color 0.1s',
+            },
+          }}
         />
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel sx={{ px: 0.5 }}>Account</InputLabel>
+        <FormControl size="small" sx={{
+          minWidth: 120,
+          '& .MuiInputLabel-root': {
+            backgroundColor: '#fafbfc',
+            px: 0.75,
+            zIndex: 2,
+            transition: 'background-color 0.2s, padding 0.2s',
+            '&.MuiInputLabel-shrink': {
+              backgroundColor: '#fafbfc',
+              px: 0.75,
+              zIndex: 2,
+            },
+          },
+          '& .MuiOutlinedInput-notchedOutline': {
+            transition: 'border-color 0.1s',
+          },
+        }}>
+          <InputLabel>Account</InputLabel>
           <Select
             multiple
             value={selectedAccounts}
@@ -284,8 +317,24 @@ const TransactionList: React.FC<TransactionListProps> = ({
             ))}
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: 100 }}>
-          <InputLabel sx={{ px: 0.5 }}>Type</InputLabel>
+        <FormControl size="small" sx={{
+          minWidth: 100,
+          '& .MuiInputLabel-root': {
+            backgroundColor: '#fafbfc',
+            px: 0.75,
+            zIndex: 2,
+            transition: 'background-color 0.2s, padding 0.2s',
+            '&.MuiInputLabel-shrink': {
+              backgroundColor: '#fafbfc',
+              px: 0.75,
+              zIndex: 2,
+            },
+          },
+          '& .MuiOutlinedInput-notchedOutline': {
+            transition: 'border-color 0.1s',
+          },
+        }}>
+          <InputLabel>Type</InputLabel>
           <Select
             multiple
             value={selectedTypes}
@@ -311,8 +360,24 @@ const TransactionList: React.FC<TransactionListProps> = ({
             ))}
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel sx={{ px: 0.5 }}>Category</InputLabel>
+        <FormControl size="small" sx={{
+          minWidth: 120,
+          '& .MuiInputLabel-root': {
+            backgroundColor: '#fafbfc',
+            px: 0.75,
+            zIndex: 2,
+            transition: 'background-color 0.2s, padding 0.2s',
+            '&.MuiInputLabel-shrink': {
+              backgroundColor: '#fafbfc',
+              px: 0.75,
+              zIndex: 2,
+            },
+          },
+          '& .MuiOutlinedInput-notchedOutline': {
+            transition: 'border-color 0.1s',
+          },
+        }}>
+          <InputLabel>Category</InputLabel>
           <Select
             multiple
             value={selectedCategories}
@@ -352,19 +417,43 @@ const TransactionList: React.FC<TransactionListProps> = ({
               ...prev,
               start: newDate ? newDate.toISOString().split('T')[0] : ''
             }))}
-            slotProps={{ 
-              textField: { 
+            slotProps={{
+              textField: {
                 size: 'small',
                 sx: {
-                  width: 140,
-                  '& .MuiInputAdornment-root': {
-                    backgroundColor: 'transparent'
+                  width: 150,
+                  '& .MuiInputLabel-root': {
+                    backgroundColor: '#fafbfc',
+                    px: 0.75,
+                    zIndex: 2,
+                    transition: 'background-color 0.2s, padding 0.2s',
+                    '&.MuiInputLabel-shrink': {
+                      backgroundColor: '#fafbfc',
+                      px: 0.75,
+                      zIndex: 2,
+                    },
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    transition: 'border-color 0.1s',
                   },
                   '& .MuiIconButton-root': {
-                    backgroundColor: 'transparent'
+                    backgroundColor: 'transparent !important',
+                    color: '#234075 !important',
+                    transition: 'background-color 0.15s',
+                    '&:hover, &:focus-visible': {
+                      backgroundColor: 'rgba(35,64,117,0.08) !important',
+                      color: '#234075 !important',
+                    },
+                    '&:active': {
+                      backgroundColor: 'transparent !important',
+                      color: '#234075 !important',
+                    },
+                    '&:focus': {
+                      backgroundColor: 'transparent !important',
+                    },
                   }
-                }
-              } 
+                },
+              },
             }}
           />
           <DatePicker
@@ -374,19 +463,43 @@ const TransactionList: React.FC<TransactionListProps> = ({
               ...prev,
               end: newDate ? newDate.toISOString().split('T')[0] : ''
             }))}
-            slotProps={{ 
-              textField: { 
+            slotProps={{
+              textField: {
                 size: 'small',
                 sx: {
-                  width: 140,
-                  '& .MuiInputAdornment-root': {
-                    backgroundColor: 'transparent'
+                  width: 150,
+                  '& .MuiInputLabel-root': {
+                    backgroundColor: '#fafbfc',
+                    px: 0.75,
+                    zIndex: 2,
+                    transition: 'background-color 0.2s, padding 0.2s',
+                    '&.MuiInputLabel-shrink': {
+                      backgroundColor: '#fafbfc',
+                      px: 0.75,
+                      zIndex: 2,
+                    },
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    transition: 'border-color 0.1s',
                   },
                   '& .MuiIconButton-root': {
-                    backgroundColor: 'transparent'
+                    backgroundColor: 'transparent !important',
+                    color: '#234075 !important',
+                    transition: 'background-color 0.15s',
+                    '&:hover, &:focus-visible': {
+                      backgroundColor: 'rgba(35,64,117,0.08) !important',
+                      color: '#234075 !important',
+                    },
+                    '&:active': {
+                      backgroundColor: 'transparent !important',
+                      color: '#234075 !important',
+                    },
+                    '&:focus': {
+                      backgroundColor: 'transparent !important',
+                    },
                   }
-                }
-              } 
+                },
+              },
             }}
           />
         </LocalizationProvider>
@@ -394,7 +507,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           variant="outlined"
           size="small"
           onClick={handleClearFilters}
-          sx={{ 
+          sx={{
             minWidth: 100,
             height: 40
           }}
