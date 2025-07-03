@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -60,6 +60,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [allCategories, setAllCategories] = useState<FullCategory[]>([]);
   const [toAccountId, setToAccountId] = useState<number | undefined>(undefined);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const descriptionRef = useRef<HTMLInputElement>(null);
   
   // State to preserve values for continuous mode
   const [preservedValues, setPreservedValues] = useState<Partial<Transaction>>({
@@ -87,16 +88,30 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   useEffect(() => { 
     if (open) {
       loadCategoriesFull();
+      // Transfer 거래 수정 시 Description 필드에 포커스
+      if (transaction?.type === 'transfer') {
+        setTimeout(() => {
+          if (descriptionRef.current) {
+            descriptionRef.current.focus();
+            // 커서를 텍스트 끝으로 이동
+            const length = descriptionRef.current.value.length;
+            descriptionRef.current.setSelectionRange(length, length);
+          }
+        }, 100);
+      }
     }
-  }, [open]);
+  }, [open, transaction]);
 
   useEffect(() => {
     if (transaction) {
+      // 편집 창에서는 amount를 항상 양수로 표시
+      const displayAmount = transaction.amount ? Math.abs(transaction.amount) : undefined;
       setFormData({
         ...transaction,
         date: transaction.date,
+        amount: displayAmount, // 항상 양수로 표시
       });
-      setAmountInputValue(transaction.amount?.toString() || '');
+      setAmountInputValue(displayAmount?.toString() || '');
       
       // Transfer 거래의 경우 notes에서 "To Account" 정보 추출
       if (transaction.type === 'transfer' && transaction.notes) {
@@ -198,8 +213,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   };
 
   const handlePayeeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const payee = event.target.value;
-    setFormData(prev => ({ ...prev, payee }));
+    setFormData(prev => ({ ...prev, payee: event.target.value }));
   };
 
   const formatAmount = (amount: number | undefined): string => {
@@ -217,18 +231,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (validateForm()) {
       let finalTransaction = {
         ...formData,
+        payee: formData.payee ? formData.payee.trim() : '',
         amount: fixAmountSign(formData.amount, formData.type, formData.category)
       };
       
       // Transfer 거래 수정 시
       if (transaction?.type === 'transfer') {
         // description은 payee에 저장, To Account 정보는 notes에 저장
-        finalTransaction.payee = formData.payee || '';
-        // notes는 이미 To Account 변경 시 업데이트됨
+        finalTransaction.notes = finalTransaction.payee;
       }
       // 새로운 Transfer 거래 생성 시
       else if (formData.type === 'transfer' && toAccountId) {
-        const description = formData.payee || '';
+        const description = finalTransaction.payee;
         finalTransaction.notes = description;
         finalTransaction.payee = `${formData.account_id} → ${toAccountId}`; // 백엔드에서 계좌 이름으로 대체됨
       }
@@ -265,6 +279,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
     return allCategories.filter(cat => cat.type === formData.type);
   }, [allCategories, formData.type]);
+
+  // Transfer 거래일 때 출발 계좌(account_id), amount는 수정 불가, To Account만 변경 가능
+  const isTransfer = formData.type === 'transfer';
+
+  // 금액 입력값은 항상 양수만 허용
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(/[^\d.]/g, '');
+    if (val.startsWith('.')) val = '0' + val;
+    const amount = val === '' ? undefined : Math.abs(parseFloat(val) || 0);
+    setFormData(prev => ({ ...prev, amount }));
+  };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -314,6 +339,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     value={formData.type || ''}
                     onChange={handleChange}
                     label="Type"
+                    disabled={!!(transaction && transaction.type === 'transfer')}
                   >
                     <MenuItem value="expense">
                       <Chip 
@@ -354,30 +380,23 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 </FormControl>
               </Grid>
               <Grid item xs={12}>
-                {formData.type === 'transfer' ? (
-                  <TextField
-                    fullWidth
-                    label="Description"
-                    name="payee"
-                    value={formData.payee}
-                    onChange={handlePayeeChange}
-                    required
-                    error={!!errors.payee}
-                    helperText={errors.payee}
-                    placeholder="e.g., Monthly transfer to savings"
-                  />
-                ) : (
-                  <TextField
-                    fullWidth
-                    label="Description"
-                    name="payee"
-                    value={formData.payee}
-                    onChange={handlePayeeChange}
-                    required
-                    error={!!errors.payee}
-                    helperText={errors.payee}
-                  />
-                )}
+                <TextField
+                  fullWidth
+                  label="Description"
+                  name="payee"
+                  value={formData.payee || ''}
+                  onChange={handlePayeeChange}
+                  required
+                  error={!!errors.payee}
+                  helperText={errors.payee}
+                  placeholder="e.g., Monthly transfer to savings"
+                  inputRef={descriptionRef}
+                  inputProps={{
+                    style: { cursor: 'text' },
+                    maxLength: 100,
+                    autoFocus: true
+                  }}
+                />
               </Grid>
               <Grid item xs={12}>
                 <FormControl fullWidth required error={!!errors.account_id}>
@@ -513,36 +532,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <TextField
                   name="amount"
                   label="Amount"
-                  value={amountInputValue}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setAmountInputValue(value);
-                    if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
-                      let amount = value === '' ? undefined : parseFloat(value);
-                      // type과 category에 따라 부호 결정
-                      if (amount !== undefined && amount !== 0) {
-                        if (formData.type === 'expense') {
-                          amount = -Math.abs(amount);
-                        } else if (formData.type === 'income') {
-                          amount = Math.abs(amount);
-                        } else if (formData.type === 'transfer') {
-                          // Transfer는 항상 양수로 처리 (백엔드에서 출발/도착 계좌에 따라 부호 결정)
-                          amount = Math.abs(amount);
-                        } else if (formData.type === 'adjust') {
-                          // Adjust는 category에 따라 부호 결정
-                          if (formData.category === 'Subtract') {
-                            amount = -Math.abs(amount);
-                          } else {
-                            amount = Math.abs(amount);
-                          }
-                        }
-                      }
-                      setFormData(prev => ({ ...prev, amount }));
-                      if (errors.amount) {
-                        setErrors(prev => ({ ...prev, amount: '' }));
-                      }
-                    }
-                  }}
+                  value={formData.amount}
+                  onChange={handleAmountChange}
                   fullWidth
                   required
                   error={!!errors.amount}
@@ -550,7 +541,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   inputProps={{
                     inputMode: 'decimal',
                     step: '0.01',
-                    min: '0'
+                    min: '0.01'
                   }}
                 />
               </Grid>

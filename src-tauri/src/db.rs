@@ -299,8 +299,10 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             |r| r.get(0),
         ).map_err(|e| e.to_string())?;
         
-        // 출발 계좌 거래: 항상 -amount, payee에는 description만, notes에는 계좌 정보
+        // 출발 계좌 거래: 항상 -abs(amount), payee에는 description만, notes에는 계좌 정보
         let from_note = format!("[To: {}]", to_account_name);
+        let description = transaction.notes.clone().unwrap_or_default(); // description만
+        let from_amount = -transfer_amount.abs();
         conn.execute(
             "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
@@ -308,17 +310,18 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 from_account_id,
                 "transfer",
                 "Transfer",
-                -transfer_amount,
-                transaction.notes.clone().unwrap_or_default(), // description만
-                from_note
+                from_amount,
+                description.clone(), // payee: description만
+                from_note            // notes: [To: 도착계좌이름]
             ],
         ).map_err(|e| e.to_string())?;
         conn.execute(
             "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-            params![-transfer_amount, from_account_id],
+            params![from_amount, from_account_id],
         ).map_err(|e| e.to_string())?;
-        // 도착 계좌 거래: 항상 +amount, payee에는 description만, notes에는 계좌 정보
+        // 도착 계좌 거래: 항상 +abs(amount), payee에는 description만, notes에는 계좌 정보
         let to_note = format!("[From: {}]", from_account_name);
+        let to_amount = transfer_amount.abs();
         conn.execute(
             "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
@@ -326,17 +329,29 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 to_account_id,
                 "transfer",
                 "Transfer",
-                transfer_amount,
-                transaction.notes.unwrap_or_default(), // description만
-                to_note
+                to_amount,
+                description, // payee: description만
+                to_note      // notes: [From: 출발계좌이름]
             ],
         ).map_err(|e| e.to_string())?;
         conn.execute(
             "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-            params![transfer_amount, to_account_id],
+            params![to_amount, to_account_id],
         ).map_err(|e| e.to_string())?;
     } else {
         // 일반 거래 처리
+        let mut amount = transaction.amount;
+        if transaction.transaction_type == "expense" {
+            amount = -amount.abs();
+        } else if transaction.transaction_type == "income" {
+            amount = amount.abs();
+        } else if transaction.transaction_type == "adjust" {
+            if transaction.category == "Subtract" {
+                amount = -amount.abs();
+            } else {
+                amount = amount.abs();
+            }
+        }
         conn.execute(
             "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
@@ -344,7 +359,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 transaction.account_id,
                 transaction.transaction_type,
                 transaction.category,
-                transaction.amount,
+                amount,
                 transaction.payee,
                 transaction.notes.clone().unwrap_or_default()
             ],
@@ -419,132 +434,115 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             drop(rows);
             drop(sel);
             
-            // 같은 날짜, 같은 금액(절댓값), 같은 계좌에서 transfer 거래를 찾아서 쌍을 업데이트
-            let transfer_amount = transaction.amount.abs();
-            let transfer_pairs: Vec<(i64, i64, f64)> = {
-                let mut stmt = conn.prepare("SELECT id, account_id, amount FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2").map_err(|e| e.to_string())?;
-                let rows = stmt.query_map(params![transaction.date, transfer_amount], |row| {
-                    Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, f64>(2)?))
-                }).map_err(|e| e.to_string())?;
-                
-                let mut pairs: Vec<(i64, i64, f64)> = Vec::new();
-                for row in rows {
-                    pairs.push(row.map_err(|e| e.to_string())?);
-                }
-                pairs
-            };
-            
-            if transfer_pairs.len() == 2 {
-                // Transfer 쌍을 찾았으므로 함께 업데이트
-                let tx = conn.transaction().map_err(|e| e.to_string())?;
-                
-                // 기존 도착 계좌 ID 찾기
-                let old_to_account_id = if transfer_pairs[0].1 == transaction.account_id {
-                    transfer_pairs[1].1
-                } else {
-                    transfer_pairs[0].1
-                };
-                
-                // 새로운 도착 계좌 ID (notes에서 추출)
-                let new_to_account_id = if let Some(notes) = &transaction.notes {
-                    if let Some(to_match) = notes.strip_prefix("[To: ") {
-                        if let Some(to_account_name) = to_match.strip_suffix("]") {
-                            // 계좌 이름으로 ID 찾기
-                            if let Ok(account_id) = tx.query_row(
-                                "SELECT id FROM accounts WHERE name = ?1",
-                                params![to_account_name],
-                                |r| r.get::<_, i64>(0)
-                            ) {
-                                account_id
-                            } else {
-                                old_to_account_id // 찾지 못하면 기존 계좌 유지
-                            }
+            // 기존 도착 계좌 ID 찾기
+            let from_account_name: String = conn.query_row(
+                "SELECT name FROM accounts WHERE id = ?1",
+                params![transaction.account_id],
+                |r| r.get(0),
+            ).map_err(|e| e.to_string())?;
+            // 도착 거래 찾기: 같은 날짜, 같은 금액, type=transfer, account_id 다르고, notes=[From: 출발계좌이름], payee 동일
+            let to_transaction: Option<(i64, i64, f64)> = conn.prepare(
+                "SELECT id, account_id, amount FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2 AND account_id != ?3 AND notes = ?4 AND payee = ?5 LIMIT 1"
+            ).ok()
+            .and_then(|mut stmt| stmt.query_row(
+                params![transaction.date, transaction.amount.abs(), transaction.account_id, format!("[From: {}]", from_account_name), transaction.payee],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            ).ok());
+            // 기존 도착 계좌 ID
+            let old_to_account_id = to_transaction.map(|(_, id, _)| id).unwrap_or(transaction.account_id);
+            // 새로운 도착 계좌 ID (notes에서 추출)
+            let new_to_account_id = if let Some(notes) = &transaction.notes {
+                if let Some(to_match) = notes.strip_prefix("[To: ") {
+                    if let Some(to_account_name) = to_match.strip_suffix("]") {
+                        // 계좌 이름으로 ID 찾기
+                        if let Ok(account_id) = conn.query_row(
+                            "SELECT id FROM accounts WHERE name = ?1",
+                            params![to_account_name],
+                            |r| r.get::<_, i64>(0)
+                        ) {
+                            account_id
                         } else {
-                            old_to_account_id
+                            old_to_account_id // 찾지 못하면 기존 계좌 유지
                         }
                     } else {
                         old_to_account_id
                     }
                 } else {
                     old_to_account_id
-                };
-                
-                // 계좌 이름 조회
-                let from_account_name: String = tx.query_row(
-                    "SELECT name FROM accounts WHERE id = ?1",
-                    params![transaction.account_id],
-                    |r| r.get(0),
+                }
+            } else {
+                old_to_account_id
+            };
+            // 계좌 이름 조회
+            let new_to_account_name: String = conn.query_row(
+                "SELECT name FROM accounts WHERE id = ?1",
+                params![new_to_account_id],
+                |r| r.get(0),
+            ).map_err(|e| e.to_string())?;
+            // To Account가 변경된 경우
+            if new_to_account_id != old_to_account_id {
+                // 기존 도착 계좌 거래 삭제
+                if let Some((to_id, to_account_id, to_amount)) = to_transaction {
+                    let account_type: String = conn.query_row(
+                        "SELECT type FROM accounts WHERE id = ?1",
+                        params![to_account_id],
+                        |r| r.get(0),
+                    ).map_err(|e| e.to_string())?;
+                    let old_balance_change = if account_type == "credit" {
+                        -to_amount
+                    } else {
+                        -to_amount
+                    };
+                    conn.execute("DELETE FROM transactions WHERE id = ?1", params![to_id]).map_err(|e| e.to_string())?;
+                    conn.execute(
+                        "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
+                        params![old_balance_change, to_account_id],
+                    ).map_err(|e| e.to_string())?;
+                }
+                // 새로운 도착 계좌 거래 생성
+                let new_to_note = format!("[From: {}]", from_account_name);
+                conn.execute(
+                    "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![transaction.date, new_to_account_id, "transfer", "Transfer", transaction.amount.abs(), transaction.payee, new_to_note],
                 ).map_err(|e| e.to_string())?;
-                
-                let new_to_account_name: String = tx.query_row(
-                    "SELECT name FROM accounts WHERE id = ?1",
+                // 새로운 도착 계좌 잔액 조정
+                let new_account_type: String = conn.query_row(
+                    "SELECT type FROM accounts WHERE id = ?1",
                     params![new_to_account_id],
                     |r| r.get(0),
                 ).map_err(|e| e.to_string())?;
-                
-                // To Account가 변경된 경우
-                if new_to_account_id != old_to_account_id {
-                    // 기존 도착 계좌 거래 삭제
-                    let old_to_transaction_id = if transfer_pairs[0].0 == transaction.id {
-                        transfer_pairs[1].0
-                    } else {
-                        transfer_pairs[0].0
-                    };
-                    
-                    // 기존 도착 계좌 잔액 조정 (거래 삭제 효과)
-                    let account_type: String = tx.query_row(
-                        "SELECT type FROM accounts WHERE id = ?1",
-                        params![old_to_account_id],
-                        |r| r.get(0),
-                    ).map_err(|e| e.to_string())?;
-                    
-                    let old_balance_change = if account_type == "credit" {
-                        -transaction.amount.abs()  // Credit 계좌: Transfer 삭제 시 반대 부호
-                    } else {
-                        -transaction.amount.abs()  // 일반 계좌: Transfer 삭제 시 반대 부호
-                    };
-                    
-                    tx.execute("DELETE FROM transactions WHERE id = ?1", params![old_to_transaction_id]).map_err(|e| e.to_string())?;
-                    tx.execute(
-                        "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-                        params![old_balance_change, old_to_account_id],
-                    ).map_err(|e| e.to_string())?;
-                    
-                    // 새로운 도착 계좌 거래 생성
-                    let new_to_note = format!("[From: {}]", from_account_name);
-                    tx.execute(
-                        "INSERT INTO transactions (date, account_id, type, category, amount, payee, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                        params![transaction.date, new_to_account_id, "transfer", "Transfer", transaction.amount.abs(), transaction.payee, new_to_note],
-                    ).map_err(|e| e.to_string())?;
-                    
-                    // 새로운 도착 계좌 잔액 조정
-                    let new_account_type: String = tx.query_row(
-                        "SELECT type FROM accounts WHERE id = ?1",
-                        params![new_to_account_id],
-                        |r| r.get(0),
-                    ).map_err(|e| e.to_string())?;
-                    
-                    let new_balance_change = if new_account_type == "credit" {
-                        transaction.amount.abs()  // Credit 계좌: Transfer 생성 시 양수
-                    } else {
-                        transaction.amount.abs()  // 일반 계좌: Transfer 생성 시 양수
-                    };
-                    
-                    tx.execute(
-                        "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-                        params![new_balance_change, new_to_account_id],
+                let new_balance_change = if new_account_type == "credit" {
+                    transaction.amount.abs()
+                } else {
+                    transaction.amount.abs()
+                };
+                conn.execute(
+                    "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
+                    params![new_balance_change, new_to_account_id],
+                ).map_err(|e| e.to_string())?;
+            }
+            // 출발 계좌 거래의 기존 정보 모두 DB에서 읽어온다
+            let (from_date, from_account_id, from_amount): (String, i64, f64) = conn.query_row(
+                "SELECT date, account_id, amount FROM transactions WHERE id = ?1",
+                params![transaction.id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            ).map_err(|e| e.to_string())?;
+            // 출발 계좌 거래 업데이트 (payee, notes만 변경, account_id/amount/date는 기존 값 유지)
+            let from_note = format!("[To: {}]", new_to_account_name);
+            conn.execute(
+                "UPDATE transactions SET payee = ?1, notes = ?2 WHERE id = ?3",
+                params![transaction.payee, from_note, transaction.id],
+            ).map_err(|e| e.to_string())?;
+            // To Account가 변경되지 않은 경우에도 도착 계좌 거래의 Description 및 amount(항상 양수) 업데이트
+            if new_to_account_id == old_to_account_id {
+                if let Some((to_id, _to_account_id, _)) = to_transaction {
+                    let to_note = format!("[From: {}]", from_account_name);
+                    let to_amount = from_amount.abs();
+                    conn.execute(
+                        "UPDATE transactions SET payee = ?1, notes = ?2, amount = ?3, date = ?4 WHERE id = ?5",
+                        params![transaction.payee, to_note, to_amount, from_date, to_id],
                     ).map_err(|e| e.to_string())?;
                 }
-                
-                // 출발 계좌 거래 업데이트 (description만 변경)
-                let from_note = format!("[To: {}]", new_to_account_name);
-                tx.execute(
-                    "UPDATE transactions SET payee = ?1, notes = ?2 WHERE id = ?3",
-                    params![transaction.payee, from_note, transaction.id],
-                ).map_err(|e| e.to_string())?;
-                
-                tx.commit().map_err(|e| e.to_string())?;
-                return get_transactions(app);
             }
         }
     }
@@ -585,6 +583,18 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     };
     let net = new_effect - old_effect;
     // Update transaction record
+    let mut new_amount = transaction.amount;
+    if transaction.transaction_type == "expense" {
+        new_amount = -new_amount.abs();
+    } else if transaction.transaction_type == "income" {
+        new_amount = new_amount.abs();
+    } else if transaction.transaction_type == "adjust" {
+        if transaction.category == "Subtract" {
+            new_amount = -new_amount.abs();
+        } else {
+            new_amount = new_amount.abs();
+        }
+    }
     conn.execute(
         "UPDATE transactions SET date = ?1, account_id = ?2, type = ?3, category = ?4, amount = ?5, payee = ?6, notes = ?7 WHERE id = ?8",
         params![
@@ -592,7 +602,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             transaction.account_id,
             transaction.transaction_type,
             transaction.category,
-            transaction.amount,
+            new_amount,
             transaction.payee,
             transaction.notes.clone().unwrap_or_default(),
             transaction.id
@@ -619,54 +629,69 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
     let mut rows = sel.query_map(params![id], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, i64>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?))
     }).map_err(|e| e.to_string())?;
-    let (old_type, old_amount, acct_id, _old_category, old_date) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
+    let (old_type, old_amount, acct_id, _old_category, _old_date) = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
     
-    // Transfer 거래의 경우 쌍을 함께 삭제
-    if old_type == "transfer" {
+    // Transfer 거래의 경우 출발 거래(음수)만 페어 삭제
+    if old_type == "transfer" && old_amount < 0.0 {
         drop(rows);
         drop(sel);
         
         let tx = conn.transaction().map_err(|e| e.to_string())?;
-        
-        // 같은 날짜, 같은 금액(절댓값)의 transfer 거래 쌍을 찾기
-        let transfer_amount = old_amount.abs();
-        let transfer_pairs: Vec<(i64, i64, f64)> = {
-            let mut stmt = tx.prepare("SELECT id, account_id, amount FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2").map_err(|e| e.to_string())?;
-            let transfer_rows = stmt.query_map(params![old_date, transfer_amount], |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, f64>(2)?))
-            }).map_err(|e| e.to_string())?;
-            
-            let mut pairs: Vec<(i64, i64, f64)> = Vec::new();
-            for row in transfer_rows {
-                pairs.push(row.map_err(|e| e.to_string())?);
-            }
-            pairs
+        // 출발 거래 정보 조회
+        let from_transaction: (String, i64, f64, String, Option<String>) = tx.query_row(
+            "SELECT date, account_id, amount, payee, notes FROM transactions WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        ).map_err(|e| e.to_string())?;
+        let (date, from_account_id, amount, payee, _notes) = from_transaction;
+        // 출발 계좌 이름
+        let from_account_name: String = tx.query_row(
+            "SELECT name FROM accounts WHERE id = ?1",
+            params![from_account_id],
+            |r| r.get(0),
+        ).map_err(|e| e.to_string())?;
+        // 도착 거래 찾기: 같은 날짜, 같은 금액, type=transfer, account_id 다르고, notes=[From: 출발계좌이름], payee 동일
+        let to_transaction: Option<(i64, i64, f64)> = tx.prepare(
+            "SELECT id, account_id, amount FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2 AND account_id != ?3 AND notes = ?4 AND payee = ?5 LIMIT 1"
+        ).ok()
+        .and_then(|mut stmt| stmt.query_row(
+            params![date, amount.abs(), from_account_id, format!("[From: {}]", from_account_name), payee],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        ).ok());
+        // 출발 거래 삭제
+        let account_type: String = tx.query_row(
+            "SELECT type FROM accounts WHERE id = ?1",
+            params![from_account_id],
+            |r| r.get(0),
+        ).map_err(|e| e.to_string())?;
+        let balance_change = if account_type == "credit" {
+            -amount
+        } else {
+            -amount
         };
-        
-        // Transfer 쌍을 모두 삭제하고 잔액 조정
-        for (pair_id, pair_account_id, pair_amount) in &transfer_pairs {
-            // 계좌 타입 조회
-            let account_type: String = tx.query_row(
+        tx.execute("DELETE FROM transactions WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        tx.execute(
+            "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
+            params![balance_change, from_account_id],
+        ).map_err(|e| e.to_string())?;
+        // 도착 거래 삭제
+        if let Some((to_id, to_account_id, to_amount)) = to_transaction {
+            let to_account_type: String = tx.query_row(
                 "SELECT type FROM accounts WHERE id = ?1",
-                params![pair_account_id],
+                params![to_account_id],
                 |r| r.get(0),
             ).map_err(|e| e.to_string())?;
-            
-            let balance_change = if account_type == "credit" {
-                -pair_amount  // Credit 계좌: Transfer 삭제 시 반대 부호
+            let to_balance_change = if to_account_type == "credit" {
+                -to_amount
             } else {
-                -pair_amount  // 일반 계좌: Transfer 삭제 시 반대 부호
+                -to_amount
             };
-            
-            // 거래 삭제
-            tx.execute("DELETE FROM transactions WHERE id = ?1", params![pair_id]).map_err(|e| e.to_string())?;
-            // 잔액 조정
+            tx.execute("DELETE FROM transactions WHERE id = ?1", params![to_id]).map_err(|e| e.to_string())?;
             tx.execute(
                 "UPDATE accounts SET balance = balance + ?1 WHERE id = ?2",
-                params![balance_change, pair_account_id],
+                params![to_balance_change, to_account_id],
             ).map_err(|e| e.to_string())?;
         }
-        
         tx.commit().map_err(|e| e.to_string())?;
         return get_transactions(app);
     }
