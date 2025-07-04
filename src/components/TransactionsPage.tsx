@@ -202,10 +202,39 @@ const TransactionsPage: React.FC = () => {
         return filtered;
       });
       
+      // Transfer 페어 삭제를 포함한 실제 삭제된 개수 계산
+      let actualDeletedCount = 1;
+      if (transactionToDelete && transactionToDelete.type === 'transfer') {
+        if (transactionToDelete.transfer_id) {
+          // transfer_id가 있는 경우 같은 transfer_id를 가진 다른 거래도 함께 삭제됨
+          const pairCount = transactions.filter(t => 
+            t.transfer_id === transactionToDelete.transfer_id
+          ).length;
+          actualDeletedCount = pairCount;
+        } else {
+          // transfer_id가 없는 경우 기존 방식으로 페어 찾기
+          const pairTransaction = transactions.find(t => 
+            t.id !== id && 
+            t.type === 'transfer' && 
+            t.date === transactionToDelete.date && 
+            Math.abs(t.amount) === Math.abs(transactionToDelete.amount) &&
+            t.payee === transactionToDelete.payee &&
+            t.account_id !== transactionToDelete.account_id
+          );
+          if (pairTransaction) {
+            actualDeletedCount = 2;
+          }
+        }
+      }
+      
       // 다른 페이지가 거래 삭제를 인식하도록 이벤트 발생
       window.dispatchEvent(new Event('transactionsUpdated'));
       
-      showSnackbar('Transaction deleted successfully', 'success');
+      if (actualDeletedCount === 1) {
+        showSnackbar('Transaction deleted successfully', 'success');
+      } else {
+        showSnackbar(`${actualDeletedCount} transactions deleted successfully`, 'success');
+      }
     } catch (error) {
       console.error('Failed to delete transaction:', error);
       showSnackbar('Failed to delete transaction', 'error');
@@ -225,34 +254,34 @@ const TransactionsPage: React.FC = () => {
         }
       }
       
+      // Transfer 거래들의 페어도 함께 제거할 ID들을 미리 계산
+      const deletedTransactions = transactions.filter(t => ids.includes(t.id));
+      const transferIdsToRemove = new Set<number>();
+      
+      deletedTransactions.forEach(transaction => {
+        if (transaction.type === 'transfer') {
+          if (transaction.transfer_id) {
+            transferIdsToRemove.add(transaction.transfer_id);
+          } else {
+            // transfer_id가 없는 경우 기존 방식으로 페어 찾기
+            const pairTransaction = transactions.find(t => 
+              !ids.includes(t.id) && 
+              t.type === 'transfer' && 
+              t.date === transaction.date && 
+              Math.abs(t.amount) === Math.abs(transaction.amount) &&
+              t.payee === transaction.payee &&
+              t.account_id !== transaction.account_id
+            );
+            if (pairTransaction) {
+              transferIdsToRemove.add(pairTransaction.id);
+            }
+          }
+        }
+      });
+      
       // 로컬 상태에서 삭제된 거래들을 제거하여 즉시 UI 업데이트
       setTransactions(prevTransactions => {
         let filtered = prevTransactions.filter(t => !ids.includes(t.id));
-        
-        // Transfer 거래들의 페어도 함께 제거
-        const deletedTransactions = prevTransactions.filter(t => ids.includes(t.id));
-        const transferIdsToRemove = new Set<number>();
-        
-        deletedTransactions.forEach(transaction => {
-          if (transaction.type === 'transfer') {
-            if (transaction.transfer_id) {
-              transferIdsToRemove.add(transaction.transfer_id);
-            } else {
-              // transfer_id가 없는 경우 기존 방식으로 페어 찾기
-              const pairTransaction = prevTransactions.find(t => 
-                !ids.includes(t.id) && 
-                t.type === 'transfer' && 
-                t.date === transaction.date && 
-                Math.abs(t.amount) === Math.abs(transaction.amount) &&
-                t.payee === transaction.payee &&
-                t.account_id !== transaction.account_id
-              );
-              if (pairTransaction) {
-                transferIdsToRemove.add(pairTransaction.id);
-              }
-            }
-          }
-        });
         
         // 페어된 Transfer 거래들도 제거
         if (transferIdsToRemove.size > 0) {
@@ -262,10 +291,13 @@ const TransactionsPage: React.FC = () => {
         return filtered;
       });
       
+      // Transfer 페어 삭제를 포함한 실제 삭제된 총 개수 계산
+      const actualDeletedCount = ids.length + transferIdsToRemove.size;
+      
       if (deletedCount === ids.length) {
-        showSnackbar(`${deletedCount} transactions deleted successfully`, 'success');
+        showSnackbar(`${actualDeletedCount} transactions deleted successfully`, 'success');
       } else {
-        showSnackbar(`${deletedCount} out of ${ids.length} transactions deleted successfully`, 'warning');
+        showSnackbar(`${actualDeletedCount} transactions deleted successfully`, 'success');
       }
       
       // 다른 페이지가 거래 삭제를 인식하도록 이벤트 발생
