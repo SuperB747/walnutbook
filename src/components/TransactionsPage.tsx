@@ -206,11 +206,11 @@ const TransactionsPage: React.FC = () => {
       let actualDeletedCount = 1;
       if (transactionToDelete && transactionToDelete.type === 'transfer') {
         if (transactionToDelete.transfer_id) {
-          // transfer_id가 있는 경우 같은 transfer_id를 가진 다른 거래도 함께 삭제됨
-          const pairCount = transactions.filter(t => 
+          // transfer_id가 있는 경우 같은 transfer_id를 가진 모든 거래 개수 계산
+          const relatedTransactions = transactions.filter(t => 
             t.transfer_id === transactionToDelete.transfer_id
-          ).length;
-          actualDeletedCount = pairCount;
+          );
+          actualDeletedCount = relatedTransactions.length;
         } else {
           // transfer_id가 없는 경우 기존 방식으로 페어 찾기
           const pairTransaction = transactions.find(t => 
@@ -257,12 +257,22 @@ const TransactionsPage: React.FC = () => {
       // Transfer 거래들의 페어도 함께 제거할 ID들을 미리 계산
       const deletedTransactions = transactions.filter(t => ids.includes(t.id));
       const transferIdsToRemove = new Set<number>();
+      const processedTransferIds = new Set<number>(); // 중복 계산 방지
       
       deletedTransactions.forEach(transaction => {
         if (transaction.type === 'transfer') {
-          if (transaction.transfer_id) {
-            transferIdsToRemove.add(transaction.transfer_id);
-          } else {
+          if (transaction.transfer_id && !processedTransferIds.has(transaction.transfer_id)) {
+            // transfer_id가 있는 경우 같은 transfer_id를 가진 모든 거래를 찾아서 제거
+            const relatedTransactions = transactions.filter(t => 
+              t.transfer_id === transaction.transfer_id
+            );
+            relatedTransactions.forEach(t => {
+              if (!ids.includes(t.id)) {
+                transferIdsToRemove.add(t.id);
+              }
+            });
+            processedTransferIds.add(transaction.transfer_id);
+          } else if (!transaction.transfer_id) {
             // transfer_id가 없는 경우 기존 방식으로 페어 찾기
             const pairTransaction = transactions.find(t => 
               !ids.includes(t.id) && 
@@ -292,6 +302,7 @@ const TransactionsPage: React.FC = () => {
       });
       
       // Transfer 페어 삭제를 포함한 실제 삭제된 총 개수 계산
+      // 중복 계산을 방지하기 위해 실제 삭제된 고유한 거래 개수만 계산
       const actualDeletedCount = ids.length + transferIdsToRemove.size;
       
       if (deletedCount === ids.length) {
