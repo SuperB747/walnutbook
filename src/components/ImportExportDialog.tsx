@@ -90,6 +90,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   const [duplicatesFound, setDuplicatesFound] = useState(0);
   const [transferConflicts, setTransferConflicts] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string>('');
   const [selectedAccount, setSelectedAccount] = useState<number | null>(null);
   const [importStatus, setImportStatus] = useState<ImportStatus>({
     status: 'ready',
@@ -106,6 +107,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         const ext = file.name.split('.').pop()?.toLowerCase();
         if (ext === 'csv') {
           setSelectedFile(file);
+          setSelectedFileName(file.name);
           setImportStatus({ status: 'ready', message: '' });
         } else {
           setError('Only CSV files are supported for import.');
@@ -303,6 +305,14 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
 
   const handleAccountChange = (event: SelectChangeEvent) => {
     setSelectedAccount(parseInt(event.target.value, 10));
+  };
+
+  // Reset file selection when dialog closes
+  const handleClose = () => {
+    setSelectedFile(null);
+    setSelectedFileName('');
+    setImportStatus({ status: 'ready', message: '' });
+    onClose();
   };
 
   const handleImport = async (transactions: ParsedTransaction[]): Promise<void> => {
@@ -684,7 +694,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Import/Export Transactions</DialogTitle>
       <DialogContent>
         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
@@ -766,6 +776,18 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             <input {...getInputProps()} />
             {importing ? (
               <CircularProgress size={24} />
+            ) : selectedFileName ? (
+              <>
+                <Typography variant="h6" sx={{ mb: 1, color: 'primary.main' }}>
+                  ✓ File Selected
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500, mb: 1 }}>
+                  {selectedFileName}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Click to change file or drag a different CSV file
+                </Typography>
+              </>
             ) : (
               <>
                 <Typography>
@@ -814,7 +836,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         </TabPanel>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={handleClose}>Close</Button>
         <Button
           onClick={handleFileImport}
           disabled={!selectedFile || !selectedAccount || importStatus.status === 'processing'}

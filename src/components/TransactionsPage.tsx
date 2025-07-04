@@ -537,11 +537,51 @@ const TransactionsPage: React.FC = () => {
 
         <Snackbar
           open={snackbar.open}
-        autoHideDuration={10000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+          autoHideDuration={10000}
+          onClose={handleSnackbarClose}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          sx={{
+            '& .MuiSnackbar-root': {
+              bottom: '24px',
+            },
+          }}
         >
-        <Alert onClose={handleSnackbarClose} severity={snackbar.severity}>
+          <Alert 
+            onClose={handleSnackbarClose} 
+            severity={snackbar.severity}
+            sx={{ 
+              borderRadius: '8px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
+              padding: '8px 12px',
+              minHeight: 'auto',
+              '& .MuiAlert-icon': {
+                padding: '0',
+                marginRight: '8px',
+                fontSize: '20px',
+              },
+              '& .MuiAlert-message': {
+                padding: '0',
+                fontSize: '14px',
+                fontWeight: 500,
+              },
+              '& .MuiAlert-action': {
+                padding: '0',
+                marginLeft: '8px',
+                '& .MuiIconButton-root': {
+                  padding: '2px',
+                  color: 'inherit',
+                  width: '16px',
+                  height: '16px',
+                  '& .MuiSvgIcon-root': {
+                    fontSize: '14px',
+                  },
+                  '&:hover': {
+                    backgroundColor: 'transparent',
+                  },
+                },
+              },
+            }}
+          >
             {snackbar.message}
           </Alert>
         </Snackbar>
