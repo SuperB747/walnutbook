@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useRef } from 'react';
+import React, { useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -311,8 +311,23 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     chart.update();
   };
 
+  // Chart.js 전역 설정 추가
+  useEffect(() => {
+    // Chart.js 전역 설정
+    ChartJS.defaults.plugins.tooltip.enabled = true;
+    ChartJS.defaults.responsive = true;
+    ChartJS.defaults.maintainAspectRatio = true;
+    
+    return () => {
+      // 컴포넌트 언마운트 시 기본값 복원
+      ChartJS.defaults.plugins.tooltip.enabled = true;
+      ChartJS.defaults.responsive = true;
+      ChartJS.defaults.maintainAspectRatio = true;
+    };
+  }, []);
+
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 3 }}>
       <Grid container spacing={3}>
         {/* 총계 */}
         <Grid item xs={12} md={3}>
@@ -399,7 +414,17 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
             <Typography variant="h6" gutterBottom>
               Expenses by Category
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 1 }}>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              gap: 1,
+              '& canvas': {
+                touchAction: 'none !important',
+                userSelect: 'none'
+              }
+            }}>
               {/* 왼쪽 범례 */}
               <Box sx={{ minWidth: 100, maxWidth: 120 }}>
                 {leftLegend.map((label) => (
@@ -430,9 +455,19 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                     ],
                   }}
                   options={{
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    layout: { padding: 0 },
+                    animation: { duration: 0 },
+                    hover: {
+                      mode: 'nearest',
+                      intersect: false
+                    },
                     plugins: {
                       legend: { display: false },
                       tooltip: {
+                        enabled: true,
+                        position: 'nearest',
                         callbacks: {
                           title: function(context) {
                             const label = context[0].label || '';
@@ -440,12 +475,12 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                             return `${label} (${percentage}%)`;
                           },
                           label: function(context) {
-                            const value = context.parsed;
+                            const value = context.raw as number;
                             return `  ${formatCurrency(Math.abs(value))}`;
                           }
                         }
                       }
-                    },
+                    }
                   }}
                 />
               </Box>
@@ -473,7 +508,13 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
             <Typography variant="h6" gutterBottom>
               Monthly Trends
             </Typography>
-            <Box sx={{ height: 200 }}>
+            <Box sx={{ 
+              height: 200,
+              '& canvas': {
+                touchAction: 'none !important',
+                userSelect: 'none'
+              }
+            }}>
               <Bar
                 data={{
                   labels: monthlyTrends.labels,
@@ -483,29 +524,45 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                       data: monthlyTrends.income,
                       backgroundColor: 'rgba(75, 192, 192, 0.5)',
                       borderColor: 'rgb(75, 192, 192)',
-                      borderWidth: 1,
+                      borderWidth: 1
                     },
                     {
-                      label: 'Expenses',
-                      data: monthlyTrends.expense.map(e => Math.abs(e)),
+                      label: 'Expense',
+                      data: monthlyTrends.expense,
                       backgroundColor: 'rgba(255, 99, 132, 0.5)',
                       borderColor: 'rgb(255, 99, 132)',
-                      borderWidth: 1,
-                    },
-                  ],
+                      borderWidth: 1
+                    }
+                  ]
                 }}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
-                  scales: {
-                    x: {
-                      stacked: false,
-                    },
-                    y: {
-                      stacked: false,
-                      beginAtZero: true,
-                    },
+                  layout: { padding: 0 },
+                  animation: { duration: 0 },
+                  hover: {
+                    mode: 'nearest',
+                    intersect: false
                   },
+                  scales: { 
+                    x: { stacked: false }, 
+                    y: { stacked: false, beginAtZero: true } 
+                  },
+                  plugins: {
+                    legend: { 
+                      display: true, 
+                      position: 'top' as const 
+                    },
+                    tooltip: {
+                      enabled: true,
+                      position: 'nearest',
+                      callbacks: {
+                        label: function(context) {
+                          return `${formatCurrency(context.parsed.y)}`;
+                        }
+                      }
+                    }
+                  }
                 }}
               />
             </Box>

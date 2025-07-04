@@ -400,13 +400,11 @@ const TransactionsPage: React.FC = () => {
         <MenuItem onClick={() => { setImportExportOpen(true); closeActionsMenu(); }}>
           Import/Export
         </MenuItem>
-
         <MenuItem onClick={() => { setBackupOpen(true); closeActionsMenu(); }}>
           Backup & Restore
         </MenuItem>
       </Menu>
-      
-      {/* Summary with month selector inside component */}
+
       <TransactionSummary
         monthTransactions={filteredByMonth}
         allTransactions={transactions}
@@ -414,9 +412,9 @@ const TransactionsPage: React.FC = () => {
         onMonthChange={handleMonthChange}
       />
 
-        <TransactionList
+      <TransactionList
         transactions={filteredByMonth}
-          accounts={accounts}
+        accounts={accounts}
         categories={categories}
         onEdit={(transaction) => {
           setSelectedTransaction(transaction);
@@ -428,14 +426,11 @@ const TransactionsPage: React.FC = () => {
             const tx = transactions.find(t => t.id === id);
             if (tx) {
               await invoke('update_transaction', { transaction: { ...tx, category: newCategory } });
-              
-              // 로컬 상태에서 카테고리를 업데이트하여 즉시 UI 업데이트
               setTransactions(prevTransactions => 
                 prevTransactions.map(t => 
                   t.id === id ? { ...t, category: newCategory } : t
                 )
               );
-              
               showSnackbar('Category updated', 'success');
             }
           } catch (error) {
@@ -447,12 +442,12 @@ const TransactionsPage: React.FC = () => {
         initialSelectedIds={importedIds}
         onAddTransaction={() => setFormOpen(true)}
         onBulkDelete={handleBulkDelete}
-        />
+      />
 
-        <TransactionForm
+      <TransactionForm
         open={formOpen}
-          transaction={selectedTransaction}
-          accounts={accounts}
+        transaction={selectedTransaction}
+        accounts={accounts}
         categories={categories}
         onClose={() => {
           setFormOpen(false);
@@ -482,7 +477,6 @@ const TransactionsPage: React.FC = () => {
         open={categoriesOpen}
         onClose={async () => {
           setCategoriesOpen(false);
-          // 로컬 상태 업데이트
           try {
             const newCategories = await invoke<string[]>('get_categories');
             setCategories(newCategories);
@@ -491,7 +485,6 @@ const TransactionsPage: React.FC = () => {
           }
         }}
         onChange={async () => {
-          // 로컬 상태 업데이트
           try {
             const newCategories = await invoke<string[]>('get_categories');
             setCategories(newCategories);
@@ -504,88 +497,61 @@ const TransactionsPage: React.FC = () => {
       <BackupRestoreDialog
         open={backupOpen}
         onClose={() => setBackupOpen(false)}
-        onRestore={async () => {
-          try {
-            // 로컬 상태를 즉시 업데이트하여 부드러운 UI 전환
-            const [newAccounts, newTransactions, newCategories] = await Promise.all([
-              invoke<Account[]>('get_accounts'),
-              invoke<Transaction[]>('get_transactions'),
-              invoke<string[]>('get_categories')
-            ]);
-            
-            // 로컬 상태 업데이트
-            setAccounts(newAccounts);
-            setTransactions(newTransactions);
-            setCategories(newCategories);
-            
-            // 선택된 월 초기화
-            setSelectedMonth('');
-            localStorage.removeItem('walnutbook_selected_month');
-            
-            // 이벤트 발생 제거 - 로컬 상태 업데이트로 대체했으므로 불필요
-            // window.dispatchEvent(new Event('accountsUpdated'));
-            // window.dispatchEvent(new Event('transactionsUpdated'));
-            // window.dispatchEvent(new Event('budgetsUpdated'));
-            
-            showSnackbar('Database restored successfully!', 'success');
-          } catch (error) {
-            console.error('Failed to refresh data after restore:', error);
-            showSnackbar('Failed to refresh data after restore', 'error');
-          }
-        }}
-        />
+      />
 
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={10000}
-          onClose={handleSnackbarClose}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-          sx={{
-            '& .MuiSnackbar-root': {
-              bottom: '24px',
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{
+          '& .MuiSnackbar-root': {
+            bottom: '24px',
+          },
+        }}
+      >
+        <Alert 
+          onClose={handleSnackbarClose} 
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ 
+            width: '100%',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
+            padding: '8px 12px',
+            minHeight: 'auto',
+            '& .MuiAlert-icon': {
+              padding: '0',
+              marginRight: '8px',
+              fontSize: '20px',
+            },
+            '& .MuiAlert-message': {
+              padding: '0',
+              fontSize: '14px',
+              fontWeight: 500,
+            },
+            '& .MuiAlert-action': {
+              padding: '0',
+              marginLeft: '8px',
+              '& .MuiIconButton-root': {
+                padding: '2px',
+                color: 'inherit',
+                width: '16px',
+                height: '16px',
+                '& .MuiSvgIcon-root': {
+                  fontSize: '14px',
+                },
+                '&:hover': {
+                  backgroundColor: 'transparent',
+                },
+              },
             },
           }}
         >
-          <Alert 
-            onClose={handleSnackbarClose} 
-            severity={snackbar.severity}
-            sx={{ 
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
-              padding: '8px 12px',
-              minHeight: 'auto',
-              '& .MuiAlert-icon': {
-                padding: '0',
-                marginRight: '8px',
-                fontSize: '20px',
-              },
-              '& .MuiAlert-message': {
-                padding: '0',
-                fontSize: '14px',
-                fontWeight: 500,
-              },
-              '& .MuiAlert-action': {
-                padding: '0',
-                marginLeft: '8px',
-                '& .MuiIconButton-root': {
-                  padding: '2px',
-                  color: 'inherit',
-                  width: '16px',
-                  height: '16px',
-                  '& .MuiSvgIcon-root': {
-                    fontSize: '14px',
-                  },
-                  '&:hover': {
-                    backgroundColor: 'transparent',
-                  },
-                },
-              },
-            }}
-          >
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
-      </Box>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
   );
 };
 

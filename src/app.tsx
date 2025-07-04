@@ -198,6 +198,25 @@ const theme = createTheme({
         },
       },
     },
+    MuiCssBaseline: {
+      styleOverrides: {
+        // 스크롤바 완전히 숨기기
+        '*': {
+          '&::-webkit-scrollbar': {
+            display: 'none',
+          },
+          '&::-webkit-scrollbar-track': {
+            display: 'none',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            display: 'none',
+          },
+          '&::-webkit-scrollbar-corner': {
+            display: 'none',
+          },
+        },
+      },
+    },
   },
 });
 
@@ -215,6 +234,8 @@ const App: React.FC = () => {
   const [toolsAnchorEl, setToolsAnchorEl] = useState<null | HTMLElement>(null);
   const openToolsMenu = (event: React.MouseEvent<HTMLElement>) => setToolsAnchorEl(event.currentTarget);
   const closeToolsMenu = () => setToolsAnchorEl(null);
+
+
   
   // Dialog states
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
@@ -503,6 +524,7 @@ const App: React.FC = () => {
           <Alert
             onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
             severity={snackbar.severity}
+            variant="filled"
             sx={{ 
               width: '100%',
               borderRadius: '8px',

@@ -580,7 +580,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
       <TableContainer component={Paper} elevation={2} sx={{ 
         width: '100%',
-        overflowX: 'auto',
         '& .MuiTable-root': {
           minWidth: '100%',
         }
@@ -749,12 +748,24 @@ const TransactionList: React.FC<TransactionListProps> = ({
                         : transaction.type === 'expense'
                           ? 'error'
                         : transaction.type === 'transfer' && getDisplayAmount(transaction) < 0
-                          ? 'secondary'
+                          ? 'primary'
                           : 'info'
                       }
                       sx={
                         transaction.type === 'adjust' && getDisplayAmount(transaction) < 0
                           ? { backgroundColor: '#e573c7', color: '#fff' }
+                          : transaction.type === 'transfer' && getDisplayAmount(transaction) < 0
+                          ? { 
+                              backgroundColor: '#1976d2', // 진한 파랑 (출발 계좌)
+                              color: '#fff',
+                              fontWeight: 500
+                            }
+                          : transaction.type === 'transfer' && getDisplayAmount(transaction) > 0
+                          ? { 
+                              backgroundColor: '#90caf9', // 연한 파랑 (도착 계좌)
+                              color: '#fff', // 하얀색 텍스트로 통일
+                              fontWeight: 500
+                            }
                           : undefined
                       }
                     />
@@ -768,10 +779,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
                           sx={{ 
                             mr: 1,
                             backgroundColor: 'transparent',
-                            color: 'primary.main',
+                            color: '#6B7280',
                             '&:hover': {
-                              backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                              color: 'primary.dark'
+                              backgroundColor: 'rgba(107, 114, 128, 0.08)',
+                              color: '#374151'
                             }
                           }}
                         >
@@ -784,10 +795,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
                         disabled={isDeleting}
                         sx={{ 
                           backgroundColor: 'transparent',
-                          color: isDeleting ? 'action.disabled' : 'error.main',
+                          color: isDeleting ? 'action.disabled' : '#6B7280',
                           '&:hover': {
-                            backgroundColor: isDeleting ? 'transparent' : 'rgba(244, 67, 54, 0.08)',
-                            color: isDeleting ? 'action.disabled' : 'error.dark'
+                            backgroundColor: isDeleting ? 'transparent' : 'rgba(107, 114, 128, 0.08)',
+                            color: isDeleting ? 'action.disabled' : '#374151'
                           }
                         }}
                       >

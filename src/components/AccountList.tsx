@@ -196,10 +196,10 @@ const AccountList: React.FC<AccountListProps> = ({
                     onClick={() => onEdit(account)}
                     sx={{ 
                       backgroundColor: 'transparent',
-                      color: 'primary.main',
+                      color: '#6B7280',
                       '&:hover': {
-                        backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                        color: 'primary.dark'
+                        backgroundColor: 'rgba(107, 114, 128, 0.08)',
+                        color: '#374151'
                       }
                     }}
                 >
@@ -210,10 +210,10 @@ const AccountList: React.FC<AccountListProps> = ({
                     onClick={() => onDelete(account.id)}
                     sx={{ 
                       backgroundColor: 'transparent',
-                      color: 'error.main',
+                      color: '#6B7280',
                       '&:hover': {
-                        backgroundColor: 'rgba(244, 67, 54, 0.08)',
-                        color: 'error.dark'
+                        backgroundColor: 'rgba(107, 114, 128, 0.08)',
+                        color: '#374151'
                       }
                     }}
                 >

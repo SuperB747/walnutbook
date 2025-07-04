@@ -333,8 +333,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       await onImport(validTransactions);
       setImportStatus({ status: 'success', message: 'Import completed successfully' });
       setTimeout(() => {
-        onClose();
-        setImportStatus({ status: 'ready', message: '' });
+        handleClose();
       }, 1500);
     } catch (error) {
       handleError(error);

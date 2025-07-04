@@ -139,13 +139,28 @@ const BudgetList: React.FC<BudgetListProps> = ({
                   <IconButton
                     size="small"
                     onClick={() => onEditBudget(budget)}
+                    sx={{
+                      backgroundColor: 'transparent',
+                      color: '#6B7280',
+                      '&:hover': {
+                        backgroundColor: 'rgba(107, 114, 128, 0.08)',
+                        color: '#374151'
+                      }
+                    }}
                   >
                     <EditIcon />
                   </IconButton>
                   <IconButton
                     size="small"
                     onClick={() => onDeleteBudget(budget)}
-                    color="error"
+                    sx={{
+                      backgroundColor: 'transparent',
+                      color: '#6B7280',
+                      '&:hover': {
+                        backgroundColor: 'rgba(107, 114, 128, 0.08)',
+                        color: '#374151'
+                      }
+                    }}
                   >
                     <DeleteIcon />
                   </IconButton>
