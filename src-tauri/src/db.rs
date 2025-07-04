@@ -194,11 +194,14 @@ pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
     let description: Option<String> = row.get(3)?;
     let created_at: String = row.get(4)?;
     // 거래 합계로 잔액 계산
-    let sum: f64 = conn.query_row(
+    let balance: f64 = conn.query_row(
       "SELECT IFNULL(SUM(amount), 0) FROM transactions WHERE account_id = ?1",
       params![id],
       |r| r.get(0),
     ).unwrap_or(0.0);
+    
+
+    
     let balance = sum;
     Ok(Account { id, name, account_type, balance, description, created_at })
   }).map_err(|e| e.to_string())?;
