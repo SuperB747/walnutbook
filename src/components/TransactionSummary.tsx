@@ -510,9 +510,12 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
             </Typography>
             <Box sx={{ 
               height: 200,
+              width: '100%',
+              overflow: 'hidden',
               '& canvas': {
                 touchAction: 'none !important',
-                userSelect: 'none'
+                userSelect: 'none',
+                maxWidth: '100% !important'
               }
             }}>
               <Bar
@@ -521,32 +524,59 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                   datasets: [
                     {
                       label: 'Income',
-                      data: monthlyTrends.income,
-                      backgroundColor: 'rgba(75, 192, 192, 0.5)',
-                      borderColor: 'rgb(75, 192, 192)',
+                      data: monthlyTrends.income.map(Math.abs),
+                      backgroundColor: 'rgba(134, 239, 172, 0.6)',
+                      borderColor: 'rgb(34, 197, 94)',
                       borderWidth: 1
                     },
                     {
                       label: 'Expense',
-                      data: monthlyTrends.expense,
-                      backgroundColor: 'rgba(255, 99, 132, 0.5)',
-                      borderColor: 'rgb(255, 99, 132)',
+                      data: monthlyTrends.expense.map(Math.abs),
+                      backgroundColor: 'rgba(252, 165, 165, 0.6)',
+                      borderColor: 'rgb(239, 68, 68)',
                       borderWidth: 1
                     }
                   ]
                 }}
-                options={{
+                                options={{
                   responsive: true,
                   maintainAspectRatio: false,
-                  layout: { padding: 0 },
+                  layout: { 
+                    padding: { 
+                      top: 10, 
+                      right: 20, 
+                      bottom: 10, 
+                      left: 10 
+                    } 
+                  },
                   animation: { duration: 0 },
                   hover: {
                     mode: 'nearest',
                     intersect: false
                   },
                   scales: { 
-                    x: { stacked: false }, 
-                    y: { stacked: false, beginAtZero: true } 
+                    x: { 
+                      stacked: false,
+                      ticks: {
+                        maxRotation: 0,
+                        minRotation: 0
+                      },
+                      grid: {
+                        display: false
+                      }
+                    }, 
+                    y: { 
+                      stacked: false, 
+                      beginAtZero: true,
+                      ticks: {
+                        callback: function(value) {
+                          return formatCurrency(Math.abs(value as number));
+                        }
+                      },
+                      grid: {
+                        color: 'rgba(0,0,0,0.1)'
+                      }
+                    } 
                   },
                   plugins: {
                     legend: { 
@@ -558,7 +588,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                       position: 'nearest',
                       callbacks: {
                         label: function(context) {
-                          return `${formatCurrency(context.parsed.y)}`;
+                          return `${context.dataset.label}: ${formatCurrency(Math.abs(context.parsed.y))}`;
                         }
                       }
                     }
