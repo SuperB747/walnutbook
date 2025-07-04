@@ -169,7 +169,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
 
     const uniqueTransactions = newTransactions.filter(transaction => {
       const key = getTransactionKey(transaction);
-      if (!key) return true; // 필수 필드가 없는 경우 포함
+      if (!key) return true; // Include if required field is missing
 
       if (isCardPayment(transaction.payee!)) {
         // 카드 결제 거래인 경우

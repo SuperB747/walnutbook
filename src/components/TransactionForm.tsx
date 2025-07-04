@@ -298,7 +298,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <DialogTitle>
           {transaction ? 'Edit Transaction' : 'Add New Transaction'}
         </DialogTitle>
@@ -399,7 +399,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   inputProps={{
                     style: { cursor: 'text' },
                     maxLength: 100,
-                    autoFocus: true
+                    autoFocus: true,
+                    autoComplete: 'off',
+                    'data-lpignore': 'true'
                   }}
                 />
               </Grid>
@@ -546,7 +548,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   inputProps={{
                     inputMode: 'decimal',
                     step: '0.01',
-                    min: '0.01'
+                    min: '0.01',
+                    autoComplete: 'off',
+                    'data-lpignore': 'true'
                   }}
                 />
               </Grid>

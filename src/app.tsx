@@ -215,6 +215,14 @@ const theme = createTheme({
             display: 'none',
           },
         },
+        // HTML5 validation 메시지를 영어로 설정
+        'input, textarea, select': {
+          '&:invalid': {
+            '&::-webkit-validation-bubble-message': {
+              display: 'none',
+            },
+          },
+        },
       },
     },
   },
