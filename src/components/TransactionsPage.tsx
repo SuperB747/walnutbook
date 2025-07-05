@@ -27,7 +27,7 @@ import ImportExportDialog from './ImportExportDialog';
 
 import CategoryManagementDialog from './CategoryManagementDialog';
 import BackupRestoreDialog from './BackupRestoreDialog';
-import { Transaction, Account } from '../db';
+import { Transaction, Account, Category } from '../db';
 import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
 
@@ -47,7 +47,7 @@ const TransactionsPage: React.FC = () => {
 
   const [categoriesOpen, setCategoriesOpen] = useState(false);
 
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [snackbar, setSnackbar] = useState<SnackbarState>({
     open: false,
     message: '',
@@ -123,9 +123,8 @@ const TransactionsPage: React.FC = () => {
 
   const loadCategories = async (): Promise<void> => {
     try {
-      const categoryList = await invoke('get_categories') as string[];
-      const allCategories = Array.from(new Set([...categoryList, 'Uncategorized']));
-      setCategories(allCategories);
+      const categoryList = await invoke('get_categories_full') as Category[];
+      setCategories(categoryList);
     } catch (error) {
       console.error('Failed to load categories:', error);
       showSnackbar('Failed to load categories', 'error');
@@ -453,6 +452,7 @@ const TransactionsPage: React.FC = () => {
         allTransactions={transactions}
         selectedMonth={selectedMonth}
         onMonthChange={handleMonthChange}
+        categories={categories}
       />
 
       <TransactionList

@@ -10,7 +10,7 @@ export interface Transaction {
   date: string;
   account_id: number;
   type: TransactionType;
-  category: string;
+  category_id: number;
   amount: number;
   payee: string;
   notes?: string;
@@ -33,11 +33,9 @@ export interface Category {
   type: CategoryType;
 }
 
-
-
 export interface Budget {
   id: number;
-  category: string;
+  category_id: number;
   amount: number;
   month: string;
   notes?: string;
@@ -77,14 +75,12 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS budgets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT NOT NULL,
+    category_id INTEGER NOT NULL,
     amount REAL NOT NULL,
     month TEXT NOT NULL,
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
-
-
 `;
 
 // Add initial data
@@ -183,13 +179,13 @@ export async function addTransaction(transaction: Omit<Transaction, 'id'>): Prom
   try {
     db.prepare(`
       INSERT INTO transactions (
-        date, account_id, type, category, amount, payee, notes, transfer_id
+        date, account_id, type, category_id, amount, payee, notes, transfer_id
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       transaction.date,
       transaction.account_id,
       transaction.type,
-      transaction.category,
+      transaction.category_id,
       transaction.amount,
       transaction.payee,
       transaction.notes || '',
@@ -248,13 +244,13 @@ export async function updateTransaction(transaction: Transaction): Promise<void>
     db.transaction(() => {
       db.prepare(`
         UPDATE transactions 
-        SET date = ?, account_id = ?, type = ?, category = ?, amount = ?, payee = ?, notes = ?, transfer_id = ?
+        SET date = ?, account_id = ?, type = ?, category_id = ?, amount = ?, payee = ?, notes = ?, transfer_id = ?
         WHERE id = ?
       `).run(
         transaction.date,
         transaction.account_id,
         transaction.type,
-        transaction.category,
+        transaction.category_id,
         transaction.amount,
         transaction.payee,
         transaction.notes || '',
@@ -309,11 +305,12 @@ export async function getAccounts(): Promise<Account[]> {
       SUM(CASE 
         WHEN type = 'expense' THEN -amount
         WHEN type = 'income' THEN amount
-        WHEN type = 'adjust' AND category = 'Add' THEN amount
-        WHEN type = 'adjust' AND category = 'Subtract' THEN -amount
+        WHEN type = 'adjust' AND c.name = 'Add' THEN amount
+        WHEN type = 'adjust' AND c.name = 'Subtract' THEN -amount
         ELSE 0
       END) as sum_amount
-     FROM transactions
+     FROM transactions t
+     JOIN categories c ON t.category_id = c.id
      GROUP BY account_id`
   ).all() as { account_id: number; sum_amount: number }[];
   
@@ -366,8 +363,6 @@ export async function deleteAccount(id: number): Promise<void> {
   }
 }
 
-
-
 // Bulk operations
 export async function bulkUpdateTransactions(updates: { id: number; changes: Partial<Transaction> }[]): Promise<void> {
   const db = getDatabase();
@@ -393,23 +388,33 @@ export async function importTransactions(transactions: Partial<Transaction>[]): 
 
   try {
     db.transaction(() => {
-      // Use only the existing columns; created_at will default if present
-      const stmt = db.prepare(`
-        INSERT INTO transactions (
-          date, account_id, type, category, amount, payee, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `);
-
       transactions.forEach(transaction => {
         if (!transaction.date || transaction.account_id == null || !transaction.type || transaction.amount == null) {
           throw new Error('Missing required transaction fields');
         }
 
-        stmt.run(
+        // Get or create category
+        let categoryId = 1; // Default category ID
+        if (transaction.category) {
+          const existingCategory = db.prepare('SELECT id FROM categories WHERE name = ?').get(transaction.category) as { id: number } | undefined;
+          if (existingCategory) {
+            categoryId = existingCategory.id;
+          } else {
+            // Create new category if it doesn't exist
+            const result = db.prepare('INSERT INTO categories (name, type) VALUES (?, ?)').run(transaction.category, 'expense');
+            categoryId = result.lastInsertRowid as number;
+          }
+        }
+
+        db.prepare(`
+          INSERT INTO transactions (
+            date, account_id, type, category_id, amount, payee, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
           transaction.date,
           transaction.account_id,
           transaction.type,
-          transaction.category || 'Uncategorized',
+          categoryId,
           transaction.amount,
           transaction.payee || 'Unknown',
           transaction.notes || ''
@@ -447,10 +452,10 @@ export async function addBudget(budget: Omit<Budget, 'id'>): Promise<void> {
 
   try {
     db.prepare(`
-      INSERT INTO budgets (category, amount, month, notes)
+      INSERT INTO budgets (category_id, amount, month, notes)
       VALUES (?, ?, ?, ?)
     `).run(
-      budget.category,
+      budget.category_id,
       budget.amount,
       budget.month,
       budget.notes || ''
@@ -467,13 +472,13 @@ export async function updateBudget(budget: Budget): Promise<void> {
   try {
     db.prepare(`
       UPDATE budgets
-      SET category = ?,
+      SET category_id = ?,
           amount = ?,
           month = ?,
           notes = ?
       WHERE id = ?
     `).run(
-      budget.category,
+      budget.category_id,
       budget.amount,
       budget.month,
       budget.notes || '',

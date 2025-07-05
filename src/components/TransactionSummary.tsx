@@ -20,7 +20,7 @@ import {
   ArcElement,
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
-import { Transaction, TransactionType } from '../db';
+import { Transaction, TransactionType, Category } from '../db';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import enUS from 'date-fns/locale/en-US';
 
@@ -39,6 +39,7 @@ interface TransactionSummaryProps {
   allTransactions: Transaction[];
   selectedMonth: string;
   onMonthChange: (month: string) => void;
+  categories: Category[];
 }
 
 // 50가지 지브리 스타일 색상 팔레트 (형광색 없음)
@@ -55,26 +56,27 @@ const ghibliColors = [
   '#B2F2D2', '#B2E2B2', '#B2D2B2', '#B2C2B2', '#B2B2C2'
 ];
 
-const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactions, allTransactions, selectedMonth, onMonthChange }) => {
+const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactions, allTransactions, selectedMonth, onMonthChange, categories }) => {
   // Transactions for summary and category calculations
   const transactionsToSummarize = monthTransactions;
 
+  const getCategoryName = (category_id: number | undefined) => {
+    if (!category_id) return 'Uncategorized';
+    return categories.find(c => c.id === category_id)?.name || 'Uncategorized';
+  };
+
   // 전체 카테고리 목록을 추출하여 고정된 색상 매핑 생성
   const allCategories = useMemo(() => {
-    const categories = new Set<string>();
+    const categoryNames = new Set<string>();
     allTransactions.forEach(transaction => {
-      if (transaction.category) {
-        categories.add(transaction.category);
-      }
+      categoryNames.add(getCategoryName(transaction.category_id));
     });
-    // Uncategorized를 명시적으로 추가
-    categories.add('Uncategorized');
-    return Array.from(categories).sort();
-  }, [allTransactions]);
+    categoryNames.add('Uncategorized');
+    return Array.from(categoryNames).sort();
+  }, [allTransactions, categories]);
 
   // 카테고리별 고유 색상 함수
   const getCategoryColor = useCallback((category: string) => {
-    // Uncategorized는 밝은 회색으로 고정
     if (category === 'Uncategorized') {
       return '#E0E0E0';
     }
@@ -93,12 +95,12 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     return transactionsToSummarize.reduce(
       (acc, transaction) => {
         if (transaction.type === 'income') {
-          // Handle reimbursements specially
-          if (transaction.category === 'Reimbursement [G]') {
+          const catName = getCategoryName(transaction.category_id);
+          if (catName === 'Reimbursement [G]') {
             reimbursements.grocery += transaction.amount;
-          } else if (transaction.category === 'Reimbursement [U]') {
+          } else if (catName === 'Reimbursement [U]') {
             reimbursements.utility += transaction.amount;
-          } else if (transaction.category === 'Reimbursement [E]') {
+          } else if (catName === 'Reimbursement [E]') {
             reimbursements.exercise += transaction.amount;
           }
           acc.income += transaction.amount;
@@ -109,36 +111,23 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       },
       { income: 0, expense: 0 }
     );
-  }, [transactionsToSummarize]);
+  }, [transactionsToSummarize, categories]);
 
   // 카테고리별 지출 계산
   const categoryExpenses = useMemo(() => {
-    // 선택된 월의 expense 거래만 필터링
     const monthExpenses = transactionsToSummarize.filter(t => t.type === 'expense');
-    
-    console.log('Selected month:', selectedMonth);
-    console.log('Month expenses:', monthExpenses);
-    
-    // 카테고리별 지출 합계 계산
     const expensesByCategory = monthExpenses.reduce((acc, transaction) => {
-      const category = transaction.category && transaction.category.trim() !== '' ? transaction.category : 'Uncategorized';
-      console.log(`Processing transaction: category="${transaction.category}" -> normalized="${category}"`);
+      const category = getCategoryName(transaction.category_id);
       acc[category] = (acc[category] || 0) + transaction.amount;
       return acc;
     }, {} as Record<string, number>);
-    
-    console.log('Expenses by category:', expensesByCategory);
-    console.log('All categories found:', Object.keys(expensesByCategory));
-    
-    // 금액 순으로 정렬
     const sortedCategories = Object.entries(expensesByCategory)
       .sort(([, a], [, b]) => b - a);
-
     return {
       labels: sortedCategories.map(([category]) => category),
       data: sortedCategories.map(([, amount]) => amount),
     };
-  }, [transactionsToSummarize, selectedMonth]);
+  }, [transactionsToSummarize, selectedMonth, categories]);
 
   // 월별 트렌드 계산
   const monthlyTrends = useMemo(() => {
@@ -226,11 +215,11 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       }
 
       // Update category totals
-      if (transaction.category) {
-        if (!summary.categories[transaction.category]) {
-          summary.categories[transaction.category] = 0;
+      if (transaction.category_id) {
+        if (!summary.categories[transaction.category_id]) {
+          summary.categories[transaction.category_id] = 0;
         }
-        summary.categories[transaction.category] += 
+        summary.categories[transaction.category_id] += 
           transaction.type === 'income' ? transaction.amount : -transaction.amount;
       }
     });

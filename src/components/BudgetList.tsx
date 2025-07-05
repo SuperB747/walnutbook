@@ -13,11 +13,12 @@ import {
   Box,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import { Budget, Transaction } from '../db';
+import { Budget, Transaction, Category } from '../db';
 
 interface BudgetListProps {
   budgets: Budget[];
   transactions: Transaction[];
+  categories: Category[];
   onEditBudget: (budget: Budget) => void;
   onDeleteBudget: (budget: Budget) => void;
   month: string;
@@ -26,6 +27,7 @@ interface BudgetListProps {
 const BudgetList: React.FC<BudgetListProps> = ({
   budgets,
   transactions,
+  categories,
   onEditBudget,
   onDeleteBudget,
   month,
@@ -37,11 +39,15 @@ const BudgetList: React.FC<BudgetListProps> = ({
     }).format(amount);
   };
 
-  const calculateSpentAmount = (category: string) => {
+  const getCategoryName = (category_id: number) => {
+    return categories.find(c => c.id === category_id)?.name || 'Uncategorized';
+  };
+
+  const calculateSpentAmount = (category_id: number) => {
     return transactions
       .filter(
         (t) =>
-          t.category === category &&
+          t.category_id === category_id &&
           t.type === 'expense' &&
           t.date.startsWith(month)
       )
@@ -83,9 +89,9 @@ const BudgetList: React.FC<BudgetListProps> = ({
         </TableHead>
         <TableBody>
           {budgets
-            .sort((a, b) => a.category.localeCompare(b.category))
+            .sort((a, b) => getCategoryName(a.category_id).localeCompare(getCategoryName(b.category_id)))
             .map((budget) => {
-            const spent = calculateSpentAmount(budget.category);
+            const spent = calculateSpentAmount(budget.category_id);
             const remaining = budget.amount - spent;
             const progress = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
 
@@ -101,7 +107,7 @@ const BudgetList: React.FC<BudgetListProps> = ({
               >
                 <TableCell sx={{ width: 250, minWidth: 250 }}>
                   <Box>
-                    <Typography variant="body1" noWrap>{budget.category}</Typography>
+                    <Typography variant="body1" noWrap>{getCategoryName(budget.category_id)}</Typography>
                     {budget.notes && (
                       <Typography variant="caption" color="text.secondary" noWrap>
                         {budget.notes}

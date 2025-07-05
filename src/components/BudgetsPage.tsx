@@ -19,7 +19,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ko } from 'date-fns/locale';
 import BudgetList from './BudgetList';
 import BudgetForm from './BudgetForm';
-import { Budget, Transaction } from '../db';
+import { Budget, Transaction, Category } from '../db';
 import { enCA } from 'date-fns/locale';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -47,6 +47,7 @@ const BudgetsPage: React.FC = () => {
   const selectedMonth = `${year}-${month}`;
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedBudget, setSelectedBudget] = useState<Budget | undefined>();
   const [snackbar, setSnackbar] = useState<{
@@ -87,9 +88,24 @@ const BudgetsPage: React.FC = () => {
     }
   };
 
+  const loadCategories = async () => {
+    try {
+      const result = await invoke<Category[]>('get_categories_full');
+      setCategories(result);
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to load categories.',
+        severity: 'error',
+      });
+    }
+  };
+
   useEffect(() => {
     loadBudgets();
     loadTransactions();
+    loadCategories();
   }, [selectedMonth]);
 
   // Listen for accountsUpdated event to refresh data after backup restore
@@ -152,6 +168,7 @@ const BudgetsPage: React.FC = () => {
           budget: {
             id: selectedBudget.id,
             category: budgetData.category!,
+            category_id: budgetData.category_id!,
             amount: budgetData.amount!,
             month: selectedMonth,
             notes: budgetData.notes,
@@ -161,6 +178,7 @@ const BudgetsPage: React.FC = () => {
       } else {
         updatedBudgets = await invoke<Budget[]>('add_budget', {
           category: budgetData.category!,
+          category_id: budgetData.category_id!,
           amount: budgetData.amount!,
           month: selectedMonth,
           notes: budgetData.notes,
@@ -442,6 +460,7 @@ const BudgetsPage: React.FC = () => {
         <BudgetList
           budgets={budgets}
           transactions={transactions}
+          categories={categories}
           onEditBudget={handleEditBudget}
           onDeleteBudget={handleDeleteBudget}
           month={selectedMonth}
@@ -453,6 +472,7 @@ const BudgetsPage: React.FC = () => {
           onSave={handleSaveBudget}
           budget={selectedBudget}
           month={selectedMonth}
+          categories={categories}
         />
 
         <Snackbar

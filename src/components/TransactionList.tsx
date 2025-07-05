@@ -167,9 +167,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
     return Array.from(new Set(
       transactions
         .filter(t => t.type !== 'transfer' && t.type !== 'adjust')
-        .map(t => t.category)
+        .map(t => getCategoryName(t.category_id))
     ));
-  }, [transactions]);
+  }, [transactions, fullCategories]);
 
   // 필터링된 거래 내역
   const filteredTransactions = useMemo(() => {
@@ -178,7 +178,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
       const searchMatch = searchTerm === '' || 
         transaction.payee.toLowerCase().includes(searchTerm.toLowerCase()) ||
         transaction.notes?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        transaction.category.toLowerCase().includes(searchTerm.toLowerCase());
+        getCategoryName(transaction.category_id).toLowerCase().includes(searchTerm.toLowerCase());
 
       // 거래 유형 필터링
       const typeMatch = selectedTypes.length === 0 || 
@@ -186,7 +186,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
       // 카테고리 필터링
       const categoryMatch = selectedCategories.length === 0 ||
-        selectedCategories.includes(transaction.category);
+        selectedCategories.includes(getCategoryName(transaction.category_id));
 
       // 계좌 필터링
       const accountMatch = selectedAccounts.length === 0 ||
@@ -234,6 +234,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
   const getAccountName = (accountId: number): string => {
     const account = accounts.find(a => a.id === accountId);
     return account ? account.name : 'Unknown Account';
+  };
+
+  const getCategoryName = (categoryId: number): string => {
+    return fullCategories.find(cat => cat.id === categoryId)?.name || 'Unknown Category';
   };
 
   const getTransactionTypeLabel = (type: string) => {
@@ -695,7 +699,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   <TableCell align="center" sx={{ width: 180, minWidth: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>
                     {(transaction.type === 'income' || transaction.type === 'expense') ? (
                       <Select
-                        value={transaction.category}
+                        value={getCategoryName(transaction.category_id)}
                         size="small"
                         variant="standard"
                         disableUnderline

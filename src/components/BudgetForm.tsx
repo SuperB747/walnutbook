@@ -12,7 +12,7 @@ import {
   MenuItem,
   InputAdornment,
 } from '@mui/material';
-import { Budget } from '../db';
+import { Budget, Category } from '../db';
 
 interface BudgetFormProps {
   open: boolean;
@@ -20,6 +20,7 @@ interface BudgetFormProps {
   onSave: (budget: Partial<Budget>) => void;
   budget?: Budget;
   month: string;
+  categories: Category[];
 }
 
 const BudgetForm: React.FC<BudgetFormProps> = ({
@@ -28,9 +29,10 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
   onSave,
   budget,
   month,
+  categories,
 }) => {
   const [formData, setFormData] = useState<Partial<Budget>>({
-    category: '',
+    category_id: 0,
     amount: 0,
     notes: '',
     month: month,
@@ -43,7 +45,7 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
     if (budget) {
       const amount = Number(budget.amount.toFixed(2));
       setFormData({
-        category: budget.category,
+        category_id: budget.category_id,
         amount: amount,
         notes: budget.notes || '',
         month: budget.month,
@@ -52,7 +54,7 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
       setAmountInput(amount.toFixed(2));
     } else {
       setFormData({
-        category: '',
+        category_id: 0,
         amount: 0,
         notes: '',
         month: month,
@@ -82,6 +84,11 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
           amount: Number(inputValue),
         });
       }
+    } else if (field === 'category_id') {
+      setFormData({
+        ...formData,
+        category_id: Number(event.target.value),
+      });
     } else {
       const value = event.target.value as string;
       setFormData({
@@ -103,14 +110,18 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
           {budget ? 'Edit Budget' : 'New Budget'}
         </DialogTitle>
         <DialogContent>
-          <TextField
+          <FormControl fullWidth required margin="normal">
+            <InputLabel>Category</InputLabel>
+            <Select
+              value={formData.category_id || ''}
+              onChange={handleChange('category_id')}
             label="Category"
-            value={formData.category}
-            onChange={handleChange('category')}
-            fullWidth
-            required
-            margin="normal"
-          />
+            >
+              {categories.map(category => (
+                <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <TextField
             label="Amount"
             type="text"

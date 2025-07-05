@@ -478,7 +478,7 @@ const App: React.FC = () => {
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/budgets" element={<BudgetsPage />} />
           </Routes>
-                </Box>
+        </Box>
         <Menu
           anchorEl={toolsAnchorEl}
           open={Boolean(toolsAnchorEl)}

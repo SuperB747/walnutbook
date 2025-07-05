@@ -17,7 +17,7 @@ import {
   Chip,
 } from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
-import { Transaction, Account, TransactionType } from '../db';
+import { Transaction, Account, TransactionType, Category } from '../db';
 import { format, parse } from 'date-fns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -28,14 +28,7 @@ export interface TransactionFormProps {
   onSave: (transaction: Partial<Transaction>) => Promise<void>;
   transaction?: Transaction;
   accounts: Account[];
-  categories: string[];
-}
-
-// Category with type info from backend
-interface FullCategory {
-  id: number;
-  name: string;
-  type: 'income' | 'expense' | 'adjust' | 'transfer';
+  categories: Category[];
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
@@ -50,14 +43,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     date: format(new Date(), 'yyyy-MM-dd'),
     account_id: accounts[0]?.id,
     type: 'expense',
-    category: '',
+    category_id: 0,
     amount: undefined,
     payee: '',
     notes: '',
   });
   const [amountInputValue, setAmountInputValue] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [allCategories, setAllCategories] = useState<FullCategory[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [toAccountId, setToAccountId] = useState<number | undefined>(undefined);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const descriptionRef = useRef<HTMLInputElement>(null);
@@ -67,7 +60,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     date: format(new Date(), 'yyyy-MM-dd'),
     account_id: accounts[0]?.id,
     type: 'expense',
-    category: '',
+    category_id: 0,
     payee: '',
   });
 
@@ -75,7 +68,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const loadCategoriesFull = async () => {
     try {
       console.log('Loading categories...');
-      const result = await invoke<FullCategory[]>('get_categories_full');
+      const result = await invoke<Category[]>('get_categories_full');
       console.log('Loaded categories:', result);
       console.log('Current form data before setting categories:', formData);
       setAllCategories(result);
@@ -110,6 +103,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         ...transaction,
         date: transaction.date,
         amount: displayAmount, // 항상 양수로 표시
+        category_id: transaction.category_id,
       });
       setAmountInputValue(displayAmount?.toString() || '');
       
@@ -130,6 +124,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         ...preservedValues,
         amount: undefined,
         notes: '',
+        category_id: 0,
       });
       setAmountInputValue('');
       setToAccountId(undefined);
@@ -144,7 +139,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (!formData.payee) newErrors.payee = 'Payee is required';
     if (!formData.account_id) newErrors.account_id = 'Account is required';
     if (!formData.type) newErrors.type = 'Type is required';
-    if (!formData.category) newErrors.category = 'Category is required';
+    if (!formData.category_id) newErrors.category_id = 'Category is required';
     if (!formData.amount || formData.amount === 0) newErrors.amount = 'Amount is required';
     if (formData.type === 'transfer' && !toAccountId) newErrors.toAccount = 'To Account is required';
 
@@ -177,26 +172,33 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const { name, value } = e.target;
     let updates: Partial<Transaction> = { [name]: value };
 
-    // Handle account_id conversion from string to number
     if (name === 'account_id') {
       updates.account_id = parseInt(value, 10);
     }
 
+    if (name === 'category_id') {
+      updates.category_id = parseInt(value, 10);
+    }
+
     if (name === 'type') {
-      // Reset category when type changes
-      updates.category = '';
-      // Set default category for adjust and transfer types
+      updates.category_id = 0;
       if (value === 'adjust') {
-        updates.category = 'Add';
+        const addCategory = allCategories.find(cat => cat.name === 'Add');
+        if (addCategory) {
+          updates.category_id = addCategory.id;
+        }
       } else if (value === 'transfer') {
-        updates.category = 'Transfer';
+        const transferCategory = allCategories.find(cat => cat.name === 'Transfer');
+        if (transferCategory) {
+          updates.category_id = transferCategory.id;
+        }
       }
     }
 
     // Handle amount sign for transfer/adjust categories only
-    if (name === 'category' && (formData.type === 'transfer' || formData.type === 'adjust')) {
+    if (formData.type === 'transfer' || formData.type === 'adjust') {
       const amount = formData.amount || 0;
-      updates.amount = fixAmountSign(amount, formData.type, value);
+      updates.amount = fixAmountSign(amount, formData.type, allCategories.find(cat => cat.id === formData.category_id)?.name);
     }
 
     // Handle numeric values
@@ -204,7 +206,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       if (formData.type === 'adjust') {
         updates.amount = parseFloat(value) || 0;
       } else {
-        updates.amount = fixAmountSign(parseFloat(value) || 0, formData.type, formData.category);
+        updates.amount = fixAmountSign(parseFloat(value) || 0, formData.type, allCategories.find(cat => cat.id === formData.category_id)?.name);
       }
     }
 
@@ -232,7 +234,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       let finalTransaction = {
         ...formData,
         payee: formData.payee ? formData.payee.trim() : '',
-        amount: fixAmountSign(formData.amount, formData.type, formData.category)
+        amount: fixAmountSign(formData.amount, formData.type, allCategories.find(cat => cat.id === formData.category_id)?.name)
       };
       
       // Transfer 거래 수정 시
@@ -263,7 +265,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           type: formData.type,
           payee: formData.payee,
           account_id: formData.account_id,
-          category: formData.category,
+          category_id: formData.category_id,
         });
       }
     }
@@ -290,9 +292,37 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   // 금액 입력값은 항상 양수만 허용
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/[^\d.]/g, '');
-    if (val.startsWith('.')) val = '0' + val;
-    const amount = val === '' ? undefined : Math.abs(parseFloat(val) || 0);
+    const value = e.target.value;
+    
+    // 빈 문자열 처리
+    if (value === '') {
+      setFormData(prev => ({ ...prev, amount: undefined }));
+      setAmountInputValue('');
+      return;
+    }
+    
+    // 숫자와 소수점만 허용
+    const cleanValue = value.replace(/[^\d.]/g, '');
+    
+    // 소수점이 여러 개 있으면 첫 번째만 유지
+    const parts = cleanValue.split('.');
+    const finalValue = parts.length > 1 ? parts[0] + '.' + parts.slice(1).join('') : cleanValue;
+    
+    // 소수점으로 시작하면 0 추가
+    const processedValue = finalValue.startsWith('.') ? '0' + finalValue : finalValue;
+    
+    // 소수점 이하 2자리로 제한
+    let result = processedValue;
+    if (processedValue.includes('.')) {
+      const [whole, decimal] = processedValue.split('.');
+      result = whole + '.' + decimal.slice(0, 2);
+    }
+    
+    // 입력값 상태 업데이트
+    setAmountInputValue(result);
+    
+    // formData 업데이트
+    const amount = result === '' ? undefined : Math.abs(parseFloat(result) || 0);
     setFormData(prev => ({ ...prev, amount }));
   };
 
@@ -465,11 +495,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               )}
               {formData.type !== 'transfer' && formData.type !== 'adjust' && (
                 <Grid item xs={12}>
-                  <FormControl fullWidth required error={!!errors.category}>
+                  <FormControl fullWidth required error={!!errors.category_id}>
                     <InputLabel>Category</InputLabel>
                     <Select
-                      name="category"
-                      value={formData.category || ''}
+                      name="category_id"
+                      value={formData.category_id?.toString() || ''}
                       onChange={handleChange}
                       label="Category"
                       MenuProps={{
@@ -491,24 +521,24 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         <em>Select a category</em>
                       </MenuItem>
                       {filteredCategories.map(category => (
-                        <MenuItem key={category.id} value={category.name}>
+                        <MenuItem key={category.id} value={category.id.toString()}>
                           {category.name}
                         </MenuItem>
                       ))}
                     </Select>
-                    {errors.category && (
-                      <FormHelperText>{errors.category}</FormHelperText>
+                    {errors.category_id && (
+                      <FormHelperText>{errors.category_id}</FormHelperText>
                     )}
                   </FormControl>
                 </Grid>
               )}
               {formData.type === 'adjust' && (
                 <Grid item xs={12}>
-                  <FormControl fullWidth required error={!!errors.category}>
+                  <FormControl fullWidth required error={!!errors.category_id}>
                     <InputLabel>Adjustment Type</InputLabel>
                     <Select
-                      name="category"
-                      value={formData.category || ''}
+                      name="category_id"
+                      value={formData.category_id?.toString() || ''}
                       onChange={handleChange}
                       label="Adjustment Type"
                     >
@@ -529,8 +559,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         />
                       </MenuItem>
                     </Select>
-                    {errors.category && (
-                      <FormHelperText>{errors.category}</FormHelperText>
+                    {errors.category_id && (
+                      <FormHelperText>{errors.category_id}</FormHelperText>
                     )}
                   </FormControl>
                 </Grid>
@@ -539,16 +569,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <TextField
                   name="amount"
                   label="Amount"
-                  value={formData.amount}
+                  value={amountInputValue}
                   onChange={handleAmountChange}
                   fullWidth
                   required
                   error={!!errors.amount}
                   helperText={errors.amount}
                   inputProps={{
-                    inputMode: 'decimal',
-                    step: '0.01',
-                    min: '0.01',
                     autoComplete: 'off',
                     'data-lpignore': 'true'
                   }}

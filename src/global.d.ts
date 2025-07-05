@@ -12,15 +12,18 @@ interface Transaction {
   date: string;
   payee: string;
   category: string;
+  category_id: number;
   amount: number;
-  type: 'income' | 'expense' | 'transfer';
+  type: 'income' | 'expense' | 'transfer' | 'adjust';
   notes?: string;
+  transfer_id?: number;
   created_at: string;
 }
 
 interface Budget {
   id: number;
   category: string;
+  category_id: number;
   amount: number;
   month: string;
   notes?: string;
