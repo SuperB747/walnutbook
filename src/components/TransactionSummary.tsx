@@ -240,13 +240,14 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
 
   // 카테고리별 퍼센테이지 계산
   const categoryPercentages = useMemo(() => {
-    const totalExpense = categoryExpenses.data.reduce((sum, amount) => sum + amount, 0);
+    // 절대값의 합계를 계산
+    const totalExpense = categoryExpenses.data.reduce((sum, amount) => sum + Math.abs(amount), 0);
     if (totalExpense === 0) return {};
     
     const percentages: Record<string, number> = {};
     categoryExpenses.labels.forEach((label, index) => {
       if (label) {
-        const amount = categoryExpenses.data[index];
+        const amount = Math.abs(categoryExpenses.data[index]);
         percentages[label] = (amount / totalExpense) * 100;
       }
     });
@@ -325,15 +326,14 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     const result = categoryExpenses.labels
       .map((label, index) => ({
         label,
-        percentage: categoryPercentages[label] || 0,
-        amount: categoryExpenses.data[index]
+        amount: Math.abs(categoryExpenses.data[index])  // 절대값으로 정렬
       }))
-      .filter(item => item.label !== null && item.amount !== 0)  // 금액이 0인 항목 제외
-      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))  // 절대값 기준으로 정렬
+      .filter(item => item.label !== null && item.amount > 0)  // 금액이 0보다 큰 항목만
+      .sort((a, b) => b.amount - a.amount)  // 금액 크기순 정렬
       .map(item => item.label as string);
     
     return result;
-  }, [categoryExpenses, categoryPercentages]);
+  }, [categoryExpenses]);
 
   const mid = Math.ceil(sortedLabels.length / 2);
   const leftLegend = sortedLabels.slice(0, mid);
@@ -530,8 +530,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                           },
                           label: function(context) {
                             const value = context.raw as number;
-                            const originalValue = categoryExpenses.data[context.dataIndex];
-                            return `  ${formatCurrency(originalValue)}`;  // 원래 값(음수 포함) 표시
+                            return `  ${formatCurrency(value)}`;  // 차트에 표시할 때는 양수로
                           }
                         }
                       }
