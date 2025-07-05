@@ -98,12 +98,17 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
           const catName = getCategoryName(transaction.category_id);
           if (catName === 'Reimbursement [G]') {
             reimbursements.grocery += transaction.amount;
+            // Reimbursement는 Income에 포함하지 않음
           } else if (catName === 'Reimbursement [U]') {
             reimbursements.utility += transaction.amount;
+            // Reimbursement는 Income에 포함하지 않음
           } else if (catName === 'Reimbursement [E]') {
             reimbursements.exercise += transaction.amount;
+            // Reimbursement는 Income에 포함하지 않음
+          } else {
+            // 일반 Income만 포함
+            acc.income += transaction.amount;
           }
-          acc.income += transaction.amount;
         } else if (transaction.type === 'expense') {
           acc.expense += transaction.amount;
         }
@@ -113,14 +118,49 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     );
   }, [transactionsToSummarize, categories]);
 
-  // 카테고리별 지출 계산
+  // 카테고리별 지출 계산 (Reimbursement 적용)
   const categoryExpenses = useMemo(() => {
     const monthExpenses = transactionsToSummarize.filter(t => t.type === 'expense');
+    const monthReimbursements = transactionsToSummarize.filter(t => 
+      t.type === 'income' && 
+      ['Reimbursement [G]', 'Reimbursement [U]', 'Reimbursement [E]'].includes(getCategoryName(t.category_id))
+    );
+
+    // Reimbursement 매핑
+    const reimbursementMap = {
+      'Groceries': 0,
+      'Utilities': 0,
+      'Exercise': 0
+    };
+
+    monthReimbursements.forEach(transaction => {
+      const catName = getCategoryName(transaction.category_id);
+      if (catName === 'Reimbursement [G]') {
+        reimbursementMap['Groceries'] += transaction.amount;
+      } else if (catName === 'Reimbursement [U]') {
+        reimbursementMap['Utilities'] += transaction.amount;
+      } else if (catName === 'Reimbursement [E]') {
+        reimbursementMap['Exercise'] += transaction.amount;
+      }
+    });
+
     const expensesByCategory = monthExpenses.reduce((acc, transaction) => {
       const category = getCategoryName(transaction.category_id);
       acc[category] = (acc[category] || 0) + transaction.amount;
       return acc;
     }, {} as Record<string, number>);
+
+    // Reimbursement를 해당 카테고리에서 차감
+    if (reimbursementMap['Groceries'] > 0) {
+      expensesByCategory['Groceries'] = (expensesByCategory['Groceries'] || 0) - reimbursementMap['Groceries'];
+    }
+    if (reimbursementMap['Utilities'] > 0) {
+      expensesByCategory['Utilities'] = (expensesByCategory['Utilities'] || 0) - reimbursementMap['Utilities'];
+    }
+    if (reimbursementMap['Exercise'] > 0) {
+      expensesByCategory['Exercise'] = (expensesByCategory['Exercise'] || 0) - reimbursementMap['Exercise'];
+    }
+
     const sortedCategories = Object.entries(expensesByCategory)
       .sort(([, a], [, b]) => b - a);
     return {
@@ -151,7 +191,11 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
             }
             
             if (transaction.type === 'income') {
-              acc.income += transaction.amount;
+              // Reimbursement는 Income 트렌드에서 제외
+              const catName = getCategoryName(transaction.category_id);
+              if (!catName.includes('Reimbursement')) {
+                acc.income += transaction.amount;
+              }
             } else if (transaction.type === 'expense') {
               acc.expense += transaction.amount;
             }
@@ -167,7 +211,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       income: monthlyData.map(data => data.income),
       expense: monthlyData.map(data => data.expense),
     };
-  }, [allTransactions]);
+  }, [allTransactions, categories]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-CA', {
@@ -207,8 +251,12 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       }
 
       if (transaction.type === 'income') {
-        summary.income += transaction.amount;
-        summary.balance += transaction.amount;
+        // Reimbursement는 Income에 포함하지 않음
+        const catName = getCategoryName(transaction.category_id);
+        if (!catName.includes('Reimbursement')) {
+          summary.income += transaction.amount;
+          summary.balance += transaction.amount;
+        }
       } else if (transaction.type === 'expense') {
         summary.expense += transaction.amount;
         summary.balance -= transaction.amount;

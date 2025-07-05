@@ -10,7 +10,7 @@ export interface Transaction {
   date: string;
   account_id: number;
   type: TransactionType;
-  category_id: number;
+  category_id: number | undefined;
   amount: number;
   payee: string;
   notes?: string;
@@ -47,7 +47,8 @@ let database: Database.Database | null = null;
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'expense'
   );
 
   CREATE TABLE IF NOT EXISTS transactions (
@@ -55,13 +56,14 @@ const SCHEMA = `
     date TEXT NOT NULL,
     account_id INTEGER NOT NULL,
     type TEXT NOT NULL,
-    category TEXT NOT NULL,
+    category_id INTEGER NOT NULL,
     amount REAL NOT NULL,
     payee TEXT NOT NULL,
     notes TEXT,
     transfer_id INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (account_id) REFERENCES accounts (id)
+    FOREIGN KEY (account_id) REFERENCES accounts (id),
+    FOREIGN KEY (category_id) REFERENCES categories (id)
   );
 
   CREATE TABLE IF NOT EXISTS accounts (
@@ -86,20 +88,50 @@ const SCHEMA = `
 // Add initial data
 const INITIAL_DATA = `
   -- Initial categories
-  INSERT INTO categories (name) VALUES
-    ('Salary'),
-    ('Business Income'),
-    ('Investment'),
-    ('Food & Dining'),
-    ('Housing'),
-    ('Transportation'),
-    ('Shopping'),
-    ('Entertainment'),
-    ('Healthcare'),
-    ('Education'),
-    ('Insurance'),
-    ('Utilities'),
-    ('Other');
+  INSERT INTO categories (name, type) VALUES
+    -- Income Categories
+    ('Bonus', 'income'),
+    ('CRA', 'income'),
+    ('Interest', 'income'),
+    ('Other Income', 'income'),
+    ('Reimbursement', 'income'),
+    ('Reimbursement [E]', 'income'),
+    ('Reimbursement [G]', 'income'),
+    ('Reimbursement [U]', 'income'),
+    ('Salary [OHCC]', 'income'),
+    ('Salery [WCST]', 'income'),
+    
+    -- Expense Categories
+    ('Auto [Gas]', 'expense'),
+    ('Auto [ICBC]', 'expense'),
+    ('Auto [Repair]', 'expense'),
+    ('Beauty & Personal Care', 'expense'),
+    ('Communication', 'expense'),
+    ('Eating Out', 'expense'),
+    ('Education', 'expense'),
+    ('Entertainment', 'expense'),
+    ('Exercise', 'expense'),
+    ('Gifts', 'expense'),
+    ('Groceries', 'expense'),
+    ('Home [Mortgage]', 'expense'),
+    ('Home [UpKeep]', 'expense'),
+    ('Insurance', 'expense'),
+    ('Living', 'expense'),
+    ('Offering', 'expense'),
+    ('Other', 'expense'),
+    ('Shopping', 'expense'),
+    ('Subscriptions', 'expense'),
+    ('Taxes', 'expense'),
+    ('Travel', 'expense'),
+    ('Utilities', 'expense'),
+    ('Uncategorized', 'expense'),
+    
+    -- Adjust Categories
+    ('Add', 'adjust'),
+    ('Subtract', 'adjust'),
+    
+    -- Transfer Category
+    ('Transfer', 'transfer');
 
   -- Initial accounts
   INSERT INTO accounts (name, type, balance) VALUES
@@ -151,6 +183,27 @@ export async function initializeDatabase(): Promise<void> {
       db.prepare("ALTER TABLE transactions ADD COLUMN transfer_id INTEGER").run();
     }
 
+    // Migration: handle transition from category to category_id
+    if (cols.some(c => c.name === 'category') && !cols.some(c => c.name === 'category_id')) {
+      // Add category_id column
+      db.prepare("ALTER TABLE transactions ADD COLUMN category_id INTEGER").run();
+      
+      // Update existing transactions to use default category_id (1)
+      db.prepare("UPDATE transactions SET category_id = 1 WHERE category_id IS NULL").run();
+      
+      // Remove old category column (SQLite doesn't support DROP COLUMN, so we'll recreate the table)
+      // This is a simplified approach - in production you'd want a more robust migration
+    }
+
+    // Migration: ensure categories table has type column
+    const categoryCols = db.prepare("PRAGMA table_info(categories)").all() as { name: string }[];
+    if (!categoryCols.some(c => c.name === 'type')) {
+      db.prepare("ALTER TABLE categories ADD COLUMN type TEXT NOT NULL DEFAULT 'expense'").run();
+      // Update existing categories to have appropriate types
+      db.prepare("UPDATE categories SET type = 'income' WHERE name IN ('Salary', 'Business Income', 'Investment')").run();
+      db.prepare("UPDATE categories SET type = 'adjust' WHERE name IN ('Add', 'Subtract')").run();
+    }
+
     // Check if we need to insert initial data
     const accountCount = db.prepare('SELECT COUNT(*) as count FROM accounts').get() as { count: number };
     if (accountCount.count === 0) {
@@ -165,13 +218,13 @@ export async function initializeDatabase(): Promise<void> {
 // Transactions
 export async function getTransactions(): Promise<Transaction[]> {
   const db = getDatabase();
-  return db.prepare('SELECT id, date, account_id, type, category, amount, payee, notes, transfer_id, created_at FROM transactions ORDER BY date DESC').all() as Transaction[];
+  return db.prepare('SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, created_at FROM transactions ORDER BY date DESC').all() as Transaction[];
 }
 
 export async function getTransaction(id: number): Promise<Transaction | null> {
   const db = getDatabase();
-  return db.prepare('SELECT id, date, account_id, type, category, amount, payee, notes, transfer_id, created_at FROM transactions WHERE id = ?').get(id) as Transaction | null;
-  }
+  return db.prepare('SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, created_at FROM transactions WHERE id = ?').get(id) as Transaction | null;
+}
 
 export async function addTransaction(transaction: Omit<Transaction, 'id'>): Promise<void> {
   const db = getDatabase();
@@ -271,7 +324,7 @@ export async function updateTransaction(transaction: Transaction): Promise<void>
         db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?')
           .run(balanceChange, transaction.account_id);
       }
-    })();
+    });
   } catch (error) {
     console.error('Error updating transaction:', error);
     throw error;
@@ -293,7 +346,7 @@ export async function deleteTransaction(id: number): Promise<void> {
       db.prepare('DELETE FROM transactions WHERE id = ?').run(id);
       db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?')
         .run(balanceChange, transaction.account_id);
-    })();
+    });
   } catch (error) {
     console.error('Error deleting transaction:', error);
     throw error;
@@ -406,6 +459,7 @@ export async function importTransactions(transactions: Partial<Transaction>[]): 
         let categoryId = 1; // Default category ID
         if (transaction.category_id) {
           categoryId = transaction.category_id;
+        }
         // If no category_id is provided, use default category
         if (!categoryId) {
           categoryId = 1; // Default category ID
@@ -429,7 +483,7 @@ export async function importTransactions(transactions: Partial<Transaction>[]): 
         db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?')
           .run(balanceChange, transaction.account_id);
       });
-    })();
+    });
   } catch (error) {
     console.error('Error importing transactions:', error);
     throw error;
@@ -653,9 +707,24 @@ function isCardPayment(transaction: Transaction): boolean {
          (transaction.notes?.toLowerCase().includes('card') || false);
 }
 
-// Add a function to get the list of categories
-export async function getCategories(): Promise<string[]> {
+// Add a function to get the list of categories with full info
+export async function getCategoriesFull(): Promise<Category[]> {
   const db = getDatabase();
-  const rows = db.prepare('SELECT name FROM categories').all() as { name: string }[];
-  return rows.map(r => r.name);
+  const rows = db.prepare('SELECT id, name, type FROM categories ORDER BY name').all() as { id: number; name: string; type: string }[];
+  return rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    type: r.type as CategoryType
+  }));
+}
+
+// Remove getCategories, keep only getCategoriesFull
+export async function getCategories(): Promise<Category[]> {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT id, name, type FROM categories ORDER BY name').all() as { id: number; name: string; type: string }[];
+  return rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    type: r.type as CategoryType
+  }));
 } 

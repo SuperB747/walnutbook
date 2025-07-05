@@ -43,7 +43,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     date: format(new Date(), 'yyyy-MM-dd'),
     account_id: accounts[0]?.id,
     type: 'expense',
-    category_id: 0,
+    category_id: undefined,
     amount: undefined,
     payee: '',
     notes: '',
@@ -67,12 +67,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   // Load all categories with type when dialog opens
   const loadCategoriesFull = async () => {
     try {
-      console.log('Loading categories...');
-      const result = await invoke<Category[]>('get_categories_full');
-      console.log('Loaded categories:', result);
-      console.log('Current form data before setting categories:', formData);
+      const result = await invoke<Category[]>("get_categories_full");
       setAllCategories(result);
-      console.log('Categories set successfully');
     } catch (e) {
       console.error('Failed to load categories:', e);
     }
@@ -133,18 +129,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }, [transaction, accounts, preservedValues]);
 
   const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.date) newErrors.date = 'Date is required';
-    if (!formData.payee) newErrors.payee = 'Payee is required';
-    if (!formData.account_id) newErrors.account_id = 'Account is required';
-    if (!formData.type) newErrors.type = 'Type is required';
-    if (!formData.category_id) newErrors.category_id = 'Category is required';
-    if (!formData.amount || formData.amount === 0) newErrors.amount = 'Amount is required';
-    if (formData.type === 'transfer' && !toAccountId) newErrors.toAccount = 'To Account is required';
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const errors: Record<string, string> = {};
+    if (!formData.date) errors.date = 'Date is required';
+    if (!formData.account_id) errors.account_id = 'Account is required';
+    if (!formData.type) errors.type = 'Type is required';
+    if (formData.type !== 'transfer' && formData.type !== 'adjust' && !formData.category_id) {
+      errors.category_id = 'Category is required';
+    }
+    if (formData.amount === undefined || formData.amount === null) errors.amount = 'Amount is required';
+    if (!formData.payee?.trim()) errors.payee = 'Description is required';
+    
+    setErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const fixAmountSign = (amount: number | undefined, type: string | undefined, category: string | undefined) => {
@@ -241,10 +237,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       if (transaction?.type === 'transfer') {
         // To Account 정보를 notes에 설정
         if (toAccountId) {
-          const toAccount = accounts.find(acc => acc.id === toAccountId);
-          if (toAccount) {
-            finalTransaction.notes = `[To: ${toAccount.name}]`;
-          }
+          finalTransaction.notes = `[To: ${toAccountId}]`;
         }
       }
       // 새로운 Transfer 거래 생성 시
@@ -275,14 +268,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const filteredCategories = useMemo(() => {
     if (formData.type === 'transfer') {
       // Transfer는 단일 카테고리 사용
-      return [{ id: 0, name: 'Transfer', type: 'transfer' as const }];
+      const transferCategory = allCategories.find(cat => cat.name === 'Transfer');
+      return transferCategory ? [transferCategory] : [];
     }
     // Adjust는 Add/Subtract 카테고리 사용
     if (formData.type === 'adjust') {
-      return [
-        { id: 0, name: 'Add', type: 'adjust' as const },
-        { id: 1, name: 'Subtract', type: 'adjust' as const }
-      ];
+      return allCategories.filter(cat => cat.name === 'Add' || cat.name === 'Subtract');
     }
     return allCategories.filter(cat => cat.type === formData.type);
   }, [allCategories, formData.type]);
@@ -472,7 +463,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           if (toAccount) {
                             setFormData(prev => ({
                               ...prev,
-                              notes: `[To: ${toAccount.name}]`
+                              notes: `[To: ${newToAccountId}]`
                             }));
                           }
                         }
@@ -542,22 +533,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       onChange={handleChange}
                       label="Adjustment Type"
                     >
-                      <MenuItem value="Add">
-                        <Chip 
-                          label="Add" 
-                          size="small" 
-                          color="success"
-                          sx={{ minWidth: 80 }}
-                        />
-                      </MenuItem>
-                      <MenuItem value="Subtract">
-                        <Chip 
-                          label="Subtract" 
-                          size="small" 
-                          color="error"
-                          sx={{ minWidth: 80 }}
-                        />
-                      </MenuItem>
+                      {allCategories
+                        .filter(cat => cat.name === 'Add' || cat.name === 'Subtract')
+                        .map(category => (
+                          <MenuItem key={category.id} value={category.id.toString()}>
+                            <Chip 
+                              label={category.name} 
+                              size="small" 
+                              color={category.name === 'Add' ? 'success' : 'error'}
+                              sx={{ minWidth: 80 }}
+                            />
+                          </MenuItem>
+                        ))}
                     </Select>
                     {errors.category_id && (
                       <FormHelperText>{errors.category_id}</FormHelperText>

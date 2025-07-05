@@ -98,7 +98,7 @@ const BulkTransactionEdit: React.FC<BulkTransactionEditProps> = ({
         ));
       case 'category_id':
         return [
-          <MenuItem key="" value="">
+          <MenuItem key="" value={undefined}>
             <em>None</em>
           </MenuItem>,
           ...categories.map(category => (

@@ -117,6 +117,8 @@ const AccountsPage: React.FC = () => {
         updatedAccounts = await invoke<Account[]>('create_account', {
           name: accountData.name!,
           accountType: accountData.type!,
+          balance: undefined,
+          description: accountData.description,
         });
       }
       

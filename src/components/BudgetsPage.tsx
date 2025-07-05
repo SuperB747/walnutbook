@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Container,
   Box,
@@ -13,7 +13,7 @@ import {
   Select,
   MenuItem,
 } from '@mui/material';
-import { Add as AddIcon, History as HistoryIcon, AutoAwesome as AutoAwesomeIcon } from '@mui/icons-material';
+import { Add as AddIcon, AutoAwesome as AutoAwesomeIcon } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ko } from 'date-fns/locale';
@@ -23,25 +23,25 @@ import { Budget, Transaction, Category } from '../db';
 import { enCA } from 'date-fns/locale';
 import { invoke } from '@tauri-apps/api/core';
 
+const MONTHS = [
+  { value: '01', label: 'January' },
+  { value: '02', label: 'February' },
+  { value: '03', label: 'March' },
+  { value: '04', label: 'April' },
+  { value: '05', label: 'May' },
+  { value: '06', label: 'June' },
+  { value: '07', label: 'July' },
+  { value: '08', label: 'August' },
+  { value: '09', label: 'September' },
+  { value: '10', label: 'October' },
+  { value: '11', label: 'November' },
+  { value: '12', label: 'December' },
+];
 
 const BudgetsPage: React.FC = () => {
   const now = new Date();
   const currentYear = now.getFullYear();
   const years = Array.from({ length: 20 }, (_, i) => 2020 + i);
-  const months = [
-    { value: '01', label: 'January' },
-    { value: '02', label: 'February' },
-    { value: '03', label: 'March' },
-    { value: '04', label: 'April' },
-    { value: '05', label: 'May' },
-    { value: '06', label: 'June' },
-    { value: '07', label: 'July' },
-    { value: '08', label: 'August' },
-    { value: '09', label: 'September' },
-    { value: '10', label: 'October' },
-    { value: '11', label: 'November' },
-    { value: '12', label: 'December' },
-  ];
   const [year, setYear] = useState(String(now.getFullYear()));
   const [month, setMonth] = useState((now.getMonth() + 1).toString().padStart(2, '0'));
   const selectedMonth = `${year}-${month}`;
@@ -60,69 +60,34 @@ const BudgetsPage: React.FC = () => {
     severity: 'success',
   });
 
-  const loadBudgets = async () => {
+  const loadAllData = async () => {
     try {
-      const result = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
-      setBudgets(result);
-    } catch (error) {
-      console.error('Failed to load budgets:', error);
-      setSnackbar({
-        open: true,
-        message: 'Failed to load budget information.',
-        severity: 'error',
-      });
-    }
-  };
-
-  const loadTransactions = async () => {
-    try {
-      const result = await invoke<Transaction[]>('get_transactions');
-      setTransactions(result);
-    } catch (error) {
-      console.error('Failed to load transactions:', error);
-      setSnackbar({
-        open: true,
-        message: 'Failed to load transactions.',
-        severity: 'error',
-      });
-    }
-  };
-
-  const loadCategories = async () => {
-    try {
-      const result = await invoke<Category[]>('get_categories_full');
-      setCategories(result);
-    } catch (error) {
-      console.error('Failed to load categories:', error);
-      setSnackbar({
-        open: true,
-        message: 'Failed to load categories.',
-        severity: 'error',
-      });
+      const [budgetList, transactionList, categoryList] = await Promise.all([
+        invoke<Budget[]>('get_budgets', { month: selectedMonth }),
+        invoke<Transaction[]>('get_transactions'),
+        invoke<Category[]>("get_categories")
+      ]);
+      setBudgets(budgetList);
+      setTransactions(transactionList);
+      setCategories(categoryList);
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to load data', severity: 'error' });
     }
   };
 
   useEffect(() => {
-    loadBudgets();
-    loadTransactions();
-    loadCategories();
+    loadAllData();
   }, [selectedMonth]);
 
-  // Listen for accountsUpdated event to refresh data after backup restore
   useEffect(() => {
-    // 복원 후 데이터 새로고침을 위한 이벤트 리스너
-    const handleAccountsUpdated = () => {
-      loadBudgets();
-      loadTransactions();
-    };
-    
-    window.addEventListener('accountsUpdated', handleAccountsUpdated);
-    window.addEventListener('transactionsUpdated', handleAccountsUpdated);
-    window.addEventListener('budgetsUpdated', handleAccountsUpdated);
+    const handleDataUpdate = () => loadAllData();
+    window.addEventListener('accountsUpdated', handleDataUpdate);
+    window.addEventListener('transactionsUpdated', handleDataUpdate);
+    window.addEventListener('budgetsUpdated', handleDataUpdate);
     return () => {
-      window.removeEventListener('accountsUpdated', handleAccountsUpdated);
-      window.removeEventListener('transactionsUpdated', handleAccountsUpdated);
-      window.removeEventListener('budgetsUpdated', handleAccountsUpdated);
+      window.removeEventListener('accountsUpdated', handleDataUpdate);
+      window.removeEventListener('transactionsUpdated', handleDataUpdate);
+      window.removeEventListener('budgetsUpdated', handleDataUpdate);
     };
   }, []);
 
@@ -140,29 +105,16 @@ const BudgetsPage: React.FC = () => {
     try {
       const updatedBudgets = await invoke<Budget[]>('delete_budget', { id: budget.id });
       setBudgets(updatedBudgets);
-      
-      // 다른 페이지가 예산 삭제를 인식하도록 이벤트 발생
       window.dispatchEvent(new Event('budgetsUpdated'));
-      
-      setSnackbar({
-        open: true,
-        message: 'Budget deleted successfully.',
-        severity: 'success',
-      });
-    } catch (error) {
-      console.error('Failed to delete budget:', error);
-      setSnackbar({
-        open: true,
-        message: 'Failed to delete budget.',
-        severity: 'error',
-      });
+      setSnackbar({ open: true, message: 'Budget deleted successfully.', severity: 'success' });
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to delete budget.', severity: 'error' });
     }
   };
 
   const handleSaveBudget = async (budgetData: Partial<Budget>) => {
     try {
       let updatedBudgets: Budget[];
-      
       if (selectedBudget) {
         updatedBudgets = await invoke<Budget[]>('update_budget', {
           budget: {
@@ -182,167 +134,87 @@ const BudgetsPage: React.FC = () => {
           notes: budgetData.notes,
         });
       }
-      
       setBudgets(updatedBudgets);
       setIsFormOpen(false);
-      
-      // 다른 페이지가 예산 변경을 인식하도록 이벤트 발생
       window.dispatchEvent(new Event('budgetsUpdated'));
-      
-      setSnackbar({
-        open: true,
-        message: `Budget ${selectedBudget ? 'updated' : 'added'} successfully.`,
-        severity: 'success',
-      });
-    } catch (error) {
-      console.error('Failed to save budget:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to ${selectedBudget ? 'update' : 'add'} budget.`,
-        severity: 'error',
-      });
+      setSnackbar({ open: true, message: `Budget ${selectedBudget ? 'updated' : 'added'} successfully.`, severity: 'success' });
+    } catch {
+      setSnackbar({ open: true, message: `Failed to ${selectedBudget ? 'update' : 'add'} budget.`, severity: 'error' });
     }
   };
 
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  const calculateTotalBudget = () => {
-    return budgets.reduce((sum, budget) => sum + budget.amount, 0);
-  };
-
-  const calculateTotalSpent = () => {
-    return Math.abs(transactions
-      .filter(
-        (t) =>
-          t.type === 'expense' &&
-          t.date.startsWith(selectedMonth)
-      )
-      .reduce((sum, t) => sum + t.amount, 0));
-  };
-
-  const totalBudget = calculateTotalBudget();
-  const totalSpent = calculateTotalSpent();
+  const totalBudget = useMemo(() => budgets.reduce((sum, budget) => sum + budget.amount, 0), [budgets]);
+  const totalSpent = useMemo(() => 
+    Math.abs(
+      transactions
+        .filter(t => 
+          t.type === 'expense' && 
+          t.date.startsWith(selectedMonth) &&
+          t.category_id !== undefined  // Only include transactions with categories
+        )
+        .reduce((sum, t) => sum + t.amount, 0)
+    ), 
+    [transactions, selectedMonth]
+  );
   const remainingBudget = totalBudget - totalSpent;
   const progress = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-CA', {
-      style: 'currency',
-      currency: 'CAD',
-    }).format(amount);
-  };
-
-
+  const formatCurrency = (amount: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(amount);
 
   const handleAutoGenerateBudget = async () => {
     try {
-      // Determine last month's date range
       const currentYear = parseInt(year);
       const currentMonth = parseInt(month);
-      
-      // Calculate previous month
       let prevYear = currentYear;
       let prevMonth = currentMonth - 1;
-      
       if (prevMonth === 0) {
         prevMonth = 12;
         prevYear = currentYear - 1;
       }
-      
       const prevMonthStr = `${prevYear}-${prevMonth.toString().padStart(2, '0')}`;
-      
-      // Step 1: Import last month's budgets first
       const prevBudgets = await invoke<Budget[]>('get_budgets', { month: prevMonthStr });
       if (prevBudgets.length > 0) {
         const existingCategories = new Set(budgets.map(b => b.category_id));
         const toImport = prevBudgets.filter(b => !existingCategories.has(b.category_id));
-        
         if (toImport.length > 0) {
           for (const b of toImport) {
             await invoke('add_budget', { category_id: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
           }
-          console.log(`Imported ${toImport.length} budget(s) from last month`);
         }
       }
-      
-      // Reload budgets after import
       const updatedBudgets = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
       setBudgets(updatedBudgets);
-      
-      // Step 2: Get last month's expense transactions for auto-generation
-      const lastMonthExpenses = transactions.filter(t => 
-        t.type === 'expense' && 
-        t.date.startsWith(prevMonthStr)
-      );
-      
-      // Calculate spending by category
+      const lastMonthExpenses = transactions.filter(t => t.type === 'expense' && t.date.startsWith(prevMonthStr));
       const spendingByCategory = new Map<number, number>();
       for (const t of lastMonthExpenses) {
-        const categoryId = t.category_id;
-        const amount = Math.abs(t.amount);
-        spendingByCategory.set(categoryId, (spendingByCategory.get(categoryId) || 0) + amount);
+        if (t.category_id !== undefined) {
+          const amount = Math.abs(t.amount);
+          spendingByCategory.set(t.category_id, (spendingByCategory.get(t.category_id) || 0) + amount);
+        }
       }
-      
-      // Get all expense categories from database
-      const allCategories = await invoke<{ id: number; name: string; type: string }[]>('get_categories_full');
-      
-      // Categories to exclude from budget generation
-      const excludedCategories = [
-        'Reimbursement',
-        'Reimbursement [G]',
-        'Reimbursement [U]', 
-        'Reimbursement [E]',
-        'Reimbursement [WCST]',
-        'Transfer',
-        'Adjust'
-      ];
-      
-      // Get eligible expense categories
-      const eligibleCategories = allCategories
-        .filter(category => category.type === 'expense')
-        .filter(category => 
-          !excludedCategories.some(excluded => category.name.includes(excluded))
-        );
-      
-      // Map existing budgets by category
+      const allCategories = await invoke<{ id: number; name: string; type: string }[]>("get_categories");
+      const excludedCategories = ['Reimbursement', 'Reimbursement [G]', 'Reimbursement [U]', 'Reimbursement [E]', 'Transfer', 'Adjust'];
+      const eligibleCategories = allCategories.filter(category => category.type === 'expense').filter(category => !excludedCategories.some(excluded => category.name.includes(excluded)));
       const budgetMap = new Map<number, Budget>(budgets.map(b => [b.category_id, b]));
-      
       let createdCount = 0;
       let skippedCount = 0;
-      
-      // Create budgets for eligible categories
       for (const category of eligibleCategories) {
         const categoryId = category.id;
         const amount = spendingByCategory.get(categoryId) || 0;
         const existing = budgetMap.get(categoryId);
-        
         if (existing) {
           skippedCount++;
         } else {
-          await invoke<Budget[]>('add_budget', { 
-            category_id: categoryId, 
-            amount, 
-            month: selectedMonth, 
-            notes: '' 
-          });
+          await invoke<Budget[]>('add_budget', { category_id: categoryId, amount, month: selectedMonth, notes: '' });
           createdCount++;
         }
       }
-      
-      // Update local state with final budgets
       const finalBudgets = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
       setBudgets(finalBudgets);
-      
       let message = `Auto-generate completed: Created ${createdCount} new budget(s)`;
-      if (skippedCount > 0) {
-        message += `, skipped ${skippedCount} existing budget(s)`;
-      }
-      
+      if (skippedCount > 0) message += `, skipped ${skippedCount} existing budget(s)`;
       setSnackbar({ open: true, message, severity: 'success' });
     } catch (error) {
-      console.error('Auto-generate budgets failed:', error);
       setSnackbar({ open: true, message: `Auto-generate failed: ${String(error)}`, severity: 'error' });
     }
   };
@@ -368,7 +240,7 @@ const BudgetsPage: React.FC = () => {
               onChange={e => setMonth(e.target.value)}
               sx={{ width: 120 }}
             >
-              {months.map(m => (
+              {MONTHS.map(m => (
                 <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
               ))}
             </Select>
@@ -476,7 +348,7 @@ const BudgetsPage: React.FC = () => {
         <Snackbar
           open={snackbar.open}
           autoHideDuration={6000}
-          onClose={handleCloseSnackbar}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
           sx={{
             '& .MuiSnackbar-root': {
@@ -485,7 +357,7 @@ const BudgetsPage: React.FC = () => {
           }}
         >
           <Alert
-            onClose={handleCloseSnackbar}
+            onClose={() => setSnackbar({ ...snackbar, open: false })}
             severity={snackbar.severity}
             variant="filled"
             sx={{ 

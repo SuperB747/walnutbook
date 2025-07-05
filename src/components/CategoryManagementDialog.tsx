@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -45,26 +45,14 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
 
-  const incomeCategories = categories
-    .filter(c => c.type === 'income')
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const expenseCategories = categories
-    .filter(c => c.type === 'expense')
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const adjustCategories = categories
-    .filter(c => c.type === 'adjust')
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const incomeCategories = useMemo(() => categories.filter(c => c.type === 'income').sort((a, b) => a.name.localeCompare(b.name)), [categories]);
+  const expenseCategories = useMemo(() => categories.filter(c => c.type === 'expense').sort((a, b) => a.name.localeCompare(b.name)), [categories]);
 
-  const load = async () => {
-    try {
-      const result = await invoke<Category[]>('get_categories_full');
-      setCategories(result);
-    } catch (e) {
-      console.error('Failed to load categories:', e);
+  useEffect(() => {
+    if (open) {
+      invoke<Category[]>("get_categories_full").then(setCategories).catch(() => {});
     }
-  };
-
-  useEffect(() => { if (open) load(); }, [open]);
+  }, [open]);
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
@@ -72,21 +60,10 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
       const type = currentTab === 0 ? 'income' : 'expense';
       await invoke<Category[]>('add_category', { name: newName.trim(), categoryType: type });
       setNewName('');
-      load(); 
+      const result = await invoke<Category[]>("get_categories_full");
+      setCategories(result);
       onChange();
-    } catch (e) {
-      console.error('Failed to add category:', e);
-    }
-  };
-
-  const startEdit = (cat: Category) => {
-    setEditId(cat.id);
-    setEditName(cat.name);
-  };
-
-  const cancelEdit = () => {
-    setEditId(null);
-    setEditName('');
+    } catch {}
   };
 
   const handleUpdate = async () => {
@@ -96,34 +73,21 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
       await invoke<Category[]>('update_category', { id: editId, name: editName.trim(), categoryType: type });
       setEditId(null);
       setEditName('');
-      load(); 
+      const result = await invoke<Category[]>("get_categories_full");
+      setCategories(result);
       onChange();
-    } catch (e) {
-      console.error('Failed to update category:', e);
-    }
-  };
-
-  const openDeleteConfirm = (category: Category) => {
-    setCategoryToDelete(category);
-    setDeleteConfirmOpen(true);
+    } catch {}
   };
 
   const handleDelete = async () => {
     if (!categoryToDelete) return;
-    
     try {
-      console.log('Attempting to delete category:', categoryToDelete.id);
       const result = await invoke<Category[]>('delete_category', { id: categoryToDelete.id });
-      console.log('Delete successful, new categories:', result);
       setCategories(result);
       onChange();
-    } catch (e) {
-      console.error('Failed to delete category:', e);
-      alert('Failed to delete category. Please try again.');
-    } finally {
-      setDeleteConfirmOpen(false);
-      setCategoryToDelete(null);
-    }
+    } catch {}
+    setDeleteConfirmOpen(false);
+    setCategoryToDelete(null);
   };
 
   return (
@@ -133,10 +97,10 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
       maxWidth={false}
       PaperProps={{
         sx: {
-          width: '30vw',
+          width: '50vw',
           height: '80vh',
           maxHeight: '80vh',
-          minWidth: '400px',
+          minWidth: '600px',
           minHeight: '500px',
         }
       }}
@@ -200,9 +164,9 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Type</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell sx={{ width: '60%', minWidth: '300px' }}>Name</TableCell>
+                <TableCell sx={{ width: '20%', minWidth: '100px' }}>Type</TableCell>
+                <TableCell align="right" sx={{ width: '20%', minWidth: '120px' }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -216,6 +180,13 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
                         value={editName}
                         onChange={e => setEditName(e.target.value)}
                         size="small"
+                        sx={{ 
+                          width: '100%',
+                          '& .MuiOutlinedInput-root': {
+                            backgroundColor: 'white'
+                          }
+                        }}
+                        variant="outlined"
                       />
                     ) : (
                       cat.name
@@ -230,16 +201,16 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
                         <IconButton size="small" onClick={handleUpdate}>
                           <Check />
                         </IconButton>
-                        <IconButton size="small" onClick={cancelEdit}>
+                        <IconButton size="small" onClick={() => { setEditId(null); setEditName(''); }}>
                           <Close />
                         </IconButton>
                       </>
                     ) : (
                       <>
-                        <IconButton size="small" onClick={() => startEdit(cat)}>
+                        <IconButton size="small" onClick={() => { setEditId(cat.id); setEditName(cat.name); }}>
                           <Edit />
                         </IconButton>
-                        <IconButton size="small" onClick={() => openDeleteConfirm(cat)}>
+                        <IconButton size="small" onClick={() => { setCategoryToDelete(cat); setDeleteConfirmOpen(true); }}>
                           <Delete />
                         </IconButton>
                       </>

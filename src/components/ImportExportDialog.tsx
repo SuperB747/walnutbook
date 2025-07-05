@@ -174,6 +174,18 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     
     const cleanDateStr = dateStr.trim();
     
+    // First try yyyyMMdd format
+    if (/^\d{8}$/.test(cleanDateStr)) {
+      const year = cleanDateStr.slice(0, 4);
+      const month = cleanDateStr.slice(4, 6);
+      const day = cleanDateStr.slice(6, 8);
+      const parsedDate = new Date(`${year}-${month}-${day}`);
+      if (isValid(parsedDate)) {
+        return format(parsedDate, 'yyyy-MM-dd');
+      }
+    }
+    
+    // Then try other formats
     const formats = [
       'yyyy-MM-dd',
       'MM/dd/yyyy',
@@ -200,16 +212,6 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       }
     }
 
-    if (/^\d{8}/.test(cleanDateStr)) {
-      const year = cleanDateStr.slice(0, 4);
-      const month = cleanDateStr.slice(4, 6);
-      const day = cleanDateStr.slice(6, 8);
-      const parsedDate = new Date(`${year}-${month}-${day}`);
-      if (isValid(parsedDate)) {
-        return format(parsedDate, 'yyyy-MM-dd');
-      }
-    }
-
     if (cleanDateStr.includes('T')) {
       const datePart = cleanDateStr.split('T')[0];
       if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
@@ -232,16 +234,29 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
 
   const validateTransaction = (transaction: Partial<Transaction> & { category?: string }): Partial<Transaction> | null => {
     if (!transaction.date || !transaction.amount || !transaction.payee) {
+      console.warn('Invalid transaction - missing required fields:', { 
+        date: transaction.date, 
+        amount: transaction.amount, 
+        payee: transaction.payee 
+      });
       return null;
     }
 
     const parsedDate = parseDate(transaction.date);
     if (!parsedDate) {
+      console.warn('Invalid transaction - could not parse date:', transaction.date);
       return null;
     }
 
     let type: TransactionType = transaction.type as TransactionType;
     let amount = Number(transaction.amount);
+    
+    // Validate amount
+    if (isNaN(amount) || amount === 0) {
+      console.warn('Invalid transaction - invalid amount:', transaction.amount);
+      return null;
+    }
+    
     if (!type) {
       type = amount < 0 ? 'expense' : 'income';
     }
@@ -251,6 +266,17 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       amount = Math.abs(amount);
     }
 
+    // For non-transfer transactions, set category_id to undefined if no category is provided
+    let categoryId: number | undefined = undefined;
+    if (type !== 'transfer' && transaction.category && transaction.category.trim() !== '') {
+      try {
+        categoryId = getCategoryId(transaction.category);
+      } catch (error) {
+        console.warn('Invalid transaction - invalid category:', error);
+        return null;
+      }
+    }
+    
     return {
       date: parsedDate,
       type,
@@ -258,7 +284,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       payee: transaction.payee,
       notes: transaction.notes || '',
       account_id: selectedAccount || 0,
-      category_id: getCategoryId(transaction.category || ''),
+      category_id: categoryId,
     };
   };
 
@@ -292,16 +318,31 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
 
     try {
       setImportStatus({ status: 'processing', message: 'Importing transactions...' });
+      
+      console.log('Starting import with', transactions.length, 'transactions');
+      
       const validTransactions: Partial<Transaction>[] = transactions
         .filter((t): t is ParsedTransaction => t.date !== null)
         .map(t => validateTransaction({ ...t, date: t.date! }))
         .filter((t): t is Partial<Transaction> => !!t);
+      
+      console.log('Valid transactions after validation:', validTransactions.length);
+      
+      if (validTransactions.length === 0) {
+        setImportStatus({
+          status: 'error',
+          message: 'No valid transactions found to import. Please check your CSV format.',
+        });
+        return;
+      }
+      
       await onImport(validTransactions);
-      setImportStatus({ status: 'success', message: 'Import completed successfully' });
+      setImportStatus({ status: 'success', message: `Import completed successfully. ${validTransactions.length} transactions imported.` });
       setTimeout(() => {
         handleClose();
       }, 1500);
     } catch (error) {
+      console.error('Import failed:', error);
       handleError(error);
     }
   };
@@ -313,82 +354,18 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       
       console.log('CSV Import Debug - Raw content preview:', allLines.slice(0, 5));
       
-      let headerIndex = -1;
-      let bestHeaderScore = 0;
+      // Skip the first line (metadata)
+      const contentToProcess = allLines.slice(1);
       
-      for (let i = 0; i < Math.min(15, allLines.length); i++) {
-        const line = allLines[i];
-        
-        const delimiters = [',', ';', '\t', '|'];
-        let bestDelimiter = ',';
-        let bestFields: string[] = [];
-        let bestFieldCount = 0;
-        
-        for (const delim of delimiters) {
-          const fields = line.split(delim).map(f => f.trim());
-          if (fields.length > bestFieldCount) {
-            bestFieldCount = fields.length;
-            bestDelimiter = delim;
-            bestFields = fields;
-          }
-        }
-        
-        let score = 0;
-        const lowerFields = bestFields.map(f => f.toLowerCase());
-        
-        if (lowerFields.some(f => /^date$/i.test(f))) score += 3;
-        else if (lowerFields.some(f => /date/i.test(f))) score += 2;
-        else if (lowerFields.some(f => /transaction.*date/i.test(f))) score += 2;
-        
-        if (lowerFields.some(f => /^amount$/i.test(f))) score += 3;
-        else if (lowerFields.some(f => /amount/i.test(f))) score += 2;
-        else if (lowerFields.some(f => /debit|credit/i.test(f))) score += 2;
-        else if (lowerFields.some(f => /withdrawal|deposit/i.test(f))) score += 1;
-        
-        if (lowerFields.some(f => /^description$/i.test(f))) score += 2;
-        else if (lowerFields.some(f => /description/i.test(f))) score += 1;
-        else if (lowerFields.some(f => /^payee$/i.test(f))) score += 2;
-        else if (lowerFields.some(f => /payee/i.test(f))) score += 1;
-        else if (lowerFields.some(f => /^memo$/i.test(f))) score += 1;
-        else if (lowerFields.some(f => /memo/i.test(f))) score += 1;
-        else if (lowerFields.some(f => /^details$/i.test(f))) score += 1;
-        else if (lowerFields.some(f => /^narrative$/i.test(f))) score += 1;
-        
-        if (lowerFields.some(f => /^category$/i.test(f))) score += 1;
-        else if (lowerFields.some(f => /category/i.test(f))) score += 1;
-        
-        const nonNumericFields = lowerFields.filter(f => !/^\d+\.?\d*$/.test(f));
-        score += nonNumericFields.length * 0.3;
-        
-        if (score > bestHeaderScore) {
-          bestHeaderScore = score;
-          headerIndex = i;
-        }
-      }
-      
-      if (headerIndex < 0 || bestHeaderScore < 2) {
-        headerIndex = 0;
-      }
-      
-      const headerLine = allLines[headerIndex];
+      // Use the second line as header
+      const headerLine = contentToProcess[0];
       console.log('Selected header line:', headerLine);
-      console.log('Header score:', bestHeaderScore);
       
-      const delimiters = [',', ';', '\t', '|'];
-      let bestDelimiter = ',';
-      let bestFieldCount = 0;
-      
-      for (const delim of delimiters) {
-        const fields = headerLine.split(delim).map(f => f.trim());
-        if (fields.length > bestFieldCount) {
-          bestFieldCount = fields.length;
-          bestDelimiter = delim;
-        }
-      }
-      
+      // Use comma as delimiter
+      const bestDelimiter = ',';
       console.log('Selected delimiter:', bestDelimiter);
       
-      const contentToParse = allLines.slice(headerIndex).join('\n');
+      const contentToParse = contentToProcess.join('\n');
       
       Papa.parse<CSVTransaction>(contentToParse, {
         header: true,
@@ -405,31 +382,11 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             const fields = results.meta.fields as string[];
             console.log('Available fields:', fields);
             
-            const dateKey = fields.find(f => /^date$/i.test(f.trim())) || 
-                           fields.find(f => /date/i.test(f) && !/amount/i.test(f)) ||
-                           fields.find(f => /transaction.*date/i.test(f)) || '';
-            
-            const amountKey = fields.find(f => /^amount$/i.test(f.trim())) || 
-                             fields.find(f => /amount/i.test(f)) ||
-                             fields.find(f => /^debit$/i.test(f.trim())) ||
-                             fields.find(f => /^credit$/i.test(f.trim())) || '';
-            
-            const payeeKey = fields.find(f => /^description$/i.test(f.trim())) || 
-                            fields.find(f => /^payee$/i.test(f.trim())) ||
-                            fields.find(f => /^memo$/i.test(f.trim())) ||
-                            fields.find(f => /^details$/i.test(f.trim())) ||
-                            fields.find(f => /^narrative$/i.test(f.trim())) ||
-                            fields.find(f => /description/i.test(f)) ||
-                            fields.find(f => /payee/i.test(f)) ||
-                            fields[0] || '';
-            
-            const categoryKey = fields.find(f => /^category$/i.test(f.trim())) || 
-                               fields.find(f => /category/i.test(f)) || '';
-            
-            const notesKey = fields.find(f => /^notes$/i.test(f.trim())) || 
-                            fields.find(f => /^memo$/i.test(f.trim())) ||
-                            fields.find(f => /notes/i.test(f)) ||
-                            fields.find(f => /memo/i.test(f)) || '';
+            const dateKey = 'date posted';
+            const amountKey = 'transaction amount';
+            const payeeKey = 'description';
+            const categoryKey = '';
+            const notesKey = '';
             
             console.log('Mapped CSV keys:', { dateKey, amountKey, payeeKey, categoryKey, notesKey });
             const validRows = (results.data as any[]).filter(row => row[dateKey] && row[amountKey]);
@@ -443,35 +400,14 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             
             const parsedTransactions: ParsedTransaction[] = validRows.map((row) => {
               const rawDate = row[dateKey];
+              const transactionType = row['transaction type']?.toString().toUpperCase();
               
               let amt = 0;
-              let rawAmt = '';
-              
-              if (amountKey) {
-                rawAmt = row[amountKey]?.toString() || '';
-              } else {
-                const debitKey = fields.find(f => /^debit$/i.test(f.trim()));
-                const creditKey = fields.find(f => /^credit$/i.test(f.trim()));
-                
-                if (debitKey && creditKey) {
-                  const debit = parseFloat(row[debitKey]?.toString().replace(/[^0-9.\-]/g, '') || '0');
-                  const credit = parseFloat(row[creditKey]?.toString().replace(/[^0-9.\-]/g, '') || '0');
-                  amt = debit > 0 ? -debit : credit;
-                  rawAmt = amt.toString();
-                }
-              }
-              
-              if (!rawAmt && amountKey) {
-                rawAmt = row[amountKey]?.toString() || '';
-              }
+              let rawAmt = row[amountKey]?.toString() || '';
               
               if (rawAmt) {
-                const hasParentheses = /\([^)]*\)/.test(rawAmt);
                 rawAmt = rawAmt.replace(/[^\d.\-]/g, '');
                 amt = parseFloat(rawAmt);
-                if (hasParentheses && amt > 0) {
-                  amt = -amt;
-                }
               }
               
               const parsedDate = parseDate(rawDate);
@@ -488,25 +424,16 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                   isCreditCard,
                   csvSignLogic,
                   amount: amt,
+                  transactionType,
                   payee: row[payeeKey] || ''
                 });
                 
-                switch (csvSignLogic) {
-                  case 'reversed':
-                    if (isCreditCard) {
-                      type = amt < 0 ? 'expense' : 'income';
-                    } else {
-                      type = amt < 0 ? 'expense' : 'income';
-                    }
-                    break;
-                  case 'standard':
-                  default:
-                    if (isCreditCard) {
-                      type = amt < 0 ? 'income' : 'expense';
-                    } else {
-                      type = amt < 0 ? 'expense' : 'income';
-                    }
-                    break;
+                if (transactionType === 'CREDIT') {
+                  type = 'income';
+                } else if (transactionType === 'DEBIT') {
+                  type = 'expense';
+                } else {
+                  type = amt < 0 ? 'expense' : 'income';
                 }
                 
                 console.log('Determined type:', type);
@@ -516,7 +443,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 date: parsedDate,
                 amount: isNaN(amt) ? 0 : Math.abs(amt),
                 payee: row[payeeKey] || '',
-                category: categoryKey ? (row[categoryKey] || '') : '',
+                category: '',
                 notes: notesKey ? (row[notesKey] || '') : '',
                 type,
                 account_id: selectedAccount || 0,
@@ -582,21 +509,19 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   };
 
   const getCategoryId = (categoryName: string): number => {
+    if (!categoryName || categoryName.trim() === '') {
+      throw new Error('Category is required');
+    }
     const found = categories.find(c => c.name === categoryName);
     if (found) return found.id;
-    return 0;
-  };
-
-  const createTransactionFromParsed = (transaction: ParsedTransaction): Partial<Transaction> => {
-    return {
-      date: transaction.date!,
-      type: transaction.type,
-      amount: transaction.amount,
-      payee: transaction.payee,
-      notes: transaction.notes,
-      account_id: transaction.account_id,
-      category_id: getCategoryId(transaction.category),
-    };
+    
+    // If Uncategorized is not found, try to find "Other" category
+    if (categoryName === 'Uncategorized') {
+      const otherCategory = categories.find(c => c.name === 'Other');
+      if (otherCategory) return otherCategory.id;
+    }
+    
+    throw new Error(`Category "${categoryName}" not found`);
   };
 
   const handleTransferConflicts = (
