@@ -29,7 +29,7 @@ import BulkTransactionEdit from './components/BulkTransactionEdit';
 import ImportExportDialog from './components/ImportExportDialog';
 import BackupRestoreDialog from './components/BackupRestoreDialog';
 
-import { Account, Transaction } from './db';
+import { Account, Transaction, Category } from './db';
 import logo from './logo.png';
 
 const theme = createTheme({
@@ -255,7 +255,7 @@ const App: React.FC = () => {
   // Data states for dialogs
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Function to find OneDrive path and create backup folder
   const findOneDrivePath = async (): Promise<string> => {
@@ -321,7 +321,7 @@ const App: React.FC = () => {
       const [accountsData, transactionsData, categoriesData] = await Promise.all([
         invoke<Account[]>('get_accounts'),
         invoke<Transaction[]>('get_transactions'),
-        invoke<string[]>('get_categories')
+        invoke<Category[]>('get_categories_full')
       ]);
       setAccounts(accountsData);
       setTransactions(transactionsData);
@@ -641,6 +641,7 @@ const App: React.FC = () => {
           }}
           accounts={accounts}
           transactions={transactions}
+          categories={categories}
         />
         
                  <BackupRestoreDialog
@@ -652,7 +653,7 @@ const App: React.FC = () => {
                const [newAccounts, newTransactions, newCategories] = await Promise.all([
                  invoke<Account[]>('get_accounts'),
                  invoke<Transaction[]>('get_transactions'),
-                 invoke<string[]>('get_categories')
+                 invoke<Category[]>('get_categories_full')
                ]);
                
                setAccounts(newAccounts);

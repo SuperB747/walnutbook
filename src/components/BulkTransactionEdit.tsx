@@ -19,7 +19,7 @@ import {
   Checkbox,
   SelectChangeEvent,
 } from '@mui/material';
-import { Transaction, Account, TransactionType } from '../db';
+import { Transaction, Account, TransactionType, Category } from '../db';
 
 export interface BulkTransactionEditProps {
   open: boolean;
@@ -27,7 +27,7 @@ export interface BulkTransactionEditProps {
   onSave: (updates: { field: string; value: any; transactionIds: number[] }) => Promise<void>;
   transactions: Transaction[];
   accounts: Account[];
-  categories: string[];
+  categories: Category[];
 }
 
 const BulkTransactionEdit: React.FC<BulkTransactionEditProps> = ({
@@ -96,14 +96,14 @@ const BulkTransactionEdit: React.FC<BulkTransactionEditProps> = ({
             {account.name}
           </MenuItem>
         ));
-      case 'category':
+      case 'category_id':
         return [
           <MenuItem key="" value="">
             <em>None</em>
           </MenuItem>,
           ...categories.map(category => (
-            <MenuItem key={category} value={category}>
-              {category}
+            <MenuItem key={category.id} value={category.id}>
+              {category.name}
             </MenuItem>
           )),
         ];
@@ -130,7 +130,7 @@ const BulkTransactionEdit: React.FC<BulkTransactionEditProps> = ({
               label="Field to Update"
             >
               <MenuItem value="account_id">Account</MenuItem>
-              <MenuItem value="category">Category</MenuItem>
+              <MenuItem value="category_id">Category</MenuItem>
               <MenuItem value="type">Type</MenuItem>
             </Select>
           </FormControl>

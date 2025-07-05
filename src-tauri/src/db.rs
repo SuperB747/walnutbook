@@ -400,6 +400,8 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     } else {
         // 일반 거래 처리
         let mut amount = transaction.amount;
+        let mut final_category_id = transaction.category_id;
+        
         if transaction.transaction_type == "expense" {
             amount = -amount.abs();
         } else if transaction.transaction_type == "income" {
@@ -412,7 +414,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 params![adjust_category_name],
                 |r| r.get(0)
             ).unwrap_or(1);
-            transaction.category_id = adjust_category_id;
+            final_category_id = adjust_category_id;
             
             if adjust_category_name == "Subtract" {
                 amount = -amount.abs();
@@ -426,7 +428,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 transaction.date,
                 transaction.account_id,
                 transaction.transaction_type,
-                transaction.category_id,
+                final_category_id,
                 amount,
                 transaction.payee,
                 transaction.notes.clone().unwrap_or_default(),
@@ -445,7 +447,14 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             if transaction.transaction_type == "expense" {
                 transaction.amount  // 빚 증가
             } else if transaction.transaction_type == "adjust" {
-                if transaction.category == "Subtract" {
+                // Get category name from database
+                let category_name: String = conn.query_row(
+                    "SELECT name FROM categories WHERE id = ?1",
+                    params![transaction.category_id],
+                    |r| r.get(0)
+                ).unwrap_or_else(|_| "Add".to_string());
+                
+                if category_name == "Subtract" {
                     transaction.amount  // 빚 증가
                 } else {
                     -transaction.amount  // 빚 감소
@@ -458,7 +467,14 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             if transaction.transaction_type == "expense" {
                 -transaction.amount
             } else if transaction.transaction_type == "adjust" {
-                if transaction.category == "Subtract" {
+                // Get category name from database
+                let category_name: String = conn.query_row(
+                    "SELECT name FROM categories WHERE id = ?1",
+                    params![transaction.category_id],
+                    |r| r.get(0)
+                ).unwrap_or_else(|_| "Add".to_string());
+                
+                if category_name == "Subtract" {
                     -transaction.amount
                 } else {
                     transaction.amount
@@ -536,17 +552,17 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     |r| r.get(0),
                 ).map_err(|e| e.to_string())?;
                 
-                let tx = conn.transaction().map_err(|e| e.to_string())?;
-                
-                // 기존 거래 삭제
-                tx.execute("DELETE FROM transactions WHERE id = ?1", params![transaction.id]).map_err(|e| e.to_string())?;
-                
                 // Transfer 카테고리 ID 조회
                 let transfer_category_id: i64 = conn.query_row(
                     "SELECT id FROM categories WHERE name = 'Transfer' LIMIT 1",
                     [],
                     |r| r.get(0)
                 ).unwrap_or(1);
+                
+                let tx = conn.transaction().map_err(|e| e.to_string())?;
+                
+                // 기존 거래 삭제
+                tx.execute("DELETE FROM transactions WHERE id = ?1", params![transaction.id]).map_err(|e| e.to_string())?;
                 
                 // 출발 계좌 거래 생성 (음수 금액)
                 let from_note = format!("[To: {}]", to_account_name);
@@ -723,11 +739,11 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     }
     
     // Compute new_effect based on transaction and account type
-        let category_name = if transaction.transaction_type == "adjust" {
-        if transaction.amount < 0.0 { "Subtract" } else { "Add" } 
+    let category_name = if transaction.transaction_type == "adjust" {
+        if transaction.amount < 0.0 { "Subtract".to_string() } else { "Add".to_string() } 
     } else {
         // category_id로 카테고리 이름 조회
-        &conn.query_row(
+        conn.query_row(
             "SELECT name FROM categories WHERE id = ?1",
             params![transaction.category_id],
             |r| r.get(0)
@@ -756,7 +772,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     } else if transaction.transaction_type == "adjust" {
                 // Adjust 거래의 경우 카테고리 이름으로 ID 찾기
                 let adjust_category_name = if transaction.amount < 0.0 { "Subtract" } else { "Add" };
-                let adjust_category_id: i64 = conn.query_row(
+                let _adjust_category_id: i64 = conn.query_row(
                     "SELECT id FROM categories WHERE name = ?1 LIMIT 1",
                     params![adjust_category_name],
                     |r| r.get(0)

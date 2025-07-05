@@ -64,7 +64,7 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
   }, [budget, month]);
 
   const handleChange = (field: keyof Budget) => (
-    event: React.ChangeEvent<HTMLInputElement | { value: unknown }>
+    event: React.ChangeEvent<HTMLInputElement> | { target: { value: unknown } }
   ) => {
     if (field === 'amount') {
       const inputValue = event.target.value as string;

@@ -33,7 +33,7 @@ import {
   FilterList as FilterIcon,
   Add as AddIcon,
 } from '@mui/icons-material';
-import { Transaction, Account } from '../db';
+import { Transaction, Account, Category } from '../db';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { parse } from 'date-fns';
@@ -41,11 +41,11 @@ import { parse } from 'date-fns';
 export interface TransactionListProps {
   transactions: Transaction[];
   accounts: Account[];
-  categories: string[];
+  categories: Category[];
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: number) => Promise<void>;
   onBulkDelete?: (ids: number[]) => Promise<void>;
-  onCategoryChange: (id: number, category: string) => Promise<void>;
+  onCategoryChange: (id: number, categoryId: number) => Promise<void>;
   onDescriptionChange?: (id: number, description: string) => Promise<void>;
   initialSelectedIds?: number[];
   onAddTransaction?: () => void;
@@ -237,7 +237,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   };
 
   const getCategoryName = (categoryId: number): string => {
-    return fullCategories.find(cat => cat.id === categoryId)?.name || 'Unknown Category';
+    return categories.find(cat => cat.id === categoryId)?.name || 'Unknown Category';
   };
 
   const getTransactionTypeLabel = (type: string) => {
@@ -703,7 +703,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
                         size="small"
                         variant="standard"
                         disableUnderline
-                        onChange={(e) => onCategoryChange(transaction.id, e.target.value as string)}
+                        onChange={(e) => {
+                          const categoryName = e.target.value as string;
+                          const category = categories.find(c => c.name === categoryName);
+                          if (category) {
+                            onCategoryChange(transaction.id, category.id);
+                          }
+                        }}
                         sx={{
                           width: '100%',
                           height: '24px',
@@ -718,7 +724,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                           .map(c => (
                             <MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>
                           ))}
-                        {categories.includes('Uncategorized') && (
+                        {categories.some(c => c.name === 'Uncategorized') && (
                           <MenuItem key="Uncategorized" value="Uncategorized">Uncategorized</MenuItem>
                         )}
                       </Select>

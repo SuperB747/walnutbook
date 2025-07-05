@@ -464,14 +464,14 @@ const TransactionsPage: React.FC = () => {
           setFormOpen(true);
         }}
         onDelete={handleTransactionDelete}
-        onCategoryChange={async (id, newCategory) => {
+        onCategoryChange={async (id, newCategoryId) => {
           try {
             const tx = transactions.find(t => t.id === id);
             if (tx) {
-              await invoke('update_transaction', { transaction: { ...tx, category: newCategory } });
+              await invoke('update_transaction', { transaction: { ...tx, category_id: newCategoryId } });
               setTransactions(prevTransactions => 
                 prevTransactions.map(t => 
-                  t.id === id ? { ...t, category: newCategory } : t
+                  t.id === id ? { ...t, category_id: newCategoryId } : t
                 )
               );
               showSnackbar('Category updated', 'success');
@@ -512,6 +512,7 @@ const TransactionsPage: React.FC = () => {
         open={importExportOpen}
         accounts={accounts}
         transactions={transactions}
+        categories={categories}
         onClose={() => setImportExportOpen(false)}
         onImport={handleImport}
       />
@@ -521,7 +522,7 @@ const TransactionsPage: React.FC = () => {
         onClose={async () => {
           setCategoriesOpen(false);
           try {
-            const newCategories = await invoke<string[]>('get_categories');
+            const newCategories = await invoke<Category[]>('get_categories_full');
             setCategories(newCategories);
           } catch (error) {
             console.error('Failed to refresh categories:', error);
@@ -529,7 +530,7 @@ const TransactionsPage: React.FC = () => {
         }}
         onChange={async () => {
           try {
-            const newCategories = await invoke<string[]>('get_categories');
+            const newCategories = await invoke<Category[]>('get_categories_full');
             setCategories(newCategories);
           } catch (error) {
             console.error('Failed to refresh categories:', error);

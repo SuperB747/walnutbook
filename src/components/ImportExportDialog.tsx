@@ -230,7 +230,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     return null;
   };
 
-  const validateTransaction = (transaction: Partial<Transaction>): Partial<Transaction> | null => {
+  const validateTransaction = (transaction: Partial<Transaction> & { category?: string }): Partial<Transaction> | null => {
     if (!transaction.date || !transaction.amount || !transaction.payee) {
       return null;
     }
@@ -564,7 +564,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       date: t.date,
       account_id: t.account_id,
       type: t.type,
-      category: t.category,
+      category_id: t.category_id,
       amount: t.amount,
       payee: t.payee,
       notes: t.notes || '',

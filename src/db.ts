@@ -199,7 +199,10 @@ export async function addTransaction(transaction: Omit<Transaction, 'id'>): Prom
     } else if (transaction.type === 'income') {
       balanceChange = transaction.amount;
     } else if (transaction.type === 'adjust') {
-      balanceChange = transaction.category === 'Add' ? transaction.amount : -transaction.amount;
+      // Get category name from database
+      const categoryName = db.prepare('SELECT name FROM categories WHERE id = ?').get(transaction.category_id) as { name: string } | undefined;
+      const isAdd = categoryName?.name === 'Add';
+      balanceChange = isAdd ? transaction.amount : -transaction.amount;
     }
 
     db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?')
@@ -228,7 +231,10 @@ export async function updateTransaction(transaction: Transaction): Promise<void>
     } else if (oldTransaction.type === 'income') {
       oldBalanceEffect = oldTransaction.amount;
     } else if (oldTransaction.type === 'adjust') {
-      oldBalanceEffect = oldTransaction.category === 'Add' ? oldTransaction.amount : -oldTransaction.amount;
+      // Get category name from database for old transaction
+      const oldCategoryName = db.prepare('SELECT name FROM categories WHERE id = ?').get(oldTransaction.category_id) as { name: string } | undefined;
+      const oldIsAdd = oldCategoryName?.name === 'Add';
+      oldBalanceEffect = oldIsAdd ? oldTransaction.amount : -oldTransaction.amount;
     }
 
     if (transaction.type === 'expense') {
@@ -236,7 +242,10 @@ export async function updateTransaction(transaction: Transaction): Promise<void>
     } else if (transaction.type === 'income') {
       newBalanceEffect = transaction.amount;
     } else if (transaction.type === 'adjust') {
-      newBalanceEffect = transaction.category === 'Add' ? transaction.amount : -transaction.amount;
+      // Get category name from database for new transaction
+      const newCategoryName = db.prepare('SELECT name FROM categories WHERE id = ?').get(transaction.category_id) as { name: string } | undefined;
+      const newIsAdd = newCategoryName?.name === 'Add';
+      newBalanceEffect = newIsAdd ? transaction.amount : -transaction.amount;
     }
 
     const balanceChange = newBalanceEffect - oldBalanceEffect;
@@ -395,15 +404,11 @@ export async function importTransactions(transactions: Partial<Transaction>[]): 
 
         // Get or create category
         let categoryId = 1; // Default category ID
-        if (transaction.category) {
-          const existingCategory = db.prepare('SELECT id FROM categories WHERE name = ?').get(transaction.category) as { id: number } | undefined;
-          if (existingCategory) {
-            categoryId = existingCategory.id;
-          } else {
-            // Create new category if it doesn't exist
-            const result = db.prepare('INSERT INTO categories (name, type) VALUES (?, ?)').run(transaction.category, 'expense');
-            categoryId = result.lastInsertRowid as number;
-          }
+        if (transaction.category_id) {
+          categoryId = transaction.category_id;
+        // If no category_id is provided, use default category
+        if (!categoryId) {
+          categoryId = 1; // Default category ID
         }
 
         db.prepare(`
@@ -463,8 +468,8 @@ export async function addBudget(budget: Omit<Budget, 'id'>): Promise<void> {
   } catch (error) {
     console.error('Error adding budget:', error);
     throw error;
-    }
   }
+}
 
 export async function updateBudget(budget: Budget): Promise<void> {
   const db = getDatabase();
@@ -507,11 +512,12 @@ export async function getNetWorthHistory(startDate: string, endDate: string): Pr
   try {
     // Get all transactions within the date range
     const transactions = db.prepare(`
-      SELECT date, type, category, amount
-      FROM transactions
-      WHERE date BETWEEN ? AND ?
-      ORDER BY date ASC
-    `).all(startDate, endDate) as { date: string; type: string; category: string; amount: number }[];
+      SELECT t.date, t.type, c.name as category_name, t.amount
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      WHERE t.date BETWEEN ? AND ?
+      ORDER BY t.date ASC
+    `).all(startDate, endDate) as { date: string; type: string; category_name: string; amount: number }[];
 
     // Get initial account balances
     const accounts = db.prepare('SELECT balance FROM accounts').all() as { balance: number }[];
@@ -535,9 +541,9 @@ export async function getNetWorthHistory(startDate: string, endDate: string): Pr
       } else if (transaction.type === 'income') {
         currentNetWorth += transaction.amount;
       } else if (transaction.type === 'adjust') {
-        if (transaction.category === 'Add') {
+        if (transaction.category_name === 'Add') {
           currentNetWorth += transaction.amount;
-        } else if (transaction.category === 'Subtract') {
+        } else if (transaction.category_name === 'Subtract') {
           currentNetWorth -= transaction.amount;
         }
       }
@@ -597,11 +603,12 @@ export async function getSpendingByCategory(startDate: string, endDate: string):
 
   try {
     const result = db.prepare(`
-      SELECT category, SUM(amount) as total
-      FROM transactions
-      WHERE type = 'expense'
-      AND date BETWEEN ? AND ?
-      GROUP BY category
+      SELECT c.name as category, SUM(t.amount) as total
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      WHERE t.type = 'expense'
+      AND t.date BETWEEN ? AND ?
+      GROUP BY c.name
       ORDER BY total DESC
     `).all(startDate, endDate) as { category: string; total: number }[];
 
@@ -643,9 +650,8 @@ export async function getIncomeVsExpenses(startDate: string, endDate: string): P
 
 function isCardPayment(transaction: Transaction): boolean {
   return transaction.payee.toLowerCase().includes('card') || 
-         transaction.notes?.toLowerCase().includes('card') || 
-         transaction.category.toLowerCase().includes('card');
-  }
+         (transaction.notes?.toLowerCase().includes('card') || false);
+}
 
 // Add a function to get the list of categories
 export async function getCategories(): Promise<string[]> {

@@ -167,7 +167,6 @@ const BudgetsPage: React.FC = () => {
         updatedBudgets = await invoke<Budget[]>('update_budget', {
           budget: {
             id: selectedBudget.id,
-            category: budgetData.category!,
             category_id: budgetData.category_id!,
             amount: budgetData.amount!,
             month: selectedMonth,
@@ -177,7 +176,6 @@ const BudgetsPage: React.FC = () => {
         });
       } else {
         updatedBudgets = await invoke<Budget[]>('add_budget', {
-          category: budgetData.category!,
           category_id: budgetData.category_id!,
           amount: budgetData.amount!,
           month: selectedMonth,
@@ -258,12 +256,12 @@ const BudgetsPage: React.FC = () => {
       // Step 1: Import last month's budgets first
       const prevBudgets = await invoke<Budget[]>('get_budgets', { month: prevMonthStr });
       if (prevBudgets.length > 0) {
-        const existingCategories = new Set(budgets.map(b => b.category));
-        const toImport = prevBudgets.filter(b => !existingCategories.has(b.category));
+        const existingCategories = new Set(budgets.map(b => b.category_id));
+        const toImport = prevBudgets.filter(b => !existingCategories.has(b.category_id));
         
         if (toImport.length > 0) {
           for (const b of toImport) {
-            await invoke('add_budget', { category: b.category, amount: b.amount, month: selectedMonth, notes: b.notes });
+            await invoke('add_budget', { category_id: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
           }
           console.log(`Imported ${toImport.length} budget(s) from last month`);
         }
@@ -280,11 +278,11 @@ const BudgetsPage: React.FC = () => {
       );
       
       // Calculate spending by category
-      const spendingByCategory = new Map<string, number>();
+      const spendingByCategory = new Map<number, number>();
       for (const t of lastMonthExpenses) {
-        const category = t.category;
+        const categoryId = t.category_id;
         const amount = Math.abs(t.amount);
-        spendingByCategory.set(category, (spendingByCategory.get(category) || 0) + amount);
+        spendingByCategory.set(categoryId, (spendingByCategory.get(categoryId) || 0) + amount);
       }
       
       // Get all expense categories from database
@@ -306,25 +304,25 @@ const BudgetsPage: React.FC = () => {
         .filter(category => category.type === 'expense')
         .filter(category => 
           !excludedCategories.some(excluded => category.name.includes(excluded))
-        )
-        .map(category => category.name);
+        );
       
       // Map existing budgets by category
-      const budgetMap = new Map<string, Budget>(budgets.map(b => [b.category, b]));
+      const budgetMap = new Map<number, Budget>(budgets.map(b => [b.category_id, b]));
       
       let createdCount = 0;
       let skippedCount = 0;
       
       // Create budgets for eligible categories
       for (const category of eligibleCategories) {
-        const amount = spendingByCategory.get(category) || 0;
-        const existing = budgetMap.get(category);
+        const categoryId = category.id;
+        const amount = spendingByCategory.get(categoryId) || 0;
+        const existing = budgetMap.get(categoryId);
         
         if (existing) {
           skippedCount++;
         } else {
           await invoke<Budget[]>('add_budget', { 
-            category, 
+            category_id: categoryId, 
             amount, 
             month: selectedMonth, 
             notes: '' 
