@@ -18,6 +18,7 @@ export interface TransactionListProps {
   onCategoryChange: (id: number, categoryId: number | undefined) => Promise<void>;
   onDescriptionChange?: (id: number, description: string) => Promise<void>;
   initialSelectedIds?: number[];
+  importedIds?: number[];
   onAddTransaction?: () => void;
 }
 
@@ -41,8 +42,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
   onCategoryChange,
   onDescriptionChange,
   initialSelectedIds = [],
+  importedIds = [],
   onAddTransaction,
 }) => {
+  console.log('TransactionList received importedIds:', importedIds);
   // 통합 필터 상태
   const [filter, setFilter] = useState({
     searchTerm: '',
@@ -52,6 +55,27 @@ const TransactionList: React.FC<TransactionListProps> = ({
     dateRange: { start: '', end: '' },
   });
   const [selectedIds, setSelectedIds] = useState<number[]>(initialSelectedIds);
+  
+  // Auto-select imported transactions when they are first loaded
+  React.useEffect(() => {
+    console.log('TransactionList useEffect triggered with importedIds:', importedIds);
+    if (importedIds.length > 0) {
+      console.log('Auto-selecting imported transactions:', importedIds);
+      // Force immediate update of selectedIds
+      setTimeout(() => {
+        setSelectedIds(prev => {
+          const newSelected = [...prev];
+          importedIds.forEach(id => {
+            if (!newSelected.includes(id)) {
+              newSelected.push(id);
+            }
+          });
+          console.log('Updated selectedIds:', newSelected);
+          return newSelected;
+        });
+      }, 0);
+    }
+  }, [importedIds]);
   const [editDescriptionId, setEditDescriptionId] = useState<number | null>(null);
   const [editDescriptionValue, setEditDescriptionValue] = useState<string>('');
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; type: 'single' | 'bulk' | null; targetId?: number; }>({ open: false, type: null });
@@ -119,13 +143,12 @@ const TransactionList: React.FC<TransactionListProps> = ({
       const accountInfo = transaction.notes || '';
       const description = transaction.payee || '';
       
-      // Transfer 거래의 경우 notes에서 계좌 ID를 추출하여 계좌 이름으로 변환
+      // Transfer 거래의 경우 notes에서 계좌 이름을 추출
       if (accountInfo && accountInfo.includes('[To:') || accountInfo.includes('[From:')) {
-        const match = accountInfo.match(/\[(To|From):\s*(\d+)\]/);
+        const match = accountInfo.match(/\[(To|From):\s*([^\]]+)\]/);
         if (match) {
           const direction = match[1];
-          const accountId = parseInt(match[2]);
-          const accountName = getAccountName(accounts, accountId);
+          const accountName = match[2];
           const displayText = direction === 'To' ? `To: ${accountName}` : `From: ${accountName}`;
           if (description) return `${displayText} ${description}`;
           return displayText;
@@ -143,9 +166,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
     if (transaction.type !== 'transfer') return true;
     if (transaction.amount < 0) return true;
     
-    // Transfer 거래의 경우 notes에서 계좌 ID를 확인
+    // Transfer 거래의 경우 notes에서 계좌 이름을 확인
     if (transaction.notes && transaction.notes.includes('[To:')) {
-      const match = transaction.notes.match(/\[To:\s*(\d+)\]/);
+      const match = transaction.notes.match(/\[To:\s*([^\]]+)\]/);
       return match !== null;
     }
     
@@ -205,7 +228,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
               filteredTransactions.map(transaction => (
                 <TableRow key={transaction.id}>
                   <TableCell padding="checkbox" sx={{ width: 50, minWidth: 50 }}>
-                    <Checkbox checked={selectedIds.includes(transaction.id)} onChange={e => { const id = transaction.id; setSelectedIds(prev => e.target.checked ? [...prev, id] : prev.filter(i => i !== id)); }} />
+                    <Checkbox 
+                      checked={selectedIds.includes(transaction.id)} 
+                      onChange={e => { 
+                        const id = transaction.id; 
+                        setSelectedIds(prev => e.target.checked ? [...prev, id] : prev.filter(i => i !== id)); 
+                      }} 
+                    />
                   </TableCell>
                   <TableCell sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{transaction.date}</TableCell>
                   <TableCell sx={{ width: 100, minWidth: 100, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{getAccountName(accounts, transaction.account_id)}</TableCell>

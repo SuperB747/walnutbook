@@ -90,13 +90,21 @@ const TransactionsPage: React.FC = () => {
   useEffect(() => {
     loadAllData();
     const handleDataUpdate = () => loadAllData();
+    const handleTransactionsImported = (event: CustomEvent) => {
+      console.log('TransactionsPage received transactionsImported event:', event.detail);
+      setImportedIds(event.detail.importedIds);
+    };
+    
     window.addEventListener('transactionsUpdated', handleDataUpdate);
     window.addEventListener('budgetsUpdated', handleDataUpdate);
     window.addEventListener('accountsUpdated', handleDataUpdate);
+    window.addEventListener('transactionsImported', handleTransactionsImported as EventListener);
+    
     return () => {
       window.removeEventListener('transactionsUpdated', handleDataUpdate);
       window.removeEventListener('budgetsUpdated', handleDataUpdate);
       window.removeEventListener('accountsUpdated', handleDataUpdate);
+      window.removeEventListener('transactionsImported', handleTransactionsImported as EventListener);
     };
   }, []);
 
@@ -223,21 +231,35 @@ const TransactionsPage: React.FC = () => {
   };
 
   const handleImport = async (importTxs: Partial<Transaction>[]): Promise<void> => {
+    console.log('=== TRANSACTIONSPAGE handleImport START ===');
+    console.log('handleImport called with:', importTxs);
+    console.log('This is the REAL handleImport function from TransactionsPage');
     try {
       const createdList = await invoke<Transaction[]>('import_transactions', { transactions: importTxs });
+      console.log('import_transactions returned:', createdList);
+      
       const importedCount = createdList.length;
       const duplicateCount = importTxs.length - importedCount;
+      
       const [newAccounts, newTransactions] = await Promise.all([
         invoke<Account[]>('get_accounts'),
         invoke<Transaction[]>('get_transactions')
       ]);
       setAccounts(newAccounts);
       setTransactions(newTransactions);
-      setImportedIds(createdList.map(t => t.id));
+      
+      const importedTransactionIds = createdList.map(t => t.id);
+      console.log('Setting importedIds:', importedTransactionIds);
+      console.log('Created transactions:', createdList);
+      console.log('importedTransactionIds length:', importedTransactionIds.length);
+      
+      setImportedIds(importedTransactionIds);
       setImportedDuplicateCount(duplicateCount);
       window.dispatchEvent(new Event('transactionsUpdated'));
       setSnackbar({ open: true, message: `Imported ${importedCount} transactions, skipped ${duplicateCount} duplicates.`, severity: 'success' });
-    } catch {
+      console.log('=== TRANSACTIONSPAGE handleImport END ===');
+    } catch (error) {
+      console.error('Import failed:', error);
       setSnackbar({ open: true, message: 'Failed to import transactions', severity: 'error' });
     }
   };
@@ -328,6 +350,7 @@ const TransactionsPage: React.FC = () => {
         }}
         onDescriptionChange={handleDescriptionChange}
         initialSelectedIds={importedIds}
+        importedIds={importedIds}
         onAddTransaction={() => setFormOpen(true)}
         onBulkDelete={handleBulkDelete}
       />

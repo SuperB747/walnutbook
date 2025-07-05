@@ -237,7 +237,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       if (transaction?.type === 'transfer') {
         // To Account 정보를 notes에 설정
         if (toAccountId) {
-          finalTransaction.notes = `[To: ${toAccountId}]`;
+          const toAccount = accounts.find(acc => acc.id === toAccountId);
+          if (toAccount) {
+            finalTransaction.notes = `[To: ${toAccount.name}]`;
+          }
         }
       }
       // 새로운 Transfer 거래 생성 시

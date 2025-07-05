@@ -626,6 +626,12 @@ const App: React.FC = () => {
               window.dispatchEvent(new Event('transactionsUpdated'));
               window.dispatchEvent(new Event('budgetsUpdated'));
               
+              // Dispatch custom event with imported transaction IDs for auto-checking
+              const importedTransactionIds = createdList.map(t => t.id);
+              window.dispatchEvent(new CustomEvent('transactionsImported', {
+                detail: { importedIds: importedTransactionIds }
+              }));
+              
               setSnackbar({
                 open: true,
                 message: `Imported ${importedCount} transactions, skipped ${duplicateCount} duplicates.`,

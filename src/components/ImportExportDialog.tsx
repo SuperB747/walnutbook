@@ -77,6 +77,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   transactions,
   categories,
 }) => {
+  console.log('ImportExportDialog received onImport prop:', typeof onImport);
   const [activeTab, setActiveTab] = useState(0);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -174,15 +175,13 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     
     const cleanDateStr = dateStr.trim();
     
-    // First try yyyyMMdd format
+    // For yyyyMMdd format, directly construct the date string without timezone conversion
     if (/^\d{8}$/.test(cleanDateStr)) {
       const year = cleanDateStr.slice(0, 4);
       const month = cleanDateStr.slice(4, 6);
       const day = cleanDateStr.slice(6, 8);
-      const parsedDate = new Date(`${year}-${month}-${day}`);
-      if (isValid(parsedDate)) {
-        return format(parsedDate, 'yyyy-MM-dd');
-      }
+      // Return the date directly in yyyy-MM-dd format without any timezone conversion
+      return `${year}-${month}-${day}`;
     }
     
     // Then try other formats
@@ -336,7 +335,16 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         return;
       }
       
-      await onImport(validTransactions);
+      console.log('ImportExportDialog calling onImport with:', validTransactions);
+      console.log('onImport function type:', typeof onImport);
+      console.log('onImport function name:', onImport.name);
+      console.log('onImport function toString:', onImport.toString());
+      if (typeof onImport === 'function') {
+        await onImport(validTransactions);
+        console.log('ImportExportDialog onImport completed');
+      } else {
+        console.error('onImport is not a function:', onImport);
+      }
       setImportStatus({ status: 'success', message: `Import completed successfully. ${validTransactions.length} transactions imported.` });
       setTimeout(() => {
         handleClose();
@@ -382,13 +390,17 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             const fields = results.meta.fields as string[];
             console.log('Available fields:', fields);
             
-            const dateKey = 'date posted';
+            const selectedAccountObj = accounts.find(acc => acc.id === selectedAccount);
+            const isCreditCard = selectedAccountObj?.type === 'credit';
+            
+            // Use different date fields based on account type
+            const dateKey = isCreditCard ? 'transaction date' : 'date posted';
             const amountKey = 'transaction amount';
             const payeeKey = 'description';
             const categoryKey = '';
             const notesKey = '';
             
-            console.log('Mapped CSV keys:', { dateKey, amountKey, payeeKey, categoryKey, notesKey });
+            console.log('Mapped CSV keys:', { dateKey, amountKey, payeeKey, categoryKey, notesKey, accountType: selectedAccountObj?.type });
             const validRows = (results.data as any[]).filter(row => row[dateKey] && row[amountKey]);
             console.log('Valid rows after dynamic filtering:', validRows.length);
             let csvSignLogic = 'standard';
@@ -412,9 +424,6 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
               
               const parsedDate = parseDate(rawDate);
               
-              const selectedAccountObj = accounts.find(acc => acc.id === selectedAccount);
-              const isCreditCard = selectedAccountObj?.type === 'credit';
-              
               let type: TransactionType;
               if (isNaN(amt)) {
                 type = 'expense';
@@ -425,18 +434,23 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                   csvSignLogic,
                   amount: amt,
                   transactionType,
-                  payee: row[payeeKey] || ''
+                  payee: row[payeeKey] || '',
+                  rawTransactionType: row['transaction type'],
+                  accountType: selectedAccountObj?.type
                 });
                 
-                if (transactionType === 'CREDIT') {
-                  type = 'income';
-                } else if (transactionType === 'DEBIT') {
-                  type = 'expense';
+                // 통합된 로직: csvSignLogic에 따라 결정
+                if (csvSignLogic === 'reversed') {
+                  // Reversed: 양수 = 지출, 음수 = 수입
+                  type = amt > 0 ? 'expense' : 'income';
+                  console.log('Reversed logic - positive=expense, negative=income -> type:', type);
                 } else {
-                  type = amt < 0 ? 'expense' : 'income';
+                  // Standard: 양수 = 수입, 음수 = 지출
+                  type = amt > 0 ? 'income' : 'expense';
+                  console.log('Standard logic - positive=income, negative=expense -> type:', type);
                 }
                 
-                console.log('Determined type:', type);
+                console.log('Final determined type:', type);
               }
               
               return {
@@ -449,7 +463,9 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 account_id: selectedAccount || 0,
               };
             });
+            console.log('handleCsvImport calling handleImport with:', parsedTransactions);
             await handleImport(parsedTransactions);
+            console.log('handleCsvImport handleImport completed');
             resolve();
           } catch (err: any) {
             reject(err);
@@ -461,6 +477,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   };
 
   const handleFileImport = async () => {
+    console.log('handleFileImport called');
     if (!selectedFile || !selectedAccount) {
       setImportStatus({
         status: 'error',
@@ -470,11 +487,15 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     }
 
     try {
+      console.log('Reading file content...');
       const content = await selectedFile.text();
       const fileType = selectedFile.name.split('.').pop()?.toLowerCase();
+      console.log('File type:', fileType);
 
       if (fileType === 'csv') {
+        console.log('Calling handleCsvImport...');
         await handleCsvImport(content);
+        console.log('handleCsvImport completed');
       } else {
         setImportStatus({
           status: 'error',
@@ -482,6 +503,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         });
       }
     } catch (error) {
+      console.error('handleFileImport error:', error);
       handleError(error);
     }
   };

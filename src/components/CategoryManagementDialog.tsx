@@ -20,6 +20,8 @@ import {
   MenuItem,
   Tabs,
   Tab,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import { Edit, Delete, Check, Close } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
@@ -42,6 +44,8 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
   const [editId, setEditId] = useState<number | null>(null);
   const [editName, setEditName] = useState<string>('');
   const [newName, setNewName] = useState<string>('');
+  const [isReimbursement, setIsReimbursement] = useState<boolean>(false);
+  const [reimbursementTargetCategoryId, setReimbursementTargetCategoryId] = useState<number | ''>('');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
 
@@ -58,8 +62,15 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
     if (!newName.trim()) return;
     try {
       const type = currentTab === 0 ? 'income' : 'expense';
-      await invoke<Category[]>('add_category', { name: newName.trim(), categoryType: type });
+      await invoke<Category[]>('add_category', {
+        name: newName.trim(),
+        categoryType: type,
+        isReimbursement: currentTab === 0 ? isReimbursement : false,
+        reimbursementTargetCategoryId: currentTab === 0 && isReimbursement ? reimbursementTargetCategoryId : null,
+      });
       setNewName('');
+      setIsReimbursement(false);
+      setReimbursementTargetCategoryId('');
       const result = await invoke<Category[]>("get_categories_full");
       setCategories(result);
       onChange();
@@ -151,6 +162,32 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
             }}
             variant="outlined"
           />
+          {currentTab === 0 && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={isReimbursement}
+                  onChange={(e) => setIsReimbursement(e.target.checked)}
+                />
+              }
+              label="Reimbursement"
+            />
+          )}
+          {currentTab === 0 && isReimbursement && (
+            <FormControl size="small" sx={{ minWidth: 200 }}>
+              <InputLabel id="reim-target-label">Target Expense Category</InputLabel>
+              <Select
+                labelId="reim-target-label"
+                value={reimbursementTargetCategoryId}
+                label="Target Expense Category"
+                onChange={(e) => setReimbursementTargetCategoryId(e.target.value as number)}
+              >
+                {expenseCategories.map(c => (
+                  <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
           <Button
             variant="contained"
             onClick={handleAdd}

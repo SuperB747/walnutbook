@@ -166,17 +166,17 @@ const AccountForm: React.FC<AccountFormProps> = ({
                   >
                     <MenuItem value="standard">
                       <Box>
-                        <Typography variant="body2">Standard (BMO MC)</Typography>
+                        <Typography variant="body2">Standard</Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Negative = Income, Positive = Expense
+                          Positive = Income, Negative = Expense
                         </Typography>
                       </Box>
                     </MenuItem>
                     <MenuItem value="reversed">
                       <Box>
-                        <Typography variant="body2">Reversed (PC MC)</Typography>
+                        <Typography variant="body2">Reversed</Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Negative = Expense, Positive = Income
+                          Positive = Expense, Negative = Income
                         </Typography>
                       </Box>
                     </MenuItem>
