@@ -94,18 +94,35 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
   // 수입/지출 합계 계산
   const totals = useMemo(() => {
     const result = { income: 0, expense: 0 };
+    const expenseReimbursements: Record<string, number> = {};
+
+    // 먼저 reimbursement 수입을 계산
     transactionsToSummarize.forEach(tx => {
       if (tx.type === 'income') {
         const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
-        if (cat?.is_reimbursement) {
-          // reimbursement income not counted in totals.income
+        if (cat?.is_reimbursement && cat.reimbursement_target_category_id) {
+          const targetCat = categoryMap.get(cat.reimbursement_target_category_id);
+          if (targetCat) {
+            // Reimbursement은 양수로 저장
+            expenseReimbursements[targetCat.id] = (expenseReimbursements[targetCat.id] || 0) + tx.amount;
+          }
         } else {
+          // 일반 수입은 양수
           result.income += tx.amount;
         }
-      } else if (tx.type === 'expense') {
-        result.expense += tx.amount;
       }
     });
+
+    // 지출 계산 (reimbursement 차감)
+    transactionsToSummarize.forEach(tx => {
+      if (tx.type === 'expense') {
+        // 지출은 음수로 저장되어 있음
+        const reimbursement = tx.category_id ? expenseReimbursements[tx.category_id] || 0 : 0;
+        // 지출(음수)에서 reimbursement(양수)를 더함
+        result.expense += tx.amount + reimbursement;
+      }
+    });
+
     return result;
   }, [transactionsToSummarize, categoryMap]);
 
@@ -113,31 +130,47 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
   const categoryExpenses = useMemo(() => {
     const expensesByCategory: Record<string, number> = {};
     const reimbursementsMap: Record<string, number> = {};
+
+    // 먼저 reimbursement 수입을 계산
     transactionsToSummarize.forEach(tx => {
-      if (tx.type === 'expense') {
-        const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
-        const name = cat?.name || 'Uncategorized';
-        expensesByCategory[name] = (expensesByCategory[name] || 0) + tx.amount;
-      } else if (tx.type === 'income') {
+      if (tx.type === 'income') {
         const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
         if (cat?.is_reimbursement && cat.reimbursement_target_category_id) {
-          const targetCat = categoryMap.get(cat.reimbursement_target_category_id);
-          const targetName = targetCat?.name || 'Uncategorized';
+          const targetName = getCategoryName(cat.reimbursement_target_category_id);
+          // Reimbursement은 양수로 저장
           reimbursementsMap[targetName] = (reimbursementsMap[targetName] || 0) + tx.amount;
         }
       }
     });
-    // 리임버스먼트 금액 차감
-    Object.entries(reimbursementsMap).forEach(([targetName, amount]) => {
-      expensesByCategory[targetName] = (expensesByCategory[targetName] || 0) - amount;
+
+    // 지출 계산 (reimbursement 차감)
+    transactionsToSummarize.forEach(tx => {
+      if (tx.type === 'expense') {
+        const name = getCategoryName(tx.category_id);
+        // 지출은 음수로 저장되어 있음
+        const reimbursement = reimbursementsMap[name] || 0;
+        // 지출(음수)에서 reimbursement(양수)를 더함
+        const netExpense = tx.amount + reimbursement;
+        
+        if (netExpense !== 0) {
+          expensesByCategory[name] = (expensesByCategory[name] || 0) + netExpense;
+        }
+      }
     });
-    const sorted = Object.entries(expensesByCategory).sort(([, a], [, b]) => b - a);
-    return { labels: sorted.map(([c]) => c), data: sorted.map(([, v]) => v) };
-  }, [transactionsToSummarize, categoryMap]);
+
+    // 0이 아닌 카테고리만 필터링하고 정렬 (절대값이 큰 순)
+    const filteredAndSorted = Object.entries(expensesByCategory)
+      .filter(([, amount]) => amount !== 0)
+      .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a));
+
+    return {
+      labels: filteredAndSorted.map(([c]) => c),
+      data: filteredAndSorted.map(([, v]) => v)
+    };
+  }, [transactionsToSummarize, categoryMap, getCategoryName]);
 
   // 월별 트렌드 계산
   const monthlyTrends = useMemo(() => {
-    // Use all transactions for trends
     const last6Months = eachMonthOfInterval({
       start: startOfMonth(subMonths(new Date(), 5)),
       end: endOfMonth(new Date()),
@@ -146,24 +179,43 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     const monthlyData = last6Months.map(month => {
       const monthStart = startOfMonth(month);
       const monthEnd = endOfMonth(month);
+      const monthReimbursements: Record<string, number> = {};
 
+      // 먼저 해당 월의 reimbursement 수입을 계산
+      allTransactions.forEach(tx => {
+        const txDate = new Date(tx.date);
+        if (txDate >= monthStart && txDate <= monthEnd && tx.type === 'income') {
+          const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
+          if (cat?.is_reimbursement && cat.reimbursement_target_category_id) {
+            const targetCat = categoryMap.get(cat.reimbursement_target_category_id);
+            if (targetCat) {
+              // Reimbursement은 양수로 저장
+              monthReimbursements[targetCat.id] = (monthReimbursements[targetCat.id] || 0) + tx.amount;
+            }
+          }
+        }
+      });
+
+      // 해당 월의 수입과 지출을 계산
       return allTransactions.reduce(
-        (acc, transaction) => {
-          const transactionDate = new Date(transaction.date);
-          if (transactionDate >= monthStart && transactionDate <= monthEnd) {
-            // Skip adjust and transfer type transactions for monthly trends
-            if (transaction.type === 'adjust' || transaction.type === 'transfer') {
+        (acc, tx) => {
+          const txDate = new Date(tx.date);
+          if (txDate >= monthStart && txDate <= monthEnd) {
+            if (tx.type === 'adjust' || tx.type === 'transfer') {
               return acc;
             }
-            
-            if (transaction.type === 'income') {
-              const cat = transaction.category_id != null ? categoryMap.get(transaction.category_id) : undefined;
-              // 리임버스먼트 카테고리인 경우 수입 트렌드에서 제외
+
+            const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
+            if (tx.type === 'income') {
               if (!cat?.is_reimbursement) {
-                acc.income += transaction.amount;
+                // 일반 수입은 양수
+                acc.income += tx.amount;
               }
-            } else if (transaction.type === 'expense') {
-              acc.expense += transaction.amount;
+            } else if (tx.type === 'expense') {
+              // 지출은 음수로 저장되어 있음
+              const reimbursement = tx.category_id ? monthReimbursements[tx.category_id] || 0 : 0;
+              // 지출(음수)에서 reimbursement(양수)를 더함
+              acc.expense += tx.amount + reimbursement;
             }
           }
           return acc;
@@ -188,13 +240,13 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
 
   // 카테고리별 퍼센테이지 계산
   const categoryPercentages = useMemo(() => {
-    const totalExpense = Math.abs(categoryExpenses.data.reduce((sum, amount) => sum + amount, 0));
+    const totalExpense = categoryExpenses.data.reduce((sum, amount) => sum + amount, 0);
     if (totalExpense === 0) return {};
     
     const percentages: Record<string, number> = {};
     categoryExpenses.labels.forEach((label, index) => {
       if (label) {
-        const amount = Math.abs(categoryExpenses.data[index]);
+        const amount = categoryExpenses.data[index];
         percentages[label] = (amount / totalExpense) * 100;
       }
     });
@@ -276,11 +328,10 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
         percentage: categoryPercentages[label] || 0,
         amount: categoryExpenses.data[index]
       }))
-      .filter(item => item.label !== null)
-      .sort((a, b) => b.percentage - a.percentage)
+      .filter(item => item.label !== null && item.amount !== 0)  // 금액이 0인 항목 제외
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))  // 절대값 기준으로 정렬
       .map(item => item.label as string);
     
-    console.log('Sorted labels for legend:', result);
     return result;
   }, [categoryExpenses, categoryPercentages]);
 
@@ -450,7 +501,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                     labels: categoryExpenses.labels,
                     datasets: [
                       {
-                        data: categoryExpenses.data,
+                        data: categoryExpenses.data.map(Math.abs),  // 차트에는 절대값으로 표시
                         backgroundColor: categoryExpenses.labels
                           .filter((label): label is string => label !== null)
                           .map(label => getCategoryColor(label)),
@@ -479,7 +530,8 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                           },
                           label: function(context) {
                             const value = context.raw as number;
-                            return `  ${formatCurrency(Math.abs(value))}`;
+                            const originalValue = categoryExpenses.data[context.dataIndex];
+                            return `  ${formatCurrency(originalValue)}`;  // 원래 값(음수 포함) 표시
                           }
                         }
                       }
