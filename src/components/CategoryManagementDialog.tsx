@@ -31,7 +31,7 @@ import { CategoryType, Category } from '../db';
 interface CategoryManagementDialogProps {
   open: boolean;
   onClose: () => void;
-  onChange: (categories: Category[]) => void;
+  onChange: () => void;
 }
 
 const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ open, onClose, onChange }) => {
@@ -79,7 +79,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
       setIsReimbursement(false);
       setReimbursementTargetCategoryId('');
       setCategories(result);
-      onChange(result);
+      onChange();
     } catch (error) {
       console.error('Failed to add category:', error);
     }
@@ -113,7 +113,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
       setEditIsReimbursement(false);
       setEditReimbursementTargetCategoryId('');
       setCategories(result);
-      onChange(result);
+      onChange();
     } catch (error) {
       console.error('Failed to update category:', error);
       alert(`카테고리 업데이트 실패: ${error}`);
@@ -125,7 +125,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
     try {
       const result = await invoke<Category[]>('delete_category', { id: categoryToDelete.id });
       setCategories(result);
-      onChange(result);
+      onChange();
     } catch (error) {
       console.error('Failed to delete category:', error);
     }

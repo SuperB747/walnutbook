@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Table,
   TableBody,
@@ -57,8 +57,21 @@ const AccountList: React.FC<AccountListProps> = ({
   onDelete,
   isLoading = false,
 }) => {
-  // 알파벳 순서로 정렬
-  const sortedAccounts = [...accounts].sort((a, b) => a.name.localeCompare(b.name));
+  // 타입별로 그룹화하고 각 그룹 내에서 알파벳 순서로 정렬
+  const sortedAccounts = useMemo(() => {
+    const groupedAccounts = {
+      Checking: accounts.filter(account => account.type === 'Checking').sort((a, b) => a.name.localeCompare(b.name)),
+      Savings: accounts.filter(account => account.type === 'Savings').sort((a, b) => a.name.localeCompare(b.name)),
+      Credit: accounts.filter(account => account.type === 'Credit').sort((a, b) => a.name.localeCompare(b.name))
+    };
+    
+    // 순서: Checking -> Savings -> Credit
+    return [
+      ...groupedAccounts.Checking,
+      ...groupedAccounts.Savings,
+      ...groupedAccounts.Credit
+    ];
+  }, [accounts]);
   // Net Balance 계산: 모든 계좌 balance를 그대로 합산
   const totalBalance = sortedAccounts.reduce((sum, account) => sum + account.balance, 0);
   const availableFunds = sortedAccounts.filter(a => a.type === 'Checking' || a.type === 'Savings').reduce((sum, a) => sum + a.balance, 0);

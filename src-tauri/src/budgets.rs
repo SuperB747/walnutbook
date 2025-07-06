@@ -29,22 +29,29 @@ pub fn get_budgets(app: AppHandle, month: String) -> Result<Vec<Budget>, String>
 }
 
 #[tauri::command]
-pub fn add_budget(app: AppHandle, category: String, amount: f64, month: String, notes: Option<String>) -> Result<Vec<Budget>, String> {
+pub fn add_budget(app: AppHandle, categoryId: i64, amount: f64, month: String, notes: Option<String>) -> Result<Vec<Budget>, String> {
+    println!(
+        "[DEBUG] add_budget called with: categoryId={:?}, amount={:?}, month={:?}, notes={:?}",
+        categoryId, amount, month, notes
+    );
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     
-    // Get category ID
-    let category_id: i64 = conn.query_row(
-        "SELECT id FROM categories WHERE name = ?1",
-        params![category],
-        |row| row.get(0),
-    ).map_err(|e| e.to_string())?;
-    
-    conn.execute(
+    match conn.execute(
         "INSERT INTO budgets (category_id, amount, month, notes) VALUES (?1, ?2, ?3, ?4)",
-        params![category_id, amount, month, notes],
-    )
-    .map_err(|e| e.to_string())?;
+        params![categoryId, amount, month, notes],
+    ) {
+        Ok(_) => {},
+        Err(e) => {
+            let msg = e.to_string();
+            // Ignore unique constraint failure (duplicate budget)
+            if msg.contains("UNIQUE constraint failed") {
+                // Skip duplicate entry
+            } else {
+                return Err(msg);
+            }
+        }
+    }
     
     get_budgets(app, month)
 }

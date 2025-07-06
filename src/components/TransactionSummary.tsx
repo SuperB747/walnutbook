@@ -418,13 +418,15 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     const result = categoryExpenses.labels
       .map((id, index) => ({
         id,
-        amount: Math.abs(categoryExpenses.data[index])
+        amount: Math.abs(categoryExpenses.data[index]),
+        percentage: categoryPercentages[labelsForDisplay[index]] || 0
       }))
       .filter(item => item.amount > 0)
-      .sort((a, b) => b.amount - a.amount)
+      .sort((a, b) => b.percentage - a.percentage) // 퍼센테이지 순으로 정렬
       .map(item => item.id);
+    
     return result;
-  }, [categoryExpenses]);
+  }, [categoryExpenses, categoryPercentages, labelsForDisplay]);
 
   const mid = Math.ceil(sortedLabels.length / 2);
   const leftLegend = sortedLabels.slice(0, mid);
@@ -437,7 +439,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
   const handleLegendHover = (label: string) => {
     const chart = doughnutRef.current;
     if (!chart) return;
-    const idx = categoryExpenses.labels.indexOf(Number(label));
+    const idx = labelsForDisplay.indexOf(label);
     if (idx === -1) return;
     // Chart.js v3+ API
     chart.setActiveElements([
@@ -572,17 +574,34 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
             }}>
               {/* 왼쪽 범례 */}
               <Box sx={{ minWidth: 100, maxWidth: 120 }}>
-                {leftLegend.map((id) => (
-                  <Box 
-                    key={id} 
-                    sx={{ display: 'flex', alignItems: 'center', mb: 0.5, cursor: 'pointer' }}
-                    onMouseEnter={() => handleLegendHover(labelsForDisplay[categoryExpenses.labels.indexOf(id)])}
-                    onMouseLeave={handleLegendLeave}
-                  >
-                    <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColorById(id), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
-                    <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>{labelsForDisplay[categoryExpenses.labels.indexOf(id)]}</Typography>
-                  </Box>
-                ))}
+                {leftLegend.map((id) => {
+                  const label = labelsForDisplay[categoryExpenses.labels.indexOf(id)];
+                  return (
+                    <Box 
+                      key={id} 
+                      sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        mb: 0.5, 
+                        cursor: 'pointer',
+                        p: 0.5,
+                        borderRadius: 1,
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                          transform: 'scale(1.02)'
+                        }
+                      }}
+                      onMouseEnter={() => handleLegendHover(label)}
+                      onMouseLeave={handleLegendLeave}
+                    >
+                      <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColorById(id), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
+                      <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>
+                        {label}
+                      </Typography>
+                    </Box>
+                  );
+                })}
               </Box>
               {/* 도넛 그래프 */}
               <Box sx={{ width: 180, height: 180, flexShrink: 0 }}>
@@ -611,6 +630,13 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                       tooltip: {
                         enabled: true,
                         position: 'nearest',
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: 'white',
+                        bodyColor: 'white',
+                        borderColor: 'rgba(255, 255, 255, 0.2)',
+                        borderWidth: 1,
+                        cornerRadius: 8,
+                        displayColors: false,
                         callbacks: {
                           title: function(context) {
                             const idx = context[0].dataIndex;
@@ -630,17 +656,34 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
               </Box>
               {/* 오른쪽 범례 */}
               <Box sx={{ minWidth: 100, maxWidth: 120 }}>
-                {rightLegend.map((id) => (
-                  <Box 
-                    key={id} 
-                    sx={{ display: 'flex', alignItems: 'center', mb: 0.5, cursor: 'pointer' }}
-                    onMouseEnter={() => handleLegendHover(labelsForDisplay[categoryExpenses.labels.indexOf(id)])}
-                    onMouseLeave={handleLegendLeave}
-                  >
-                    <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColorById(id), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
-                    <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>{labelsForDisplay[categoryExpenses.labels.indexOf(id)]}</Typography>
-                  </Box>
-                ))}
+                {rightLegend.map((id) => {
+                  const label = labelsForDisplay[categoryExpenses.labels.indexOf(id)];
+                  return (
+                    <Box 
+                      key={id} 
+                      sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        mb: 0.5, 
+                        cursor: 'pointer',
+                        p: 0.5,
+                        borderRadius: 1,
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                          transform: 'scale(1.02)'
+                        }
+                      }}
+                      onMouseEnter={() => handleLegendHover(label)}
+                      onMouseLeave={handleLegendLeave}
+                    >
+                      <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColorById(id), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
+                      <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>
+                        {label}
+                      </Typography>
+                    </Box>
+                  );
+                })}
               </Box>
             </Box>
           </Paper>

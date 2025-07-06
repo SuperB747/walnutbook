@@ -42,8 +42,8 @@ const BudgetsPage: React.FC = () => {
   const now = new Date();
   const currentYear = now.getFullYear();
   const years = Array.from({ length: 20 }, (_, i) => 2020 + i);
-  const [year, setYear] = useState(String(now.getFullYear()));
-  const [month, setMonth] = useState((now.getMonth() + 1).toString().padStart(2, '0'));
+  const [year, setYear] = useState(() => localStorage.getItem('budgetYear') || String(now.getFullYear()));
+  const [month, setMonth] = useState(() => localStorage.getItem('budgetMonth') || (now.getMonth() + 1).toString().padStart(2, '0'));
   const selectedMonth = `${year}-${month}`;
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -84,10 +84,12 @@ const BudgetsPage: React.FC = () => {
     window.addEventListener('accountsUpdated', handleDataUpdate);
     window.addEventListener('transactionsUpdated', handleDataUpdate);
     window.addEventListener('budgetsUpdated', handleDataUpdate);
+    window.addEventListener('categoriesUpdated', handleDataUpdate);
     return () => {
       window.removeEventListener('accountsUpdated', handleDataUpdate);
       window.removeEventListener('transactionsUpdated', handleDataUpdate);
       window.removeEventListener('budgetsUpdated', handleDataUpdate);
+      window.removeEventListener('categoriesUpdated', handleDataUpdate);
     };
   }, []);
 
@@ -128,7 +130,7 @@ const BudgetsPage: React.FC = () => {
         });
       } else {
         updatedBudgets = await invoke<Budget[]>('add_budget', {
-          category_id: budgetData.category_id!,
+          categoryId: budgetData.category_id!,
           amount: budgetData.amount!,
           month: selectedMonth,
           notes: budgetData.notes,
@@ -162,6 +164,13 @@ const BudgetsPage: React.FC = () => {
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(amount);
 
   const handleAutoGenerateBudget = async () => {
+    // Auto-generate is only allowed for the current month
+    const today = new Date();
+    const todayMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    if (selectedMonth !== todayMonthStr) {
+      setSnackbar({ open: true, message: 'Auto-generate is only allowed for the current month.', severity: 'info' });
+      return;
+    }
     try {
       const currentYear = parseInt(year);
       const currentMonth = parseInt(month);
@@ -171,46 +180,53 @@ const BudgetsPage: React.FC = () => {
         prevMonth = 12;
         prevYear = currentYear - 1;
       }
-      const prevMonthStr = `${prevYear}-${prevMonth.toString().padStart(2, '0')}`;
+      const prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2,'0')}`;
+
       const prevBudgets = await invoke<Budget[]>('get_budgets', { month: prevMonthStr });
       if (prevBudgets.length > 0) {
-        const existingCategories = new Set(budgets.map(b => b.category_id));
-        const toImport = prevBudgets.filter(b => !existingCategories.has(b.category_id));
-        if (toImport.length > 0) {
-          for (const b of toImport) {
-            await invoke('add_budget', { category_id: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
+        const currentBudgets = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
+        const existingCatIds = new Set(currentBudgets.map(b => b.category_id));
+        for (const b of prevBudgets) {
+          if (!existingCatIds.has(b.category_id)) {
+            console.log('add_budget params', { categoryId: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
+            await invoke<Budget[]>('add_budget', { categoryId: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
           }
         }
       }
-      const updatedBudgets = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
-      setBudgets(updatedBudgets);
+
+      const budgetsAfterCopy = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
+      setBudgets(budgetsAfterCopy);
+
       const lastMonthExpenses = transactions.filter(t => t.type === 'Expense' && t.date.startsWith(prevMonthStr));
       const spendingByCategory = new Map<number, number>();
       for (const t of lastMonthExpenses) {
-        if (t.category_id !== undefined) {
-          const amount = Math.abs(t.amount);
-          spendingByCategory.set(t.category_id, (spendingByCategory.get(t.category_id) || 0) + amount);
+        if (t.category_id != null) {
+          spendingByCategory.set(t.category_id, (spendingByCategory.get(t.category_id) || 0) + Math.abs(t.amount));
         }
       }
-      const allCategories = await invoke<Category[]>("get_categories_full");
-      const excludedCategories = ['Reimbursement', 'Reimbursement [G]', 'Reimbursement [U]', 'Reimbursement [E]', 'Transfer', 'Adjust'];
-      const eligibleCategories = allCategories.filter(category => category.type === 'Expense').filter(category => !excludedCategories.some(excluded => category.name.includes(excluded)));
-      const budgetMap = new Map<number, Budget>(budgets.map(b => [b.category_id, b]));
+
+      const allCategories = await invoke<Category[]>('get_categories_full');
+      const excluded = ['Reimbursement', 'Transfer', 'Adjust'];
+      const eligible = allCategories
+        .filter(c => c.type === 'Expense' && !excluded.some(ex => c.name.includes(ex)));
+
       let createdCount = 0;
       let skippedCount = 0;
-      for (const category of eligibleCategories) {
-        const categoryId = category.id;
-        const amount = spendingByCategory.get(categoryId) || 0;
-        const existing = budgetMap.get(categoryId);
-        if (existing) {
+      const budgetedCatIds = new Set(budgetsAfterCopy.map(b => b.category_id));
+      for (const c of eligible) {
+        if (budgetedCatIds.has(c.id)) {
           skippedCount++;
         } else {
-          await invoke<Budget[]>('add_budget', { category_id: categoryId, amount, month: selectedMonth, notes: '' });
+          const amt = spendingByCategory.get(c.id) || 0;
+          console.log('add_budget params', { categoryId: c.id, amount: amt, month: selectedMonth, notes: '' });
+          await invoke<Budget[]>('add_budget', { categoryId: c.id, amount: amt, month: selectedMonth, notes: '' });
           createdCount++;
         }
       }
+
       const finalBudgets = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
       setBudgets(finalBudgets);
+
       let message = `Auto-generate completed: Created ${createdCount} new budget(s)`;
       if (skippedCount > 0) message += `, skipped ${skippedCount} existing budget(s)`;
       setSnackbar({ open: true, message, severity: 'success' });
@@ -227,7 +243,11 @@ const BudgetsPage: React.FC = () => {
             <Select
               value={year}
               size="small"
-              onChange={e => setYear(e.target.value)}
+              onChange={e => {
+                const newYear = e.target.value;
+                setYear(newYear);
+                localStorage.setItem('budgetYear', newYear);
+              }}
               sx={{ width: 90 }}
             >
               {years.map(y => (
@@ -237,7 +257,11 @@ const BudgetsPage: React.FC = () => {
             <Select
               value={month}
               size="small"
-              onChange={e => setMonth(e.target.value)}
+              onChange={e => {
+                const newMonth = e.target.value;
+                setMonth(newMonth);
+                localStorage.setItem('budgetMonth', newMonth);
+              }}
               sx={{ width: 120 }}
             >
               {MONTHS.map(m => (

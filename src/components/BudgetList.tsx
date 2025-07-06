@@ -54,11 +54,9 @@ const BudgetList: React.FC<BudgetListProps> = ({
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
-  const getProgressColor = (spent: number, budgeted: number) => {
-    const ratio = spent / budgeted;
-    if (ratio >= 1) return 'error';
-    if (ratio >= 0.8) return 'warning';
-    return 'primary';
+  const getProgressColor = (progress: number) => {
+    if (progress > 100) return 'error';
+    return 'success';
   };
 
   return (
@@ -91,9 +89,20 @@ const BudgetList: React.FC<BudgetListProps> = ({
           {budgets
             .sort((a, b) => getCategoryName(a.category_id).localeCompare(getCategoryName(b.category_id)))
             .map((budget) => {
-            const spent = calculateSpentAmount(budget.category_id);
+            const spent = Math.abs(calculateSpentAmount(budget.category_id));
             const remaining = budget.amount - spent;
-            const progress = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
+            const hasBudget = budget.amount > 0;
+            const progress = hasBudget ? Math.min((spent / budget.amount) * 100, 999) : 0;
+            // fillPercent: how much to fill within 0-200% scale
+            const fillPercent = hasBudget ? Math.min(progress / 2, 100) : 0;
+            // barColor based on actual progress
+            const barColor = hasBudget
+              ? (progress > 200
+                  ? 'error.dark'
+                  : progress > 100
+                    ? 'error.light'
+                    : 'success.main')
+              : undefined;
 
             return (
               <TableRow 
@@ -127,16 +136,25 @@ const BudgetList: React.FC<BudgetListProps> = ({
                 </TableCell>
                 <TableCell sx={{ minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ width: '100%', mr: 1 }}>
+                    <Box sx={{ width: '100%', mr: 1, position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
                       <LinearProgress
                         variant="determinate"
-                        value={Math.min(progress, 100)}
-                        color={getProgressColor(spent, budget.amount)}
+                        value={fillPercent}
+                        sx={{
+                          height: 16,
+                          borderRadius: 0,
+                          bgcolor: 'transparent',
+                          '& .MuiLinearProgress-bar': {
+                            backgroundColor: barColor,
+                          }
+                        }}
                       />
+                      {/* 100% marker line */}
+                      <Box sx={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: '2px', bgcolor: 'divider' }} />
                     </Box>
                     <Box sx={{ minWidth: 35 }}>
                       <Typography variant="body2" color="text.secondary">
-                        {Math.round(progress)}%
+                        {hasBudget ? Math.round(progress) : 0}%
                       </Typography>
                     </Box>
                   </Box>
