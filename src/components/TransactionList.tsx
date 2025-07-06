@@ -140,10 +140,32 @@ const TransactionList: React.FC<TransactionListProps> = ({
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   const getDisplayPayee = (transaction: Transaction) => {
     if (transaction.type === 'Transfer') {
+      // Transfer 거래의 경우 payee 필드에 "[계좌명 → 계좌명]" 형태로 저장되어 있음
+      if (transaction.payee && transaction.payee.includes(' → ')) {
+        const description = transaction.payee;
+        const notes = transaction.notes || '';
+        
+        // Notes에서 임시 정보 제거
+        let cleanNotes = notes;
+        if (cleanNotes.includes('[TO_ACCOUNT_ID:')) {
+          const endIndex = cleanNotes.indexOf(']');
+          if (endIndex !== -1) {
+            cleanNotes = cleanNotes.substring(endIndex + 1).trim();
+          }
+        }
+        
+        // Description과 Notes 결합
+        if (cleanNotes) {
+          return `${description} ${cleanNotes}`;
+        } else {
+          return description;
+        }
+      }
+      
+      // 기존 방식 (notes에서 계좌 정보 추출)
       const accountInfo = transaction.notes || '';
       const description = transaction.payee || '';
       
-      // Transfer 거래의 경우 notes에서 계좌 이름을 추출
       if (accountInfo && accountInfo.includes('[To:') || accountInfo.includes('[From:')) {
         const match = accountInfo.match(/\[(To|From):\s*([^\]]+)\]/);
         if (match) {

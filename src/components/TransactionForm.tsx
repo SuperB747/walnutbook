@@ -60,7 +60,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     date: format(new Date(), 'yyyy-MM-dd'),
     account_id: accounts[0]?.id,
     type: 'Expense' as TransactionType,
-    category_id: 0,
+    category_id: undefined,
     payee: '',
   });
 
@@ -95,11 +95,26 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (transaction) {
       // 편집 창에서는 amount를 항상 양수로 표시
       const displayAmount = transaction.amount ? Math.abs(transaction.amount) : undefined;
+      
+      // Transfer 거래의 경우 notes에서 자동 생성된 정보 제거
+      let cleanNotes = transaction.notes;
+      if (transaction.type === 'Transfer' && transaction.notes) {
+        // [To: 계좌명] 패턴 제거
+        cleanNotes = transaction.notes.replace(/\[To: [^\]]+\]/, '').trim();
+        // [From: 계좌ID] 패턴 제거
+        cleanNotes = cleanNotes.replace(/\[From: \d+\]/, '').trim();
+        // 빈 문자열이면 undefined로 설정
+        if (cleanNotes === '') {
+          cleanNotes = undefined;
+        }
+      }
+      
       setFormData({
         ...transaction,
         date: transaction.date,
         amount: displayAmount, // 항상 양수로 표시
         category_id: transaction.category_id,
+        notes: cleanNotes,
       });
       setAmountInputValue(displayAmount?.toString() || '');
       
@@ -120,7 +135,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         ...preservedValues,
         amount: undefined,
         notes: '',
-        category_id: 0,
+        category_id: undefined,
       });
       setAmountInputValue('');
       setToAccountId(undefined);
@@ -133,11 +148,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (!formData.date) errors.date = 'Date is required';
     if (!formData.account_id) errors.account_id = 'Account is required';
     if (!formData.type) errors.type = 'Type is required';
-    if (formData.type !== 'Transfer' && formData.type !== 'Adjust' && !formData.category_id) {
-      errors.category_id = 'Category is required';
-    }
     if (formData.amount === undefined || formData.amount === null) errors.amount = 'Amount is required';
-    if (!formData.payee?.trim()) errors.payee = 'Description is required';
+    if (formData.type !== 'Transfer' && !formData.payee?.trim()) errors.payee = 'Description is required';
     
     setErrors(errors);
     return Object.keys(errors).length === 0;
@@ -173,7 +185,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
 
     if (name === 'category_id') {
-      updates.category_id = parseInt(value, 10);
+      updates.category_id = value === '' ? undefined : parseInt(value, 10);
     }
 
     if (name === 'type') {
@@ -188,6 +200,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         if (transferCategory) {
           updates.category_id = transferCategory.id;
         }
+        // Transfer로 변경 시 toAccountId 초기화
+        setToAccountId(undefined);
       }
     }
 
@@ -226,6 +240,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[DEBUG] handleSubmit called');
+    console.log('[DEBUG] formData:', formData);
+    console.log('[DEBUG] toAccountId:', toAccountId);
+    
     if (validateForm()) {
       let finalTransaction = {
         ...formData,
@@ -233,26 +251,62 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         amount: fixAmountSign(formData.amount, formData.type, allCategories.find(cat => cat.id === formData.category_id)?.name)
       };
       
+      console.log('[DEBUG] finalTransaction before processing:', finalTransaction);
+      
       // Transfer 거래 수정 시
       if (transaction?.type === 'Transfer') {
-        // To Account 정보를 notes에 설정
-        if (toAccountId) {
-          const toAccount = accounts.find(acc => acc.id === toAccountId);
-          if (toAccount) {
-            finalTransaction.notes = `[To: ${toAccount.name}]`;
+        console.log('[DEBUG] Editing existing Transfer transaction');
+        // To Account 정보는 payee에 이미 포함되어 있으므로 notes는 사용자 입력만 유지
+        // 기존 notes에서 자동 생성된 정보 제거
+        let cleanNotes = finalTransaction.notes;
+        if (cleanNotes) {
+          cleanNotes = cleanNotes.replace(/\[To: [^\]]+\]/, '').trim();
+          cleanNotes = cleanNotes.replace(/\[From: \d+\]/, '').trim();
+          if (cleanNotes === '') {
+            cleanNotes = undefined;
           }
         }
+        finalTransaction.notes = cleanNotes;
+        
+        // Transfer 거래에서는 Description을 자동으로 설정
+        if (toAccountId) {
+          const fromAccount = accounts.find(acc => acc.id === formData.account_id);
+          const toAccount = accounts.find(acc => acc.id === toAccountId);
+          if (fromAccount && toAccount) {
+            finalTransaction.payee = `[${fromAccount.name} → ${toAccount.name}]`;
+          }
+        }
+        
+        // Transfer 거래에서는 category_id를 undefined로 설정
+        finalTransaction.category_id = undefined;
       }
       // 새로운 Transfer 거래 생성 시
       else if (formData.type === 'Transfer' && toAccountId) {
-        const description = finalTransaction.payee;
-        finalTransaction.notes = description;
-        finalTransaction.payee = `${formData.account_id} → ${toAccountId}`; // 백엔드에서 계좌 이름으로 대체됨
+        console.log('[DEBUG] Creating new Transfer transaction');
+        const fromAccount = accounts.find(acc => acc.id === formData.account_id);
+        const toAccount = accounts.find(acc => acc.id === toAccountId);
+        if (fromAccount && toAccount) {
+          finalTransaction.payee = `[${fromAccount.name} → ${toAccount.name}]`;
+          // Notes에는 사용자가 입력한 내용만 저장하되, 백엔드에서 to_account_id를 찾을 수 있도록 임시 정보 포함
+          const userNotes = formData.notes || '';
+          finalTransaction.notes = userNotes ? `[TO_ACCOUNT_ID:${toAccountId}] ${userNotes}` : `[TO_ACCOUNT_ID:${toAccountId}]`;
+          // Transfer 거래에서는 category_id를 undefined로 설정
+          finalTransaction.category_id = undefined;
+          console.log('[DEBUG] Set payee and notes for new transfer:', finalTransaction.payee, finalTransaction.notes);
+        }
       }
       // Adjust 거래는 category를 그대로 저장 (백엔드에서 부호 결정에 사용)
       // category는 이미 'Add' 또는 'Subtract'로 설정되어 있음
       
-      await onSave(finalTransaction);
+      console.log('[DEBUG] finalTransaction after processing:', finalTransaction);
+      
+      try {
+        await onSave(finalTransaction);
+        console.log('[DEBUG] onSave completed successfully');
+      } catch (error) {
+        console.error('[DEBUG] onSave failed:', error);
+        throw error;
+      }
       
       // In continuous mode, preserve current values for next transaction
       if (!transaction) {
@@ -264,6 +318,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           category_id: formData.category_id,
         });
       }
+    } else {
+      console.log('[DEBUG] Form validation failed');
     }
   };
 
@@ -414,19 +470,22 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   fullWidth
                   label="Description"
                   name="payee"
-                  value={formData.payee || ''}
+                  value={formData.type === 'Transfer' && toAccountId ? 
+                    (() => {
+                      const fromAccount = accounts.find(acc => acc.id === formData.account_id);
+                      const toAccount = accounts.find(acc => acc.id === toAccountId);
+                      return fromAccount && toAccount ? `[${fromAccount.name} → ${toAccount.name}]` : (formData.payee || '');
+                    })() : 
+                    (formData.payee || '')
+                  }
                   onChange={handlePayeeChange}
                   required
                   error={!!errors.payee}
                   helperText={errors.payee}
-                  placeholder="e.g., Monthly transfer to savings"
-                  inputRef={descriptionRef}
+                  disabled={formData.type === 'Transfer'}
+                  InputLabelProps={{ shrink: true }}
                   inputProps={{
-                    style: { cursor: 'text' },
-                    maxLength: 100,
-                    autoFocus: true,
-                    autoComplete: 'off',
-                    'data-lpignore': 'true'
+                    readOnly: formData.type === 'Transfer',
                   }}
                 />
               </Grid>
@@ -438,7 +497,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     value={formData.account_id?.toString() || ''}
                     onChange={handleChange}
                     label="Account"
-                    disabled={transaction?.type === 'Transfer'}
+                    disabled={transaction?.type === 'Transfer' || (transaction && formData.type === 'Transfer')}
                   >
                     {accounts.map((account) => (
                       <MenuItem key={account.id} value={account.id.toString()}>
@@ -460,17 +519,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       onChange={(e) => {
                         const newToAccountId = parseInt(e.target.value, 10);
                         setToAccountId(newToAccountId);
-                        
-                        // To Account 변경 시 notes 업데이트
-                        if (newToAccountId) {
-                          const toAccount = accounts.find(acc => acc.id === newToAccountId);
-                          if (toAccount) {
-                            setFormData(prev => ({
-                              ...prev,
-                              notes: `[To: ${newToAccountId}]`
-                            }));
-                          }
-                        }
                       }}
                       label="To Account"
                     >
