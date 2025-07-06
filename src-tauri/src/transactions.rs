@@ -252,7 +252,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let mut conn = Connection::open(&path).map_err(|e| e.to_string())?;
     
     // 기존 거래 정보 조회
-    let (old_type, old_transfer_id) = {
+    let (old_type, _old_transfer_id) = {
         let mut sel = conn.prepare("SELECT type, transfer_id FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
         let mut rows = sel.query_map(params![transaction.id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
@@ -539,6 +539,8 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
     };
     
     let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let mut imported_count = 0;
+    let mut duplicate_count = 0;
     
     // Import new transactions
     for t in transactions {
@@ -548,11 +550,17 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
         let key = (t.date.clone(), cents, t.payee.clone());
         
         // Skip if duplicate
-        if existing_keys.contains(&key) { continue; }
+        if existing_keys.contains(&key) { 
+            duplicate_count += 1;
+            continue; 
+        }
         
         // Skip if duplicate transfer
         let transfer_key = (t.date.clone(), cents);
-        if transfer_keys.contains(&transfer_key) { continue; }
+        if transfer_keys.contains(&transfer_key) { 
+            duplicate_count += 1;
+            continue; 
+        }
         
         // Insert new transaction
         tx.execute(
@@ -568,10 +576,21 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
                 None::<i64>
             ],
         ).map_err(|e| e.to_string())?;
+        
+        imported_count += 1;
     }
     
     tx.commit().map_err(|e| e.to_string())?;
-    get_transactions(app)
+    
+    // Return transactions with import statistics
+    let mut result = get_transactions(app)?;
+    
+    // Add import statistics to the first transaction (temporary storage)
+    if !result.is_empty() {
+        result[0].notes = Some(format!("IMPORT_STATS: imported={}, duplicates={}", imported_count, duplicate_count));
+    }
+    
+    Ok(result)
 }
 
 #[tauri::command]

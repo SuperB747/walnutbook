@@ -709,8 +709,18 @@ const App: React.FC = () => {
           onImport={async (transactions) => {
             try {
               const createdList = await invoke<Transaction[]>('import_transactions', { transactions });
-              const importedCount = createdList.length;
-              const duplicateCount = transactions.length - importedCount;
+              
+              // Extract import statistics from the first transaction's notes
+              let importedCount = createdList.length;
+              let duplicateCount = 0;
+              
+              if (createdList.length > 0 && createdList[0].notes) {
+                const statsMatch = createdList[0].notes.match(/IMPORT_STATS: imported=(\d+), duplicates=(\d+)/);
+                if (statsMatch) {
+                  importedCount = parseInt(statsMatch[1]);
+                  duplicateCount = parseInt(statsMatch[2]);
+                }
+              }
               
               // 로컬 상태를 즉시 업데이트하여 부드러운 UI 전환
               const [newAccounts, newTransactions] = await Promise.all([

@@ -269,8 +269,18 @@ const TransactionsPage: React.FC = () => {
       const createdList = await invoke<Transaction[]>('import_transactions', { transactions: importTxs });
       console.log('import_transactions returned:', createdList);
       
-      const importedCount = createdList.length;
-      const duplicateCount = importTxs.length - importedCount;
+      // Extract import statistics from the first transaction's notes
+      let importedCount = createdList.length;
+      let duplicateCount = 0;
+      
+      if (createdList.length > 0 && createdList[0].notes) {
+        const statsMatch = createdList[0].notes.match(/IMPORT_STATS: imported=(\d+), duplicates=(\d+)/);
+        if (statsMatch) {
+          importedCount = parseInt(statsMatch[1]);
+          duplicateCount = parseInt(statsMatch[2]);
+          console.log('Extracted import stats:', { importedCount, duplicateCount });
+        }
+      }
       
       const [newAccounts, newTransactions] = await Promise.all([
         invoke<Account[]>('get_accounts'),

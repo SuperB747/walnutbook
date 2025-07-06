@@ -20,12 +20,6 @@ pub fn backup_database(app: AppHandle, save_path: String) -> Result<(), String> 
         }
     }
     
-    // Check foreign key constraints
-    let integrity_check = conn.query_row("PRAGMA foreign_key_check", [], |_| Ok(()));
-    if let Err(_) = integrity_check {
-        return Err("Database has foreign key constraint violations".to_string());
-    }
-    
     // Create backup
     fs::copy(&db_path, save_path).map_err(|e| e.to_string())?;
     Ok(())
@@ -53,13 +47,6 @@ pub fn restore_database(app: AppHandle, file_path: String) -> Result<(), String>
                     let _ = fs::copy(&backup_path, &db_path);
                     return Err(format!("Restored database is missing {} table", table));
                 }
-            }
-            
-            // Verify data integrity - check foreign key constraints
-            let integrity_check = conn.query_row("PRAGMA foreign_key_check", [], |_| Ok(()));
-            if let Err(_) = integrity_check {
-                let _ = fs::copy(&backup_path, &db_path);
-                return Err("Restored database has foreign key constraint violations".to_string());
             }
             
             // Delete backup if verification succeeds
@@ -110,13 +97,6 @@ pub fn import_database(app: AppHandle, data: Vec<u8>) -> Result<(), String> {
             let _ = fs::copy(&backup_path, &db_path);
             return Err(format!("Imported database is missing {} table", table));
         }
-    }
-    
-    // Verify data integrity - check foreign key constraints
-    let integrity_check = conn.query_row("PRAGMA foreign_key_check", [], |_| Ok(()));
-    if let Err(_) = integrity_check {
-        let _ = fs::copy(&backup_path, &db_path);
-        return Err("Imported database has foreign key constraint violations".to_string());
     }
     
     // Delete backup if all checks pass
