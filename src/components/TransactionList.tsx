@@ -262,7 +262,25 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   <TableCell sx={{ width: 100, minWidth: 100, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{getAccountName(accounts, transaction.account_id)}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => { setEditDescriptionId(transaction.id); setEditDescriptionValue(transaction.payee); }} style={{ cursor: 'text' }}>
                     {editDescriptionId === transaction.id ? (
-                      <TextField value={editDescriptionValue} size="small" variant="standard" onChange={e => setEditDescriptionValue(e.target.value)} onBlur={async () => { if (typeof onDescriptionChange === 'function') await onDescriptionChange(transaction.id, editDescriptionValue.trim()); setEditDescriptionId(null); }} onKeyDown={async e => { if (e.key === 'Enter') { if (typeof onDescriptionChange === 'function') await onDescriptionChange(transaction.id, editDescriptionValue.trim()); setEditDescriptionId(null); } else if (e.key === 'Escape') { setEditDescriptionId(null); } }} autoFocus sx={{ width: '100%', fontSize: '0.9rem', p: 0, '& .MuiInputBase-input': { fontSize: '0.9rem !important', lineHeight: '1.2', padding: '0 !important' }, '& .MuiInputBase-root': { fontSize: '0.9rem !important' } }} />
+                      <TextField value={editDescriptionValue} size="small" variant="standard" onChange={e => setEditDescriptionValue(e.target.value)} onBlur={async () => { 
+                        const newValue = editDescriptionValue.trim();
+                        const originalValue = transaction.payee;
+                        if (newValue !== originalValue && typeof onDescriptionChange === 'function') {
+                          await onDescriptionChange(transaction.id, newValue);
+                        }
+                        setEditDescriptionId(null); 
+                      }} onKeyDown={async e => { 
+                        if (e.key === 'Enter') { 
+                          const newValue = editDescriptionValue.trim();
+                          const originalValue = transaction.payee;
+                          if (newValue !== originalValue && typeof onDescriptionChange === 'function') {
+                            await onDescriptionChange(transaction.id, newValue);
+                          }
+                          setEditDescriptionId(null); 
+                        } else if (e.key === 'Escape') { 
+                          setEditDescriptionId(null); 
+                        } 
+                      }} autoFocus sx={{ width: '100%', fontSize: '0.9rem', p: 0, '& .MuiInputBase-input': { fontSize: '0.9rem !important', lineHeight: '1.2', padding: '0 !important' }, '& .MuiInputBase-root': { fontSize: '0.9rem !important' } }} />
                     ) : (
                       <Typography noWrap sx={{ fontSize: '0.9rem' }}>{getDisplayPayee(transaction)}</Typography>
                     )}
