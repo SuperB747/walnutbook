@@ -26,20 +26,12 @@ import {
 } from '@mui/material';
 import { Edit, Delete, Check, Close } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
-import { CategoryType } from '../db';
-
-interface Category {
-  id: number;
-  name: string;
-  type: CategoryType;
-  is_reimbursement: boolean;
-  reimbursement_target_category_id: number | null;
-}
+import { CategoryType, Category } from '../db';
 
 interface CategoryManagementDialogProps {
   open: boolean;
   onClose: () => void;
-  onChange: () => void;
+  onChange: (categories: Category[]) => void;
 }
 
 const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ open, onClose, onChange }) => {
@@ -76,18 +68,18 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
   const handleAdd = async () => {
     if (!newName.trim()) return;
     try {
-      const type = currentTab === 0 ? 'Income' : 'Expense';
-      await invoke<Category[]>('add_category', {
+      const categoryType = currentTab === 0 ? 'Income' : 'Expense';
+      const result = await invoke<Category[]>('add_category', {
         name: newName.trim(),
-        type,
+        categoryType,
         isReimbursement: currentTab === 0 ? isReimbursement : false,
         reimbursementTargetCategoryId: currentTab === 0 && isReimbursement ? reimbursementTargetCategoryId : null,
       });
       setNewName('');
       setIsReimbursement(false);
       setReimbursementTargetCategoryId('');
-      loadCategories();
-      onChange();
+      setCategories(result);
+      onChange(result);
     } catch (error) {
       console.error('Failed to add category:', error);
     }
@@ -95,23 +87,36 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
 
   const handleUpdate = async () => {
     if (editId == null || !editName.trim()) return;
+    
+    console.log('Updating category:', {
+      id: editId,
+      name: editName.trim(),
+      categoryType: currentTab === 0 ? 'Income' : 'Expense',
+      isReimbursement: currentTab === 0 ? editIsReimbursement : false,
+      reimbursementTargetCategoryId: currentTab === 0 && editIsReimbursement ? editReimbursementTargetCategoryId : null,
+    });
+    
     try {
-      const type = currentTab === 0 ? 'Income' : 'Expense';
-      await invoke<Category[]>('update_category', {
+      const categoryType = currentTab === 0 ? 'Income' : 'Expense';
+      const result = await invoke<Category[]>('update_category', {
         id: editId,
         name: editName.trim(),
-        type,
+        categoryType,
         isReimbursement: currentTab === 0 ? editIsReimbursement : false,
         reimbursementTargetCategoryId: currentTab === 0 && editIsReimbursement ? editReimbursementTargetCategoryId : null,
       });
+      
+      console.log('Update successful, result:', result);
+      
       setEditId(null);
       setEditName('');
       setEditIsReimbursement(false);
       setEditReimbursementTargetCategoryId('');
-      loadCategories();
-      onChange();
+      setCategories(result);
+      onChange(result);
     } catch (error) {
       console.error('Failed to update category:', error);
+      alert(`카테고리 업데이트 실패: ${error}`);
     }
   };
 
@@ -120,8 +125,10 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
     try {
       const result = await invoke<Category[]>('delete_category', { id: categoryToDelete.id });
       setCategories(result);
-      onChange();
-    } catch {}
+      onChange(result);
+    } catch (error) {
+      console.error('Failed to delete category:', error);
+    }
     setDeleteConfirmOpen(false);
     setCategoryToDelete(null);
   };

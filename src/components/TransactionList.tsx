@@ -27,9 +27,9 @@ const getAccountName = (accounts: Account[], accountId: number): string => {
   return account ? account.name : 'Unknown Account';
 };
 const getCategoryName = (categories: Category[], categoryId: number | undefined): string => {
-  if (!categoryId) return '';
+  if (!categoryId) return 'Undefined';
   const category = categories.find(cat => cat.id === categoryId);
-  return category?.name || '';
+  return category?.name || 'Undefined';
 };
 
 const TransactionList: React.FC<TransactionListProps> = ({

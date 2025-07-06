@@ -362,27 +362,20 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       
       console.log('CSV Import Debug - Raw content preview:', allLines.slice(0, 5));
       
-      // Skip the first line (metadata)
-      const contentToProcess = allLines.slice(1);
-      
-      // Use the second line as header
-      const headerLine = contentToProcess[0];
+      // 헤더는 첫 줄!
+      const headerLine = allLines[0];
       console.log('Selected header line:', headerLine);
-      
-      // Use comma as delimiter
-      const bestDelimiter = ',';
-      console.log('Selected delimiter:', bestDelimiter);
-      
-      const contentToParse = contentToProcess.join('\n');
+      // 데이터는 그 아래부터!
+      const contentToParse = allLines.join('\n'); // 전체를 파싱
       
       Papa.parse<CSVTransaction>(contentToParse, {
         header: true,
         skipEmptyLines: true,
-        delimiter: bestDelimiter,
+        delimiter: ',',
         transformHeader: header => header.trim().toLowerCase(),
         complete: async (results) => {
           console.log('CSV import header line:', headerLine);
-          console.log('Detected delimiter:', bestDelimiter);
+          console.log('Detected delimiter:', ',');
           console.log('Parsed raw rows:', results.data.length, 'fields:', results.meta.fields);
           console.log('Sample data:', results.data.slice(0, 3));
           
@@ -393,15 +386,30 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             const selectedAccountObj = accounts.find(acc => acc.id === selectedAccount);
             const isCreditCard = selectedAccountObj?.type === 'Credit';
             
-            // Use different date fields based on account type
-            const dateKey = isCreditCard ? 'transaction date' : 'date posted';
-            const amountKey = 'transaction amount';
-            const payeeKey = 'description';
-            const categoryKey = '';
-            const notesKey = '';
+            // 자동감지 로직: 다양한 은행 포맷 지원
+            const lowerFields = fields.map(f => f.toLowerCase());
+            function autoDetectField(candidates: string[]) {
+              const idx = lowerFields.findIndex(f => candidates.includes(f));
+              return idx !== -1 ? fields[idx] : undefined;
+            }
+
+            // Payee/Description
+            const payeeKey = autoDetectField(['payee', 'description', 'desc', 'merchant']) || fields[0];
+            // Amount
+            const amountKey = autoDetectField(['amount', 'transaction amount', 'amt']) || fields[1];
+            // Date (후보군에 'posted date' 추가)
+            const dateKey = autoDetectField(['date', 'transaction date', 'date posted', 'posted date']) || fields[2];
+            // Category/Notes(옵션)
+            const categoryKey = autoDetectField(['category', 'cat']);
+            const notesKey = autoDetectField(['notes', 'memo', 'note']);
             
             console.log('Mapped CSV keys:', { dateKey, amountKey, payeeKey, categoryKey, notesKey, accountType: selectedAccountObj?.type });
-            const validRows = (results.data as any[]).filter(row => row[dateKey] && row[amountKey]);
+            console.log('Sample row:', results.data[0]);
+            // 필터 조건 강화: null/undefined/공백 모두 걸러냄
+            const validRows = (results.data as any[]).filter(row =>
+              row[dateKey] != null && row[dateKey].toString().trim() !== '' &&
+              row[amountKey] != null && row[amountKey].toString().trim() !== ''
+            );
             console.log('Valid rows after dynamic filtering:', validRows.length);
             let csvSignLogic = 'standard';
             try {
@@ -537,8 +545,8 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     const found = categories.find(c => c.name === categoryName);
     if (found) return found.id;
     
-    // If Uncategorized is not found, try to find "Other" category
-    if (categoryName === 'Uncategorized') {
+            // If Undefined is not found, try to find "Other" category
+        if (categoryName === 'Undefined') {
       const otherCategory = categories.find(c => c.name === 'Other');
       if (otherCategory) return otherCategory.id;
     }

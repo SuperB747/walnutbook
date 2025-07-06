@@ -40,7 +40,7 @@ const BudgetList: React.FC<BudgetListProps> = ({
   };
 
   const getCategoryName = (category_id: number) => {
-    return categories.find(c => c.id === category_id)?.name || 'Uncategorized';
+    return categories.find(c => c.id === category_id)?.name || 'Undefined';
   };
 
   const calculateSpentAmount = (category_id: number) => {

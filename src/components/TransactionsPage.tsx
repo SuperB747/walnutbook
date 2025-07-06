@@ -435,11 +435,8 @@ const TransactionsPage: React.FC = () => {
             setCategories(newCategories);
           } catch {}
         }}
-        onChange={async () => {
-          try {
-            const newCategories = await invoke<Category[]>("get_categories_full");
-            setCategories(newCategories);
-          } catch {}
+        onChange={(newCategories) => {
+          setCategories(newCategories);
         }}
       />
 

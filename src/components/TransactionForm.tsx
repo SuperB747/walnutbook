@@ -577,7 +577,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       }}
                     >
                       <MenuItem value="">
-                        <em>Select a category</em>
+                        <em>Undefined</em>
                       </MenuItem>
                       {filteredCategories.map(category => (
                         <MenuItem key={category.id} value={category.id.toString()}>

@@ -60,29 +60,37 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
   // Transactions for summary and category calculations
   const transactionsToSummarize = monthTransactions;
 
-  const getCategoryName = (category_id: number | undefined) => {
-    if (!category_id) return 'Uncategorized';
-    return categories.find(c => c.id === category_id)?.name || 'Uncategorized';
-  };
-
-  // 전체 카테고리 목록을 추출하여 고정된 색상 매핑 생성
-  const allCategories = useMemo(() => {
-    const categoryNames = new Set<string>();
-    allTransactions.forEach(transaction => {
-      categoryNames.add(getCategoryName(transaction.category_id));
+  // 카테고리 ID 기준으로 고정된 색상 매핑
+  const allCategoryIds = useMemo(() => {
+    // 실제로 사용된 모든 카테고리 ID를 모으고 정렬
+    const ids = new Set<number>();
+    allTransactions.forEach(tx => {
+      if (tx.category_id != null) ids.add(tx.category_id);
     });
-    categoryNames.add('Uncategorized');
-    return Array.from(categoryNames).sort();
+    categories.forEach(cat => {
+      if (cat.id != null) ids.add(cat.id);
+    });
+    return Array.from(ids).sort((a, b) => a - b);
   }, [allTransactions, categories]);
 
-  // 카테고리별 고유 색상 함수
-  const getCategoryColor = useCallback((category: string) => {
-    if (category === 'Uncategorized') {
-      return '#E0E0E0';
-    }
-    const idx = allCategories.indexOf(category);
-    return ghibliColors[idx % ghibliColors.length];
-  }, [allCategories]);
+  // 카테고리 ID → 색상 인덱스 매핑
+  const categoryIdToColor = useMemo(() => {
+    const map = new Map<number, string>();
+    allCategoryIds.forEach((id, idx) => {
+      map.set(id, ghibliColors[idx % ghibliColors.length]);
+    });
+    return map;
+  }, [allCategoryIds]);
+
+  const getCategoryColorById = useCallback((category_id: number | undefined | null) => {
+    if (category_id == null) return '#E0E0E0'; // Undefined
+    return categoryIdToColor.get(category_id) || '#E0E0E0';
+  }, [categoryIdToColor]);
+
+  const getCategoryName = (category_id: number | undefined) => {
+    if (!category_id) return 'Undefined';
+    return categories.find(c => c.id === category_id)?.name || 'Undefined';
+  };
 
   // Map categories by ID for quick lookup
   const categoryMap = useMemo(() => {
@@ -128,17 +136,15 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
 
   // 카테고리별 지출 계산 (리임버스먼트 적용)
   const categoryExpenses = useMemo(() => {
-    const expensesByCategory: Record<string, number> = {};
-    const reimbursementsMap: Record<string, number> = {};
+    const expensesByCategory: Record<number, number> = {};
+    const reimbursementsMap: Record<number, number> = {};
 
-    // 먼저 reimbursement 수입을 계산
+    // reimbursement 수입 계산
     transactionsToSummarize.forEach(tx => {
       if (tx.type === 'Income') {
         const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
-        if (cat?.is_reimbursement && cat.reimbursement_target_category_id) {
-          const targetName = getCategoryName(cat.reimbursement_target_category_id);
-          // Reimbursement은 양수로 저장
-          reimbursementsMap[targetName] = (reimbursementsMap[targetName] || 0) + tx.amount;
+        if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
+          reimbursementsMap[cat.reimbursement_target_category_id] = (reimbursementsMap[cat.reimbursement_target_category_id] || 0) + tx.amount;
         }
       }
     });
@@ -146,14 +152,11 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     // 지출 계산 (reimbursement 차감)
     transactionsToSummarize.forEach(tx => {
       if (tx.type === 'Expense') {
-        const name = getCategoryName(tx.category_id);
-        // 지출은 음수로 저장되어 있음
-        const reimbursement = reimbursementsMap[name] || 0;
-        // 지출(음수)에서 reimbursement(양수)를 더함
+        const id = tx.category_id ?? -1; // -1은 Undefined
+        const reimbursement = reimbursementsMap[id] || 0;
         const netExpense = tx.amount + reimbursement;
-        
         if (netExpense !== 0) {
-          expensesByCategory[name] = (expensesByCategory[name] || 0) + netExpense;
+          expensesByCategory[id] = (expensesByCategory[id] || 0) + netExpense;
         }
       }
     });
@@ -164,10 +167,15 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a));
 
     return {
-      labels: filteredAndSorted.map(([c]) => c),
+      labels: filteredAndSorted.map(([id]) => Number(id)), // id 배열
       data: filteredAndSorted.map(([, v]) => v)
     };
-  }, [transactionsToSummarize, categoryMap, getCategoryName]);
+  }, [transactionsToSummarize, categoryMap]);
+
+  // labelsForDisplay: id 배열을 이름 배열로 변환
+  const labelsForDisplay = useMemo(() => {
+    return categoryExpenses.labels.map(id => id === -1 ? 'Undefined' : getCategoryName(id));
+  }, [categoryExpenses.labels, categories]);
 
   // 월별 트렌드 계산
   const monthlyTrends = useMemo(() => {
@@ -245,15 +253,15 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     if (totalExpense === 0) return {};
     
     const percentages: Record<string, number> = {};
-    categoryExpenses.labels.forEach((label, index) => {
-      if (label) {
+    categoryExpenses.labels.forEach((id, index) => {
+      if (id !== null) {
         const amount = Math.abs(categoryExpenses.data[index]);
-        percentages[label] = (amount / totalExpense) * 100;
+        percentages[labelsForDisplay[index]] = (amount / totalExpense) * 100;
       }
     });
     
     return percentages;
-  }, [categoryExpenses]);
+  }, [categoryExpenses, labelsForDisplay]);
 
   const calculateSummary = (transactionsToSummarize: Transaction[]) => {
     // 먼저 reimbursement 매핑을 계산
@@ -408,14 +416,13 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
   // 범례 분할 (퍼센테이지 순으로 정렬)
   const sortedLabels = useMemo(() => {
     const result = categoryExpenses.labels
-      .map((label, index) => ({
-        label,
-        amount: Math.abs(categoryExpenses.data[index])  // 절대값으로 정렬
+      .map((id, index) => ({
+        id,
+        amount: Math.abs(categoryExpenses.data[index])
       }))
-      .filter(item => item.label !== null && item.amount > 0)  // 금액이 0보다 큰 항목만
-      .sort((a, b) => b.amount - a.amount)  // 금액 크기순 정렬
-      .map(item => item.label as string);
-    
+      .filter(item => item.amount > 0)
+      .sort((a, b) => b.amount - a.amount)
+      .map(item => item.id);
     return result;
   }, [categoryExpenses]);
 
@@ -430,7 +437,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
   const handleLegendHover = (label: string) => {
     const chart = doughnutRef.current;
     if (!chart) return;
-    const idx = categoryExpenses.labels.indexOf(label);
+    const idx = categoryExpenses.labels.indexOf(Number(label));
     if (idx === -1) return;
     // Chart.js v3+ API
     chart.setActiveElements([
@@ -565,15 +572,15 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
             }}>
               {/* 왼쪽 범례 */}
               <Box sx={{ minWidth: 100, maxWidth: 120 }}>
-                {leftLegend.map((label) => (
+                {leftLegend.map((id) => (
                   <Box 
-                    key={label} 
+                    key={id} 
                     sx={{ display: 'flex', alignItems: 'center', mb: 0.5, cursor: 'pointer' }}
-                    onMouseEnter={() => handleLegendHover(label)}
+                    onMouseEnter={() => handleLegendHover(labelsForDisplay[categoryExpenses.labels.indexOf(id)])}
                     onMouseLeave={handleLegendLeave}
                   >
-                    <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColor(label), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
-                    <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>{label}</Typography>
+                    <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColorById(id), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>{labelsForDisplay[categoryExpenses.labels.indexOf(id)]}</Typography>
                   </Box>
                 ))}
               </Box>
@@ -582,13 +589,11 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                 <Doughnut
                   ref={doughnutRef}
                   data={{
-                    labels: categoryExpenses.labels,
+                    labels: labelsForDisplay,
                     datasets: [
                       {
-                        data: categoryExpenses.data.map(Math.abs),  // 차트에는 절대값으로 표시
-                        backgroundColor: categoryExpenses.labels
-                          .filter((label): label is string => label !== null)
-                          .map(label => getCategoryColor(label)),
+                        data: categoryExpenses.data.map(Math.abs),
+                        backgroundColor: categoryExpenses.labels.map(id => getCategoryColorById(id)),
                       },
                     ],
                   }}
@@ -608,13 +613,14 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                         position: 'nearest',
                         callbacks: {
                           title: function(context) {
-                            const label = context[0].label || '';
+                            const idx = context[0].dataIndex;
+                            const label = labelsForDisplay[idx] || '';
                             const percentage = categoryPercentages[label]?.toFixed(1) || '0.0';
                             return `${label} (${percentage}%)`;
                           },
                           label: function(context) {
                             const value = context.raw as number;
-                            return `  ${formatCurrency(value)}`;  // 차트에 표시할 때는 양수로
+                            return `  ${formatCurrency(value)}`;
                           }
                         }
                       }
@@ -624,15 +630,15 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
               </Box>
               {/* 오른쪽 범례 */}
               <Box sx={{ minWidth: 100, maxWidth: 120 }}>
-                {rightLegend.map((label) => (
+                {rightLegend.map((id) => (
                   <Box 
-                    key={label} 
+                    key={id} 
                     sx={{ display: 'flex', alignItems: 'center', mb: 0.5, cursor: 'pointer' }}
-                    onMouseEnter={() => handleLegendHover(label)}
+                    onMouseEnter={() => handleLegendHover(labelsForDisplay[categoryExpenses.labels.indexOf(id)])}
                     onMouseLeave={handleLegendLeave}
                   >
-                    <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColor(label), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
-                    <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>{label}</Typography>
+                    <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColorById(id), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>{labelsForDisplay[categoryExpenses.labels.indexOf(id)]}</Typography>
                   </Box>
                 ))}
               </Box>
