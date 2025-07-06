@@ -66,7 +66,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
 
   const loadCategories = async () => {
     try {
-      const cats = await invoke<Category[]>('get_categories');
+      const cats = await invoke<Category[]>('get_categories_full');
       setCategories(cats);
     } catch (error) {
       console.error('Failed to load categories:', error);

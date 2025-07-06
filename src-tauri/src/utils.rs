@@ -15,19 +15,6 @@ pub fn get_db_path(_app: &AppHandle) -> PathBuf {
 
 pub fn init_db(app: &AppHandle) -> Result<(), String> {
     let path = get_db_path(app);
-    // Remove any other .db files in the app data directory, keeping only walnutbook.db
-    if let Some(app_dir) = path.parent() {
-        if let Ok(entries) = fs::read_dir(app_dir) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.extension().and_then(|e| e.to_str()) == Some("db")
-                    && p.file_name().and_then(|n| n.to_str()) != Some("walnutbook.db")
-                {
-                    let _ = fs::remove_file(&p);
-                }
-            }
-        }
-    }
     let conn = Connection::open(&path).map_err(|e| e.to_string())?;
 
     // Create tables if they don't exist
@@ -51,6 +38,19 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
             type TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
+    // Add default Adjust categories if they don't exist
+    conn.execute(
+        "INSERT OR IGNORE INTO categories (name, type) VALUES ('Add', 'Adjust')",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT OR IGNORE INTO categories (name, type) VALUES ('Subtract', 'Adjust')",
         [],
     )
     .map_err(|e| e.to_string())?;

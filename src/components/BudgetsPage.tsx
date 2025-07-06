@@ -65,7 +65,7 @@ const BudgetsPage: React.FC = () => {
       const [budgetList, transactionList, categoryList] = await Promise.all([
         invoke<Budget[]>('get_budgets', { month: selectedMonth }),
         invoke<Transaction[]>('get_transactions'),
-        invoke<Category[]>("get_categories")
+        invoke<Category[]>("get_categories_full")
       ]);
       setBudgets(budgetList);
       setTransactions(transactionList);
@@ -192,7 +192,7 @@ const BudgetsPage: React.FC = () => {
           spendingByCategory.set(t.category_id, (spendingByCategory.get(t.category_id) || 0) + amount);
         }
       }
-      const allCategories = await invoke<{ id: number; name: string; type: string }[]>("get_categories");
+      const allCategories = await invoke<Category[]>("get_categories_full");
       const excludedCategories = ['Reimbursement', 'Reimbursement [G]', 'Reimbursement [U]', 'Reimbursement [E]', 'Transfer', 'Adjust'];
       const eligibleCategories = allCategories.filter(category => category.type === 'Expense').filter(category => !excludedCategories.some(excluded => category.name.includes(excluded)));
       const budgetMap = new Map<number, Budget>(budgets.map(b => [b.category_id, b]));

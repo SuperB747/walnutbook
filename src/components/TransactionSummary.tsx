@@ -255,43 +255,127 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     return percentages;
   }, [categoryExpenses]);
 
-  const calculateSummary = () => {
+  const calculateSummary = (transactionsToSummarize: Transaction[]) => {
+    // 먼저 reimbursement 매핑을 계산
+    const expenseReimbursements: { [key: number]: number } = {};
+    transactionsToSummarize.forEach(tx => {
+      if (tx.type === 'Income') {
+        const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
+        if (cat?.is_reimbursement && cat.reimbursement_target_category_id) {
+          expenseReimbursements[cat.reimbursement_target_category_id] = 
+            (expenseReimbursements[cat.reimbursement_target_category_id] || 0) + tx.amount;
+        }
+      }
+    });
+
     const summary = {
       income: 0,
       expense: 0,
       balance: 0,
-      categories: {} as Record<string, number>,
+      categories: {} as { [key: number]: number }
     };
 
-    transactionsToSummarize.forEach((transaction) => {
-      // Skip adjust and transfer type transactions for monthly summary
-      if (transaction.type === 'Adjust' || transaction.type === 'Transfer' as TransactionType) {
-        return;
+    // 먼저 reimbursement 수입을 계산
+    transactionsToSummarize.forEach(tx => {
+      if (tx.type === 'Income') {
+        const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
+        if (cat?.is_reimbursement && cat.reimbursement_target_category_id) {
+          const amount = tx.amount;
+          summary.income += amount;
+          summary.balance += amount;
+          if (tx.category_id) {
+            summary.categories[tx.category_id] = (summary.categories[tx.category_id] || 0) + amount;
+          }
+        }
       }
+    });
 
-      if (transaction.type === 'Income') {
-        // Exclude reimbursement income
-        const cat = transaction.category_id != null ? categoryMap.get(transaction.category_id) : undefined;
+    // 지출 계산 (reimbursement 차감)
+    transactionsToSummarize.forEach(tx => {
+      if (tx.type === 'Expense') {
+        // 지출은 음수로 저장되어 있음
+        const reimbursement = tx.category_id ? expenseReimbursements[tx.category_id] || 0 : 0;
+        const amount = tx.amount; // 이미 음수로 저장되어 있음
+        summary.expense += amount; // 음수 그대로 더함
+        summary.balance += amount; // 음수 그대로 더함
+        if (tx.category_id) {
+          summary.categories[tx.category_id] = (summary.categories[tx.category_id] || 0) + amount;
+        }
+      }
+    });
+
+    // 나머지 수입 계산 (reimbursement 제외)
+    transactionsToSummarize.forEach(tx => {
+      if (tx.type === 'Income') {
+        const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
         if (!cat?.is_reimbursement) {
-          summary.income += transaction.amount;
-          summary.balance += transaction.amount;
+          const amount = tx.amount;
+          summary.income += amount;
+          summary.balance += amount;
+          if (tx.category_id) {
+            summary.categories[tx.category_id] = (summary.categories[tx.category_id] || 0) + amount;
+          }
         }
-      } else if (transaction.type === 'Expense') {
-        summary.expense += transaction.amount;
-        summary.balance -= transaction.amount;
-      }
-
-      // Update category totals
-      if (transaction.category_id) {
-        if (!summary.categories[transaction.category_id]) {
-          summary.categories[transaction.category_id] = 0;
-        }
-        summary.categories[transaction.category_id] += 
-          transaction.type === 'Income' ? transaction.amount : -transaction.amount;
       }
     });
 
     return summary;
+  };
+
+  const calculateMonthSummaries = (allTransactions: Transaction[]) => {
+    const monthSummaries = new Map<string, { income: number; expense: number; balance: number }>();
+
+    // 먼저 reimbursement 매핑을 계산
+    const monthReimbursements: { [key: string]: { [key: number]: number } } = {};
+    allTransactions.forEach(tx => {
+      const txDate = new Date(tx.date);
+      const monthKey = format(txDate, 'yyyy-MM');
+      if (tx.type === 'Income') {
+        const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
+        if (cat?.is_reimbursement && cat.reimbursement_target_category_id) {
+          if (!monthReimbursements[monthKey]) {
+            monthReimbursements[monthKey] = {};
+          }
+          if (cat.reimbursement_target_category_id) {
+            monthReimbursements[monthKey][cat.reimbursement_target_category_id] = 
+              (monthReimbursements[monthKey][cat.reimbursement_target_category_id] || 0) + tx.amount;
+          }
+        }
+      }
+    });
+
+    // 각 월별로 수입/지출 계산
+    allTransactions.forEach(tx => {
+      const txDate = new Date(tx.date);
+      const monthKey = format(txDate, 'yyyy-MM');
+      
+      if (!monthSummaries.has(monthKey)) {
+        monthSummaries.set(monthKey, { income: 0, expense: 0, balance: 0 });
+      }
+      const summary = monthSummaries.get(monthKey)!;
+
+      if (tx.type === 'Adjust' || tx.type === 'Transfer') {
+        return;
+      }
+
+      const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
+      if (tx.type === 'Income') {
+        if (!cat?.is_reimbursement) {
+          // 일반 수입은 양수
+          summary.income += tx.amount;
+          summary.balance += tx.amount;
+        }
+      } else if (tx.type === 'Expense') {
+        // 지출은 음수로 저장되어 있음
+        const reimbursement = tx.category_id && monthReimbursements[monthKey] ? 
+          monthReimbursements[monthKey][tx.category_id] || 0 : 0;
+        const amount = tx.amount; // 이미 음수로 저장되어 있음
+        summary.expense += amount; // 음수 그대로 더함
+        summary.balance += amount; // 음수 그대로 더함
+      }
+    });
+
+    return monthSummaries;
   };
 
   const now = new Date();

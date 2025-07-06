@@ -276,10 +276,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
     // Adjust는 Add/Subtract 카테고리 사용
     if (formData.type === 'Adjust') {
-      return allCategories.filter(cat => cat.name === 'Add' || cat.name === 'Subtract');
+      return allCategories.filter(cat => cat.type === 'Adjust');
     }
+    // Income/Expense는 해당 타입의 카테고리만 사용
     return allCategories.filter(cat => cat.type === formData.type);
-  }, [allCategories, formData.type]);
+  }, [formData.type, allCategories]);
 
   // Transfer 거래일 때 출발 계좌(account_id), amount는 수정 불가, To Account만 변경 가능
   const isTransfer = formData.type === 'Transfer';
