@@ -148,7 +148,7 @@ const BudgetsPage: React.FC = () => {
     Math.abs(
       transactions
         .filter(t => 
-          t.type === 'expense' && 
+          t.type === 'Expense' && 
           t.date.startsWith(selectedMonth) &&
           t.category_id !== undefined  // Only include transactions with categories
         )
@@ -184,7 +184,7 @@ const BudgetsPage: React.FC = () => {
       }
       const updatedBudgets = await invoke<Budget[]>('get_budgets', { month: selectedMonth });
       setBudgets(updatedBudgets);
-      const lastMonthExpenses = transactions.filter(t => t.type === 'expense' && t.date.startsWith(prevMonthStr));
+      const lastMonthExpenses = transactions.filter(t => t.type === 'Expense' && t.date.startsWith(prevMonthStr));
       const spendingByCategory = new Map<number, number>();
       for (const t of lastMonthExpenses) {
         if (t.category_id !== undefined) {
@@ -194,7 +194,7 @@ const BudgetsPage: React.FC = () => {
       }
       const allCategories = await invoke<{ id: number; name: string; type: string }[]>("get_categories");
       const excludedCategories = ['Reimbursement', 'Reimbursement [G]', 'Reimbursement [U]', 'Reimbursement [E]', 'Transfer', 'Adjust'];
-      const eligibleCategories = allCategories.filter(category => category.type === 'expense').filter(category => !excludedCategories.some(excluded => category.name.includes(excluded)));
+      const eligibleCategories = allCategories.filter(category => category.type === 'Expense').filter(category => !excludedCategories.some(excluded => category.name.includes(excluded)));
       const budgetMap = new Map<number, Budget>(budgets.map(b => [b.category_id, b]));
       let createdCount = 0;
       let skippedCount = 0;

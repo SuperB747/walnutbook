@@ -27,22 +27,22 @@ pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
         // 실시간 잔액 계산 (계좌 타입과 거래 타입에 따라)
         let balance: f64 = conn.query_row(
             "SELECT IFNULL(SUM(CASE 
-                WHEN a.type = 'credit' THEN
+                WHEN a.type = 'Credit' THEN
                     CASE
-                        WHEN t.type = 'expense' THEN amount
-                        WHEN t.type = 'income' THEN -amount
-                        WHEN t.type = 'adjust' AND c.name = 'Add' THEN -amount
-                        WHEN t.type = 'adjust' AND c.name = 'Subtract' THEN amount
-                        WHEN t.type = 'transfer' THEN amount
+                        WHEN t.type = 'Expense' THEN amount
+                        WHEN t.type = 'Income' THEN -amount
+                        WHEN t.type = 'Adjust' AND c.name = 'Add' THEN -amount
+                        WHEN t.type = 'Adjust' AND c.name = 'Subtract' THEN amount
+                        WHEN t.type = 'Transfer' THEN amount
                         ELSE 0
                     END
                 ELSE
                     CASE
-                        WHEN t.type = 'expense' THEN -amount
-                        WHEN t.type = 'income' THEN amount
-                        WHEN t.type = 'adjust' AND c.name = 'Add' THEN amount
-                        WHEN t.type = 'adjust' AND c.name = 'Subtract' THEN -amount
-                        WHEN t.type = 'transfer' THEN amount
+                        WHEN t.type = 'Expense' THEN -amount
+                        WHEN t.type = 'Income' THEN amount
+                        WHEN t.type = 'Adjust' AND c.name = 'Add' THEN amount
+                        WHEN t.type = 'Adjust' AND c.name = 'Subtract' THEN -amount
+                        WHEN t.type = 'Transfer' THEN amount
                         ELSE 0
                     END
                 END), 0) 

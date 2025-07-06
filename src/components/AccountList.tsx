@@ -61,9 +61,9 @@ const AccountList: React.FC<AccountListProps> = ({
   const sortedAccounts = [...accounts].sort((a, b) => a.name.localeCompare(b.name));
   // Net Balance 계산: 모든 계좌 balance를 그대로 합산
   const totalBalance = sortedAccounts.reduce((sum, account) => sum + account.balance, 0);
-  const availableFunds = sortedAccounts.filter(a => a.type === 'checking' || a.type === 'savings').reduce((sum, a) => sum + a.balance, 0);
+  const availableFunds = sortedAccounts.filter(a => a.type === 'Checking' || a.type === 'Savings').reduce((sum, a) => sum + a.balance, 0);
   // Credit 계좌 잔액 합산 (부호 변환 없이 그대로)
-  const creditAccounts = sortedAccounts.filter(a => a.type === 'credit');
+  const creditAccounts = sortedAccounts.filter(a => a.type === 'Credit');
   const creditCardBalance = creditAccounts.reduce((sum, a) => sum + a.balance, 0);
 
   return (

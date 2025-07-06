@@ -42,7 +42,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [formData, setFormData] = useState<Partial<Transaction>>({
     date: format(new Date(), 'yyyy-MM-dd'),
     account_id: accounts[0]?.id,
-    type: 'expense',
+    type: 'Expense' as TransactionType,
     category_id: undefined,
     amount: undefined,
     payee: '',
@@ -59,7 +59,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [preservedValues, setPreservedValues] = useState<Partial<Transaction>>({
     date: format(new Date(), 'yyyy-MM-dd'),
     account_id: accounts[0]?.id,
-    type: 'expense',
+    type: 'Expense' as TransactionType,
     category_id: 0,
     payee: '',
   });
@@ -78,7 +78,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (open) {
       loadCategoriesFull();
       // Transfer 거래 수정 시 Description 필드에 포커스
-      if (transaction?.type === 'transfer') {
+      if (transaction?.type === 'Transfer') {
         setTimeout(() => {
           if (descriptionRef.current) {
             descriptionRef.current.focus();
@@ -104,7 +104,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       setAmountInputValue(displayAmount?.toString() || '');
       
       // Transfer 거래의 경우 notes에서 "To Account" 정보 추출
-      if (transaction.type === 'transfer' && transaction.notes) {
+      if (transaction.type === 'Transfer' && transaction.notes) {
         const toAccountMatch = transaction.notes.match(/\[To: (.+?)\]/);
         if (toAccountMatch) {
           const toAccountName = toAccountMatch[1];
@@ -133,7 +133,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (!formData.date) errors.date = 'Date is required';
     if (!formData.account_id) errors.account_id = 'Account is required';
     if (!formData.type) errors.type = 'Type is required';
-    if (formData.type !== 'transfer' && formData.type !== 'adjust' && !formData.category_id) {
+    if (formData.type !== 'Transfer' && formData.type !== 'Adjust' && !formData.category_id) {
       errors.category_id = 'Category is required';
     }
     if (formData.amount === undefined || formData.amount === null) errors.amount = 'Amount is required';
@@ -145,14 +145,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const fixAmountSign = (amount: number | undefined, type: string | undefined, category: string | undefined) => {
     if (amount === undefined) return amount;
-    if (type === 'expense') return -Math.abs(amount);
-    if (type === 'income') return Math.abs(amount);
-    if (type === 'transfer') {
+    if (type === 'Expense') return -Math.abs(amount);
+    if (type === 'Income') return Math.abs(amount);
+    if (type === 'Transfer') {
       // Transfer는 항상 양수로 처리 (백엔드에서 출발/도착 계좌에 따라 부호 결정)
       return Math.abs(amount);
     }
     // Adjust는 category에 따라 부호 결정
-    if (type === 'adjust') {
+    if (type === 'Adjust') {
       if (category === 'Subtract') {
         return -Math.abs(amount);
       } else {
@@ -178,12 +178,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     if (name === 'type') {
       updates.category_id = 0;
-      if (value === 'adjust') {
+      if (value === 'Adjust') {
         const addCategory = allCategories.find(cat => cat.name === 'Add');
         if (addCategory) {
           updates.category_id = addCategory.id;
         }
-      } else if (value === 'transfer') {
+      } else if (value === 'Transfer') {
         const transferCategory = allCategories.find(cat => cat.name === 'Transfer');
         if (transferCategory) {
           updates.category_id = transferCategory.id;
@@ -192,14 +192,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
 
     // Handle amount sign for transfer/adjust categories only
-    if (formData.type === 'transfer' || formData.type === 'adjust') {
+    if (formData.type === 'Transfer' || formData.type === 'Adjust') {
       const amount = formData.amount || 0;
       updates.amount = fixAmountSign(amount, formData.type, allCategories.find(cat => cat.id === formData.category_id)?.name);
     }
 
     // Handle numeric values
     if (name === 'amount') {
-      if (formData.type === 'adjust') {
+      if (formData.type === 'Adjust') {
         updates.amount = parseFloat(value) || 0;
       } else {
         updates.amount = fixAmountSign(parseFloat(value) || 0, formData.type, allCategories.find(cat => cat.id === formData.category_id)?.name);
@@ -234,7 +234,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       };
       
       // Transfer 거래 수정 시
-      if (transaction?.type === 'transfer') {
+      if (transaction?.type === 'Transfer') {
         // To Account 정보를 notes에 설정
         if (toAccountId) {
           const toAccount = accounts.find(acc => acc.id === toAccountId);
@@ -244,7 +244,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         }
       }
       // 새로운 Transfer 거래 생성 시
-      else if (formData.type === 'transfer' && toAccountId) {
+      else if (formData.type === 'Transfer' && toAccountId) {
         const description = finalTransaction.payee;
         finalTransaction.notes = description;
         finalTransaction.payee = `${formData.account_id} → ${toAccountId}`; // 백엔드에서 계좌 이름으로 대체됨
@@ -269,20 +269,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   // Filter categories based on selected type
   const filteredCategories = useMemo(() => {
-    if (formData.type === 'transfer') {
+    if (formData.type === 'Transfer') {
       // Transfer는 단일 카테고리 사용
       const transferCategory = allCategories.find(cat => cat.name === 'Transfer');
       return transferCategory ? [transferCategory] : [];
     }
     // Adjust는 Add/Subtract 카테고리 사용
-    if (formData.type === 'adjust') {
+    if (formData.type === 'Adjust') {
       return allCategories.filter(cat => cat.name === 'Add' || cat.name === 'Subtract');
     }
     return allCategories.filter(cat => cat.type === formData.type);
   }, [allCategories, formData.type]);
 
   // Transfer 거래일 때 출발 계좌(account_id), amount는 수정 불가, To Account만 변경 가능
-  const isTransfer = formData.type === 'transfer';
+  const isTransfer = formData.type === 'Transfer';
 
   // 금액 입력값은 항상 양수만 허용
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -368,9 +368,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     value={formData.type || ''}
                     onChange={handleChange}
                     label="Type"
-                    disabled={!!(transaction && transaction.type === 'transfer')}
+                    disabled={!!(transaction && transaction.type === 'Transfer')}
                   >
-                    <MenuItem value="expense">
+                    <MenuItem value="Expense">
                       <Chip 
                         label="Expense" 
                         size="small" 
@@ -378,7 +378,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         sx={{ minWidth: 80 }}
                       />
                     </MenuItem>
-                    <MenuItem value="income">
+                    <MenuItem value="Income">
                       <Chip 
                         label="Income" 
                         size="small" 
@@ -386,7 +386,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         sx={{ minWidth: 80 }}
                       />
                     </MenuItem>
-                    <MenuItem value="transfer">
+                    <MenuItem value="Transfer">
                       <Chip 
                         label="Transfer" 
                         size="small" 
@@ -394,11 +394,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         sx={{ minWidth: 80 }}
                       />
                     </MenuItem>
-                    <MenuItem value="adjust">
+                    <MenuItem value="Adjust">
                       <Chip 
                         label="Adjust" 
                         size="small" 
-                        color={formData.type === 'adjust' && Number(formData.amount) < 0 ? 'error' : 'info'}
+                        color={formData.type === 'Adjust' && Number(formData.amount) < 0 ? 'error' : 'info'}
                         sx={{ minWidth: 80 }}
                       />
                     </MenuItem>
@@ -437,7 +437,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     value={formData.account_id?.toString() || ''}
                     onChange={handleChange}
                     label="Account"
-                    disabled={transaction?.type === 'transfer'}
+                    disabled={transaction?.type === 'Transfer'}
                   >
                     {accounts.map((account) => (
                       <MenuItem key={account.id} value={account.id.toString()}>
@@ -450,7 +450,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   )}
                 </FormControl>
               </Grid>
-              {formData.type === 'transfer' && (
+              {formData.type === 'Transfer' && (
                 <Grid item xs={12}>
                   <FormControl fullWidth required error={!!errors.toAccount}>
                     <InputLabel>To Account</InputLabel>
@@ -487,7 +487,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   </FormControl>
                 </Grid>
               )}
-              {formData.type !== 'transfer' && formData.type !== 'adjust' && (
+              {formData.type !== 'Transfer' && formData.type !== 'Adjust' && (
                 <Grid item xs={12}>
                   <FormControl fullWidth required error={!!errors.category_id}>
                     <InputLabel>Category</InputLabel>
@@ -526,7 +526,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   </FormControl>
                 </Grid>
               )}
-              {formData.type === 'adjust' && (
+              {formData.type === 'Adjust' && (
                 <Grid item xs={12}>
                   <FormControl fullWidth required error={!!errors.category_id}>
                     <InputLabel>Adjustment Type</InputLabel>

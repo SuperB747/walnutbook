@@ -84,7 +84,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   // 고유 카테고리
   const uniqueCategories = useMemo(() => {
     return Array.from(new Set(
-      transactions.filter(t => t.type !== 'transfer' && t.type !== 'adjust').map(t => getCategoryName(categories, t.category_id))
+      transactions.filter(t => t.type !== 'Transfer' && t.type !== 'Adjust').map(t => getCategoryName(categories, t.category_id))
     ));
   }, [transactions, categories]);
 
@@ -139,7 +139,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   // 기타 유틸
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   const getDisplayPayee = (transaction: Transaction) => {
-    if (transaction.type === 'transfer') {
+    if (transaction.type === 'Transfer') {
       const accountInfo = transaction.notes || '';
       const description = transaction.payee || '';
       
@@ -163,7 +163,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
     return transaction.payee;
   };
   const isEditableTransfer = (transaction: Transaction) => {
-    if (transaction.type !== 'transfer') return true;
+    if (transaction.type !== 'Transfer') return true;
     if (transaction.amount < 0) return true;
     
     // Transfer 거래의 경우 notes에서 계좌 이름을 확인
@@ -246,7 +246,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     )}
                   </TableCell>
                   <TableCell align="center" sx={{ width: 180, minWidth: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>
-                    {(transaction.type === 'income' || transaction.type === 'expense') ? (
+                    {(transaction.type === 'Income' || transaction.type === 'Expense') ? (
                       <Select 
                         value={transaction.category_id || ''} 
                         size="small" 
@@ -286,7 +286,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     <Typography sx={{ fontSize: '0.9rem' }} color={transaction.amount < 0 ? 'error' : transaction.amount > 0 ? 'success' : 'text.primary'}>{formatCurrency(transaction.amount)}</Typography>
                   </TableCell>
                   <TableCell align="center" sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap', px: 1 }}>
-                    <Chip label={transaction.type === 'adjust' ? 'Adjust' : transaction.type} size="small" color={transaction.type === 'adjust' ? transaction.amount < 0 ? undefined : 'info' : transaction.type === 'income' ? 'success' : transaction.type === 'expense' ? 'error' : transaction.type === 'transfer' && transaction.amount < 0 ? 'primary' : 'info'} sx={transaction.type === 'adjust' && transaction.amount < 0 ? { backgroundColor: '#e573c7', color: '#fff' } : transaction.type === 'transfer' && transaction.amount < 0 ? { backgroundColor: '#1976d2', color: '#fff', fontWeight: 500 } : transaction.type === 'transfer' && transaction.amount > 0 ? { backgroundColor: '#90caf9', color: '#fff', fontWeight: 500 } : undefined} />
+                    <Chip label={transaction.type === 'Adjust' ? 'Adjust' : transaction.type} size="small" color={transaction.type === 'Adjust' ? transaction.amount < 0 ? undefined : 'info' : transaction.type === 'Income' ? 'success' : transaction.type === 'Expense' ? 'error' : 'default'} />
                   </TableCell>
                   <TableCell align="right" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>

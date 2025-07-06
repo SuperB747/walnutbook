@@ -132,13 +132,13 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
             // Legacy transfer handling
             let other_transaction = if old_amount < 0.0 {
                 tx.query_row(
-                    "SELECT id FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2 AND account_id != ?3 AND notes = ?4 AND payee = ?5 LIMIT 1",
+                    "SELECT id FROM transactions WHERE type = 'Transfer' AND date = ?1 AND ABS(amount) = ?2 AND account_id != ?3 AND notes = ?4 AND payee = ?5 LIMIT 1",
                     params![_old_date, old_amount.abs(), acct_id, format!("[To: {}]", acct_id), _old_payee],
                     |row| row.get::<_, i64>(0)
                 ).ok()
             } else {
                 tx.query_row(
-                    "SELECT id FROM transactions WHERE type = 'transfer' AND date = ?1 AND ABS(amount) = ?2 AND account_id != ?3 AND notes = ?4 AND payee = ?5 LIMIT 1",
+                    "SELECT id FROM transactions WHERE type = 'Transfer' AND date = ?1 AND ABS(amount) = ?2 AND account_id != ?3 AND notes = ?4 AND payee = ?5 LIMIT 1",
                     params![_old_date, old_amount.abs(), acct_id, format!("[From: {}]", acct_id), _old_payee],
                     |row| row.get::<_, i64>(0)
                 ).ok()

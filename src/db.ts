@@ -1,6 +1,6 @@
-export type TransactionType = 'income' | 'expense' | 'adjust' | 'transfer';
-export type AccountType = 'checking' | 'savings' | 'credit' | 'investment' | 'other';
-export type CategoryType = 'income' | 'expense' | 'adjust' | 'transfer';
+export type TransactionType = 'Income' | 'Expense' | 'Adjust' | 'Transfer';
+export type AccountType = 'Checking' | 'Savings' | 'Credit' | 'Investment' | 'Other';
+export type CategoryType = 'Income' | 'Expense' | 'Adjust' | 'Transfer';
 
 export interface Transaction {
   id: number;

@@ -22,16 +22,18 @@ import {
   Tab,
   Checkbox,
   FormControlLabel,
+  TableContainer,
 } from '@mui/material';
 import { Edit, Delete, Check, Close } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
+import { CategoryType } from '../db';
 
 interface Category {
   id: number;
   name: string;
-  type: 'income' | 'expense' | 'adjust' | 'transfer';
-  is_reimbursement?: boolean;
-  reimbursement_target_category_id?: number;
+  type: CategoryType;
+  is_reimbursement: boolean;
+  reimbursement_target_category_id: number | null;
 }
 
 interface CategoryManagementDialogProps {
@@ -53,42 +55,52 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
 
-  const incomeCategories = useMemo(() => categories.filter(c => c.type === 'income').sort((a, b) => a.name.localeCompare(b.name)), [categories]);
-  const expenseCategories = useMemo(() => categories.filter(c => c.type === 'expense').sort((a, b) => a.name.localeCompare(b.name)), [categories]);
+  const incomeCategories = useMemo(() => categories.filter(c => c.type === 'Income').sort((a, b) => a.name.localeCompare(b.name)), [categories]);
+  const expenseCategories = useMemo(() => categories.filter(c => c.type === 'Expense').sort((a, b) => a.name.localeCompare(b.name)), [categories]);
 
   useEffect(() => {
     if (open) {
-      invoke<Category[]>("get_categories_full").then(setCategories).catch(() => {});
+      loadCategories();
     }
   }, [open]);
+
+  const loadCategories = async () => {
+    try {
+      const cats = await invoke<Category[]>('get_categories');
+      setCategories(cats);
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+    }
+  };
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
     try {
-      const type = currentTab === 0 ? 'income' : 'expense';
+      const type = currentTab === 0 ? 'Income' : 'Expense';
       await invoke<Category[]>('add_category', {
         name: newName.trim(),
-        categoryType: type,
+        type,
         isReimbursement: currentTab === 0 ? isReimbursement : false,
         reimbursementTargetCategoryId: currentTab === 0 && isReimbursement ? reimbursementTargetCategoryId : null,
       });
       setNewName('');
       setIsReimbursement(false);
       setReimbursementTargetCategoryId('');
-      const result = await invoke<Category[]>("get_categories_full");
-      setCategories(result);
+      loadCategories();
       onChange();
-    } catch {}
+    } catch (error) {
+      console.error('Failed to add category:', error);
+    }
   };
 
   const handleUpdate = async () => {
     if (editId == null || !editName.trim()) return;
     try {
-      const type = currentTab === 0 ? 'income' : 'expense';
+      const type = currentTab === 0 ? 'Income' : 'Expense';
       await invoke<Category[]>('update_category', {
         id: editId,
         name: editName.trim(),
-        categoryType: type,
+        type,
         isReimbursement: currentTab === 0 ? editIsReimbursement : false,
         reimbursementTargetCategoryId: currentTab === 0 && editIsReimbursement ? editReimbursementTargetCategoryId : null,
       });
@@ -96,10 +108,11 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
       setEditName('');
       setEditIsReimbursement(false);
       setEditReimbursementTargetCategoryId('');
-      const result = await invoke<Category[]>("get_categories_full");
-      setCategories(result);
+      loadCategories();
       onChange();
-    } catch {}
+    } catch (error) {
+      console.error('Failed to update category:', error);
+    }
   };
 
   const handleDelete = async () => {
@@ -220,7 +233,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
             </TableHead>
             <TableBody>
               {(currentTab === 0 ? incomeCategories : expenseCategories)
-                .filter(cat => cat.type !== 'adjust' && cat.type !== 'transfer')
+                .filter(cat => cat.type !== 'Adjust' && cat.type !== 'Transfer')
                 .map(cat => (
                 <TableRow key={cat.id}>
                   <TableCell>
@@ -262,7 +275,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
                     )}
                   </TableCell>
                   <TableCell>
-                    {cat.type === 'income' ? 'Income' : 'Expense'}
+                    {cat.type === 'Income' ? 'Income' : 'Expense'}
                   </TableCell>
                   <TableCell align="right">
                     {editId === cat.id ? (

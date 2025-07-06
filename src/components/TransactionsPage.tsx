@@ -137,11 +137,11 @@ const TransactionsPage: React.FC = () => {
       await invoke('delete_transaction', { id });
       setTransactions(prev => {
         let filtered = prev.filter(t => t.id !== id);
-        if (transactionToDelete.type === 'transfer') {
+        if (transactionToDelete.type === 'Transfer') {
           if (transactionToDelete.transfer_id) {
             filtered = filtered.filter(t => t.transfer_id !== transactionToDelete.transfer_id);
           } else {
-            const pairTransaction = prev.find(t => t.id !== id && t.type === 'transfer' && t.date === transactionToDelete.date && Math.abs(t.amount) === Math.abs(transactionToDelete.amount) && t.payee === transactionToDelete.payee && t.account_id !== transactionToDelete.account_id);
+            const pairTransaction = prev.find(t => t.id !== id && t.type === 'Transfer' && t.date === transactionToDelete.date && Math.abs(t.amount) === Math.abs(transactionToDelete.amount) && t.payee === transactionToDelete.payee && t.account_id !== transactionToDelete.account_id);
             if (pairTransaction) filtered = filtered.filter(t => t.id !== pairTransaction.id);
           }
         }
@@ -179,13 +179,13 @@ const TransactionsPage: React.FC = () => {
       const transferIdsToRemove = new Set<number>();
       const processedTransferIds = new Set<number>();
       deletedTransactions.forEach(transaction => {
-        if (transaction.type === 'transfer') {
+        if (transaction.type === 'Transfer') {
           if (transaction.transfer_id && !processedTransferIds.has(transaction.transfer_id)) {
             const relatedTransactions = transactions.filter(t => t.transfer_id === transaction.transfer_id);
             relatedTransactions.forEach(t => { if (!ids.includes(t.id)) transferIdsToRemove.add(t.id); });
             processedTransferIds.add(transaction.transfer_id);
           } else if (!transaction.transfer_id) {
-            const pairTransaction = transactions.find(t => !ids.includes(t.id) && t.type === 'transfer' && t.date === transaction.date && Math.abs(t.amount) === Math.abs(transaction.amount) && t.payee === transaction.payee && t.account_id !== transaction.account_id);
+            const pairTransaction = transactions.find(t => !ids.includes(t.id) && t.type === 'Transfer' && t.date === transaction.date && Math.abs(t.amount) === Math.abs(transaction.amount) && t.payee === transaction.payee && t.account_id !== transaction.account_id);
             if (pairTransaction) transferIdsToRemove.add(pairTransaction.id);
           }
         }

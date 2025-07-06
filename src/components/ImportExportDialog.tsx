@@ -257,17 +257,17 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     }
     
     if (!type) {
-      type = amount < 0 ? 'expense' : 'income';
+      type = amount < 0 ? 'Expense' : 'Income';
     }
-    if (type === 'expense') {
+    if (type === 'Expense') {
       amount = -Math.abs(amount);
-    } else if (type === 'income') {
+    } else if (type === 'Income') {
       amount = Math.abs(amount);
     }
 
     // For non-transfer transactions, set category_id to undefined if no category is provided
     let categoryId: number | undefined = undefined;
-    if (type !== 'transfer' && transaction.category && transaction.category.trim() !== '') {
+    if (type !== 'Transfer' && transaction.category && transaction.category.trim() !== '') {
       try {
         categoryId = getCategoryId(transaction.category);
       } catch (error) {
@@ -391,7 +391,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             console.log('Available fields:', fields);
             
             const selectedAccountObj = accounts.find(acc => acc.id === selectedAccount);
-            const isCreditCard = selectedAccountObj?.type === 'credit';
+            const isCreditCard = selectedAccountObj?.type === 'Credit';
             
             // Use different date fields based on account type
             const dateKey = isCreditCard ? 'transaction date' : 'date posted';
@@ -426,7 +426,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
               
               let type: TransactionType;
               if (isNaN(amt)) {
-                type = 'expense';
+                type = 'Expense';
               } else {
                 console.log('CSV Import Debug:', {
                   accountName: selectedAccountObj?.name,
@@ -442,11 +442,11 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 // 통합된 로직: csvSignLogic에 따라 결정
                 if (csvSignLogic === 'reversed') {
                   // Reversed: 양수 = 지출, 음수 = 수입
-                  type = amt > 0 ? 'expense' : 'income';
+                  type = amt > 0 ? 'Expense' : 'Income';
                   console.log('Reversed logic - positive=expense, negative=income -> type:', type);
                 } else {
                   // Standard: 양수 = 수입, 음수 = 지출
-                  type = amt > 0 ? 'income' : 'expense';
+                  type = amt > 0 ? 'Income' : 'Expense';
                   console.log('Standard logic - positive=income, negative=expense -> type:', type);
                 }
                 
@@ -556,7 +556,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       if (!newTx.date || !newTx.amount) continue;
       
       const existingTransfer = existingTransactions.find(existing => 
-        existing.type === 'transfer' &&
+        existing.type === 'Transfer' &&
         existing.date === newTx.date &&
         Math.abs(existing.amount) === Math.abs(newTx.amount || 0)
       );

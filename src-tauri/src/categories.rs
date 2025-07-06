@@ -96,12 +96,12 @@ pub fn get_spending_by_category(app: AppHandle, start_date: String, end_date: St
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT c.name, SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END) as expense,
-         SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE 0 END) as income
+        "SELECT c.name, SUM(CASE WHEN t.type = 'Expense' THEN t.amount ELSE 0 END) as expense,
+         SUM(CASE WHEN t.type = 'Income' THEN t.amount ELSE 0 END) as income
          FROM transactions t
          LEFT JOIN categories c ON t.category_id = c.id
          WHERE t.date BETWEEN ?1 AND ?2
-         AND t.type != 'transfer'
+         AND t.type != 'Transfer'
          GROUP BY c.name
          HAVING expense > 0 OR income > 0"
     ).map_err(|e| e.to_string())?;
@@ -139,11 +139,11 @@ pub fn get_income_vs_expenses(app: AppHandle, start_date: String, end_date: Stri
     
     let mut stmt = conn.prepare(
         "SELECT strftime('%Y-%m', date) as month,
-         SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expenses,
-         SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income
+         SUM(CASE WHEN type = 'Expense' THEN amount ELSE 0 END) as expenses,
+         SUM(CASE WHEN type = 'Income' THEN amount ELSE 0 END) as income
          FROM transactions
          WHERE date BETWEEN ?1 AND ?2
-         AND type != 'transfer'
+         AND type != 'Transfer'
          GROUP BY month
          ORDER BY month"
     ).map_err(|e| e.to_string())?;
@@ -193,22 +193,22 @@ pub fn get_net_worth_history(app: AppHandle, start_date: String, end_date: Strin
                 a.id as account_id,
                 a.type as account_type,
                 COALESCE(SUM(CASE 
-                    WHEN a.type = 'credit' THEN
+                    WHEN a.type = 'Credit' THEN
                         CASE
-                            WHEN t.type = 'expense' THEN t.amount
-                            WHEN t.type = 'income' THEN -t.amount
-                            WHEN t.type = 'adjust' AND c.name = 'Add' THEN -t.amount
-                            WHEN t.type = 'adjust' AND c.name = 'Subtract' THEN t.amount
-                            WHEN t.type = 'transfer' THEN t.amount
+                            WHEN t.type = 'Expense' THEN t.amount
+                            WHEN t.type = 'Income' THEN -t.amount
+                            WHEN t.type = 'Adjust' AND c.name = 'Add' THEN -t.amount
+                            WHEN t.type = 'Adjust' AND c.name = 'Subtract' THEN t.amount
+                            WHEN t.type = 'Transfer' THEN t.amount
                             ELSE 0
                         END
                     ELSE
                         CASE
-                            WHEN t.type = 'expense' THEN -t.amount
-                            WHEN t.type = 'income' THEN t.amount
-                            WHEN t.type = 'adjust' AND c.name = 'Add' THEN t.amount
-                            WHEN t.type = 'adjust' AND c.name = 'Subtract' THEN -t.amount
-                            WHEN t.type = 'transfer' THEN t.amount
+                            WHEN t.type = 'Expense' THEN -t.amount
+                            WHEN t.type = 'Income' THEN t.amount
+                            WHEN t.type = 'Adjust' AND c.name = 'Add' THEN t.amount
+                            WHEN t.type = 'Adjust' AND c.name = 'Subtract' THEN -t.amount
+                            WHEN t.type = 'Transfer' THEN t.amount
                             ELSE 0
                         END
                     END
@@ -223,8 +223,8 @@ pub fn get_net_worth_history(app: AppHandle, start_date: String, end_date: Strin
         SELECT 
             date,
             SUM(balance) as net_worth,
-            SUM(CASE WHEN account_type != 'credit' THEN balance ELSE 0 END) as assets,
-            SUM(CASE WHEN account_type = 'credit' THEN balance ELSE 0 END) as liabilities
+            SUM(CASE WHEN account_type != 'Credit' THEN balance ELSE 0 END) as assets,
+            SUM(CASE WHEN account_type = 'Credit' THEN balance ELSE 0 END) as liabilities
         FROM monthly_balances
         GROUP BY date
         ORDER BY date"

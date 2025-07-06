@@ -40,7 +40,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
 }) => {
   const [formData, setFormData] = useState<Partial<Account>>({
     name: '',
-    type: 'checking' as AccountType,
+    type: 'Checking' as AccountType,
     description: '',
   });
   const [csvSignLogic, setCsvSignLogic] = useState<string>('standard');
@@ -57,7 +57,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
     } else {
       setFormData({
         name: '',
-        type: 'checking' as AccountType,
+        type: 'Checking' as AccountType,
         description: '',
       });
       setCsvSignLogic('standard');
@@ -140,11 +140,11 @@ const AccountForm: React.FC<AccountFormProps> = ({
               onChange={handleTypeChange}
               label="Type"
               >
-              <MenuItem value="checking">Checking</MenuItem>
-              <MenuItem value="savings">Savings</MenuItem>
-              <MenuItem value="credit">Credit</MenuItem>
-              <MenuItem value="investment">Investment</MenuItem>
-              <MenuItem value="other">Other</MenuItem>
+              <MenuItem value="Checking">Checking</MenuItem>
+              <MenuItem value="Savings">Savings</MenuItem>
+              <MenuItem value="Credit">Credit</MenuItem>
+              <MenuItem value="Investment">Investment</MenuItem>
+              <MenuItem value="Other">Other</MenuItem>
               </Select>
             </FormControl>
 

@@ -48,7 +48,7 @@ const BudgetList: React.FC<BudgetListProps> = ({
       .filter(
         (t) =>
           t.category_id === category_id &&
-          t.type === 'expense' &&
+          t.type === 'Expense' &&
           t.date.startsWith(month)
       )
       .reduce((sum, t) => sum + t.amount, 0);
