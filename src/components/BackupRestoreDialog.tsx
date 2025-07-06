@@ -32,7 +32,7 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
   };
 
   const handleBackup = async () => {
-    setStatus({ message: 'Backing up to OneDrive...', error: false });
+    setStatus({ message: 'Verifying database integrity...', error: false });
     try {
       // Determine OneDrive path
       const backupDir = await findOneDrivePath();
@@ -40,12 +40,14 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
       const pad = (n: number) => n.toString().padStart(2, '0');
       const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
       const savePath = `${backupDir}/walnutbook_backup_${timestamp}.db`;
+      
+      setStatus({ message: 'Creating backup...', error: false });
       // Invoke Rust to copy the DB file to OneDrive
       await invoke('backup_database', { savePath });
-      setStatus({ message: `Backup saved to OneDrive/WalnutBook_Backups: ${savePath}`, error: false });
+      setStatus({ message: `✅ Backup successful! Saved to: ${savePath}`, error: false });
     } catch (err) {
       console.error('Backup failed:', err);
-      setStatus({ message: 'Backup failed: ' + String(err), error: true });
+      setStatus({ message: '❌ Backup failed: ' + String(err), error: true });
     }
   };
 
@@ -68,17 +70,21 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
         return;
       }
       try {
+        setStatus({ message: 'Verifying backup file...', error: false });
         const buffer = await file.arrayBuffer();
+        
+        setStatus({ message: 'Restoring database...', error: false });
         await invoke('import_database', { data: Array.from(new Uint8Array(buffer)) });
-        setStatus({ message: 'Restore successful!', error: false });
+        
+        setStatus({ message: '✅ Restore successful! Database has been restored.', error: false });
         onRestore?.();
         // 복원 완료 후 즉시 다이얼로그 닫기
         setTimeout(() => {
           handleClose();
-        }, 1000);
+        }, 2000);
       } catch (e) {
         console.error('Restore failed:', e);
-        setStatus({ message: 'Restore failed: ' + String(e), error: true });
+        setStatus({ message: '❌ Restore failed: ' + String(e), error: true });
       }
     };
     // onFocus를 약간 지연시켜 race condition 방지
