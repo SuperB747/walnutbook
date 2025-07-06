@@ -431,32 +431,48 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       <Chip 
                         label="Expense" 
                         size="small" 
-                        color="error" 
-                        sx={{ minWidth: 80 }}
+                        sx={{ 
+                          minWidth: 80,
+                          backgroundColor: '#f44336', // 빨강색
+                          color: 'white',
+                          fontWeight: 'bold'
+                        }}
                       />
                     </MenuItem>
                     <MenuItem value="Income">
                       <Chip 
                         label="Income" 
                         size="small" 
-                        color="success" 
-                        sx={{ minWidth: 80 }}
+                        sx={{ 
+                          minWidth: 80,
+                          backgroundColor: '#4caf50', // 녹색
+                          color: 'white',
+                          fontWeight: 'bold'
+                        }}
                       />
                     </MenuItem>
                     <MenuItem value="Transfer">
                       <Chip 
                         label="Transfer" 
                         size="small" 
-                        color="info" 
-                        sx={{ minWidth: 80 }}
+                        sx={{ 
+                          minWidth: 80,
+                          backgroundColor: '#ff9800', // 오렌지색
+                          color: 'white',
+                          fontWeight: 'bold'
+                        }}
                       />
                     </MenuItem>
                     <MenuItem value="Adjust">
                       <Chip 
                         label="Adjust" 
                         size="small" 
-                        color={formData.type === 'Adjust' && Number(formData.amount) < 0 ? 'error' : 'info'}
-                        sx={{ minWidth: 80 }}
+                        sx={{ 
+                          minWidth: 80,
+                          backgroundColor: '#9c27b0', // 보라색
+                          color: 'white',
+                          fontWeight: 'bold'
+                        }}
                       />
                     </MenuItem>
                   </Select>

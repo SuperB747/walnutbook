@@ -25,14 +25,37 @@ pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
         let created_at: String = row.get(4)?;
         
         // 실시간 잔액 계산 (계좌 타입과 거래 타입에 따라)
+        // 
+        // BALANCE CALCULATION LOGIC:
+        // =========================
+        // 
+        // CREDIT CARDS:
+        // - Expense transactions are stored as NEGATIVE amounts (e.g., -$1000)
+        // - Credit card debt should be NEGATIVE (you owe money)
+        // - We use the amount AS-IS (no ABS conversion) to preserve the sign
+        // - Example: $1000 expense = -$1000 stored = -$1000 balance (debt)
+        // 
+        // OTHER ACCOUNTS (Checking, Savings, Investment, Other):
+        // - Expense transactions are stored as NEGATIVE amounts (e.g., -$1000)
+        // - We convert to positive for display using -ABS(amount)
+        // - Example: $1000 expense = -$1000 stored = -$1000 balance (money spent)
+        // 
+        // TRANSFER transactions:
+        // - Use amount AS-IS for all account types
+        // - Backend handles sign conversion based on departure/arrival accounts
+        // 
+        // ADJUST transactions:
+        // - For Credit: use amount AS-IS
+        // - For Others: use ABS(amount) with proper sign based on category
+        // 
         let balance: f64 = conn.query_row(
             "SELECT IFNULL(SUM(CASE 
                 WHEN a.type = 'Credit' THEN
                     CASE
-                        WHEN t.type = 'Expense' THEN ABS(amount)
-                        WHEN t.type = 'Income' THEN -ABS(amount)
-                        WHEN t.type = 'Adjust' AND c.name = 'Add' THEN -ABS(amount)
-                        WHEN t.type = 'Adjust' AND c.name = 'Subtract' THEN ABS(amount)
+                        WHEN t.type = 'Expense' THEN amount
+                        WHEN t.type = 'Income' THEN amount
+                        WHEN t.type = 'Adjust' AND c.name = 'Add' THEN amount
+                        WHEN t.type = 'Adjust' AND c.name = 'Subtract' THEN amount
                         WHEN t.type = 'Transfer' THEN amount
                         ELSE 0
                     END

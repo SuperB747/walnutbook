@@ -192,13 +192,16 @@ pub fn get_net_worth_history(app: AppHandle, start_date: String, end_date: Strin
                 d.date,
                 a.id as account_id,
                 a.type as account_type,
+                -- Balance calculation follows the same logic as accounts.rs
+                -- Credit cards: use amount AS-IS (preserve negative debt)
+                -- Other accounts: use ABS with proper sign conversion
                 COALESCE(SUM(CASE 
                     WHEN a.type = 'Credit' THEN
                         CASE
-                            WHEN t.type = 'Expense' THEN ABS(t.amount)
-                            WHEN t.type = 'Income' THEN -ABS(t.amount)
-                            WHEN t.type = 'Adjust' AND c.name = 'Add' THEN -ABS(t.amount)
-                            WHEN t.type = 'Adjust' AND c.name = 'Subtract' THEN ABS(t.amount)
+                            WHEN t.type = 'Expense' THEN t.amount
+                            WHEN t.type = 'Income' THEN t.amount
+                            WHEN t.type = 'Adjust' AND c.name = 'Add' THEN t.amount
+                            WHEN t.type = 'Adjust' AND c.name = 'Subtract' THEN t.amount
                             WHEN t.type = 'Transfer' THEN t.amount
                             ELSE 0
                         END

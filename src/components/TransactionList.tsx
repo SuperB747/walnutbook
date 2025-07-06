@@ -308,7 +308,29 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     <Typography sx={{ fontSize: '0.9rem' }} color={transaction.amount < 0 ? 'error' : transaction.amount > 0 ? 'success' : 'text.primary'}>{formatCurrency(transaction.amount)}</Typography>
                   </TableCell>
                   <TableCell align="center" sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap', px: 1 }}>
-                    <Chip label={transaction.type === 'Adjust' ? 'Adjust' : transaction.type} size="small" color={transaction.type === 'Adjust' ? transaction.amount < 0 ? undefined : 'info' : transaction.type === 'Income' ? 'success' : transaction.type === 'Expense' ? 'error' : 'default'} />
+                    <Chip 
+                      label={transaction.type === 'Adjust' ? 'Adjust' : transaction.type} 
+                      size="small" 
+                      sx={{
+                        backgroundColor: (() => {
+                          if (transaction.type === 'Expense') return '#f44336'; // 빨강색
+                          if (transaction.type === 'Income') return '#4caf50'; // 녹색
+                          if (transaction.type === 'Adjust') {
+                            const categoryName = getCategoryName(categories, transaction.category_id);
+                            if (categoryName === 'Add') return '#9c27b0'; // 보라색
+                            if (categoryName === 'Subtract') return '#e91e63'; // 핑크색
+                            return '#757575'; // 기본 회색
+                          }
+                          if (transaction.type === 'Transfer') {
+                            // Transfer의 경우 amount가 음수면 출발계좌, 양수면 도착계좌
+                            return transaction.amount < 0 ? '#ff9800' : '#2196f3'; // 오렌지색(출발) vs 파랑색(도착)
+                          }
+                          return '#757575'; // 기본 회색
+                        })(),
+                        color: 'white',
+                        fontWeight: 'bold'
+                      }}
+                    />
                   </TableCell>
                   <TableCell align="right" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>

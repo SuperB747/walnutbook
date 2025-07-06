@@ -135,18 +135,32 @@ const TransactionsPage: React.FC = () => {
       }
       
       await invoke('delete_transaction', { id });
+      
+      // Transfer 거래인 경우 백엔드에서 이미 쌍을 삭제했으므로 프론트엔드에서도 쌍을 모두 제거
       setTransactions(prev => {
-        let filtered = prev.filter(t => t.id !== id);
         if (transactionToDelete.type === 'Transfer') {
           if (transactionToDelete.transfer_id) {
-            filtered = filtered.filter(t => t.transfer_id !== transactionToDelete.transfer_id);
+            // transfer_id가 있는 경우 같은 transfer_id를 가진 모든 트랜잭션 제거
+            return prev.filter(t => t.transfer_id !== transactionToDelete.transfer_id);
           } else {
-            const pairTransaction = prev.find(t => t.id !== id && t.type === 'Transfer' && t.date === transactionToDelete.date && Math.abs(t.amount) === Math.abs(transactionToDelete.amount) && t.payee === transactionToDelete.payee && t.account_id !== transactionToDelete.account_id);
-            if (pairTransaction) filtered = filtered.filter(t => t.id !== pairTransaction.id);
+            // 레거시 Transfer 거래의 경우 쌍을 찾아서 제거
+            const pairTransaction = prev.find(t => 
+              t.id !== id && 
+              t.type === 'Transfer' && 
+              t.date === transactionToDelete.date && 
+              Math.abs(t.amount) === Math.abs(transactionToDelete.amount) && 
+              t.payee === transactionToDelete.payee && 
+              t.account_id !== transactionToDelete.account_id
+            );
+            if (pairTransaction) {
+              return prev.filter(t => t.id !== id && t.id !== pairTransaction.id);
+            }
           }
         }
-        return filtered;
+        // 일반 거래인 경우 해당 ID만 제거
+        return prev.filter(t => t.id !== id);
       });
+      
       window.dispatchEvent(new Event('transactionsUpdated'));
       setSnackbar({ open: true, message: 'Transaction deleted successfully', severity: 'success' });
     } catch (error) {
@@ -159,14 +173,30 @@ const TransactionsPage: React.FC = () => {
     try {
       let successfulDeletions = 0;
       const failedDeletions: number[] = [];
+      const processedTransferIds = new Set<number>();
       
       for (const id of ids) {
         try { 
           await invoke('delete_transaction', { id }); 
           successfulDeletions++;
+          
+          // Transfer 거래인 경우 백엔드에서 이미 쌍을 삭제했으므로 추가 처리 불필요
+          const transaction = transactions.find(t => t.id === id);
+          if (transaction?.type === 'Transfer' && transaction.transfer_id) {
+            processedTransferIds.add(transaction.transfer_id);
+          }
         } catch (error) {
           console.error(`Failed to delete transaction ${id}:`, error);
-          failedDeletions.push(id);
+          // Transfer 거래인 경우 백엔드에서 이미 쌍을 삭제했으므로 실패로 인식하지 않음
+          const transaction = transactions.find(t => t.id === id);
+          if (transaction?.type === 'Transfer') {
+            successfulDeletions++;
+            if (transaction.transfer_id) {
+              processedTransferIds.add(transaction.transfer_id);
+            }
+          } else {
+            failedDeletions.push(id);
+          }
         }
       }
       
@@ -175,9 +205,9 @@ const TransactionsPage: React.FC = () => {
         return;
       }
       
+      // Transfer 거래 쌍을 프론트엔드에서도 제거
       const deletedTransactions = transactions.filter(t => ids.includes(t.id));
       const transferIdsToRemove = new Set<number>();
-      const processedTransferIds = new Set<number>();
       deletedTransactions.forEach(transaction => {
         if (transaction.type === 'Transfer') {
           if (transaction.transfer_id && !processedTransferIds.has(transaction.transfer_id)) {
@@ -190,6 +220,7 @@ const TransactionsPage: React.FC = () => {
           }
         }
       });
+      
       setTransactions(prev => {
         let filtered = prev.filter(t => !ids.includes(t.id));
         if (transferIdsToRemove.size > 0) filtered = filtered.filter(t => !transferIdsToRemove.has(t.id));
