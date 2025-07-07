@@ -96,7 +96,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
         transaction.payee.toLowerCase().includes(searchTerm.toLowerCase()) ||
         transaction.notes?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         getCategoryName(categories, transaction.category_id).toLowerCase().includes(searchTerm.toLowerCase());
-      const typeMatch = types.length === 0 || types.includes(transaction.type);
+      const typeMatch = types.length === 0 || types.includes(transaction.type.toLowerCase());
       const categoryMatch = catFilter.length === 0 || catFilter.includes(getCategoryName(categories, transaction.category_id));
       const accountMatch = accFilter.length === 0 || accFilter.includes(transaction.account_id);
       const dateMatch = (!dateRange.start || transaction.date >= dateRange.start) && (!dateRange.end || transaction.date <= dateRange.end);

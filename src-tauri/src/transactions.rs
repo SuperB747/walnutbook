@@ -517,6 +517,7 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
             let amount: f64 = row.get(1)?;
             let payee: String = row.get(2)?;
             let ttype: String = row.get(3)?;
+            // 더 정확한 중복 체크를 위해 센트 단위로 반올림
             let cents = (amount * 100.0).round() as i64;
             Ok(if ttype == "transfer" {
                 TransactionKey::Transfer(date, cents)

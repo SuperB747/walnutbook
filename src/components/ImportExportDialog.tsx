@@ -136,7 +136,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
 
   const removeDuplicateTransactions = (
     newTransactions: Partial<Transaction>[],
-    existingTransactions: Transaction[]
+    existingTransactions: Partial<Transaction>[]
   ): Partial<Transaction>[] => {
     if (!removeDuplicates) return newTransactions;
 
@@ -145,10 +145,10 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
 
     existingTransactions.forEach(transaction => {
       const key = getTransactionKey(transaction);
-      if (isCardPayment(transaction.payee)) {
-        existingPayments.set(key, transaction);
-      } else {
-        existingRegular.set(key, transaction);
+      if (transaction.payee && isCardPayment(transaction.payee)) {
+        existingPayments.set(key, transaction as Transaction);
+      } else if (transaction.payee) {
+        existingRegular.set(key, transaction as Transaction);
       }
     });
 
@@ -241,7 +241,14 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       return null;
     }
 
-    const parsedDate = parseDate(transaction.date);
+    // 이미 파싱된 날짜인지 확인 (yyyy-MM-dd 형식)
+    let parsedDate: string;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(transaction.date)) {
+      parsedDate = transaction.date;
+    } else {
+      parsedDate = parseDate(transaction.date) || '';
+    }
+    
     if (!parsedDate) {
       console.warn('Invalid transaction - could not parse date:', transaction.date);
       return null;
@@ -323,7 +330,11 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       const validTransactions: Partial<Transaction>[] = transactions
         .filter((t): t is ParsedTransaction => t.date !== null)
         .map(t => validateTransaction({ ...t, date: t.date! }))
-        .filter((t): t is Partial<Transaction> => !!t);
+        .filter((t): t is Partial<Transaction> => !!t)
+        .map(t => ({
+          ...t,
+          date: t.date || undefined
+        }));
       
       console.log('Valid transactions after validation:', validTransactions.length);
       
@@ -335,17 +346,30 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         return;
       }
       
-      console.log('ImportExportDialog calling onImport with:', validTransactions);
+      // 중복 체크 및 제거
+      const uniqueTransactions = removeDuplicateTransactions(validTransactions as Partial<Transaction>[], transactions as Partial<Transaction>[]);
+      console.log('Transactions after duplicate removal:', uniqueTransactions.length);
+      console.log('Duplicates found:', validTransactions.length - uniqueTransactions.length);
+      
+      if (uniqueTransactions.length === 0) {
+        setImportStatus({
+          status: 'error',
+          message: 'All transactions are duplicates. No new transactions to import.',
+        });
+        return;
+      }
+      
+      console.log('ImportExportDialog calling onImport with:', uniqueTransactions);
       console.log('onImport function type:', typeof onImport);
       console.log('onImport function name:', onImport.name);
       console.log('onImport function toString:', onImport.toString());
       if (typeof onImport === 'function') {
-        await onImport(validTransactions);
+        await onImport(uniqueTransactions);
         console.log('ImportExportDialog onImport completed');
       } else {
         console.error('onImport is not a function:', onImport);
       }
-      setImportStatus({ status: 'success', message: `Import completed successfully. ${validTransactions.length} transactions imported.` });
+      setImportStatus({ status: 'success', message: `Import completed successfully. ${uniqueTransactions.length} transactions imported.` });
       setTimeout(() => {
         handleClose();
       }, 1500);
@@ -362,11 +386,28 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       
       console.log('CSV Import Debug - Raw content preview:', allLines.slice(0, 5));
       
-      // 헤더는 첫 줄!
-      const headerLine = allLines[0];
+      // 실제 헤더 찾기 (첫 번째 줄이 메타데이터인 경우 처리)
+      let headerLine = allLines[0];
+      let dataStartIndex = 0;
+      
+      // 첫 번째 줄이 메타데이터인지 확인 (날짜/시간 정보가 포함된 경우)
+      if (headerLine.toLowerCase().includes('valid as of') || 
+          headerLine.toLowerCase().includes('year/month/day') ||
+          headerLine.toLowerCase().includes('date') && headerLine.toLowerCase().includes('time')) {
+        // 두 번째 줄을 헤더로 사용
+        if (allLines.length > 1) {
+          headerLine = allLines[1];
+          dataStartIndex = 2;
+          console.log('Detected metadata line, using second line as header:', headerLine);
+        }
+      }
+      
       console.log('Selected header line:', headerLine);
-      // 데이터는 그 아래부터!
-      const contentToParse = allLines.join('\n'); // 전체를 파싱
+      console.log('Data starts from line:', dataStartIndex);
+      
+      // 데이터만 파싱 (헤더 + 데이터)
+      const dataLines = [headerLine, ...allLines.slice(dataStartIndex)];
+      const contentToParse = dataLines.join('\n');
       
       Papa.parse<CSVTransaction>(contentToParse, {
         header: true,
@@ -470,7 +511,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 type,
                 account_id: selectedAccount || 0,
               };
-            });
+            }).filter(t => t.date !== null); // null인 날짜를 가진 트랜잭션 필터링
             console.log('handleCsvImport calling handleImport with:', parsedTransactions);
             await handleImport(parsedTransactions);
             console.log('handleCsvImport handleImport completed');
