@@ -28,7 +28,7 @@ import { invoke } from '@tauri-apps/api/core';
 interface ImportExportDialogProps {
   open: boolean;
   onClose: () => void;
-  onImport: (transactions: Partial<Transaction>[]) => Promise<void>;
+  onImport: (transactions: Partial<Transaction>[]) => Promise<{ imported: Transaction[]; imported_count: number; duplicate_count: number }>;
   accounts: Account[];
   transactions: Transaction[];
   categories: Category[];
@@ -68,6 +68,13 @@ const PAYMENT_KEYWORDS = [
   'e-transfer payment',
   'interac payment'
 ];
+
+interface HeaderMapping {
+  type: number;
+  date: number;
+  amount: number;
+  payee: number;
+}
 
 const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   open,
@@ -123,15 +130,16 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   };
 
   const getTransactionKey = (transaction: Partial<Transaction>): string => {
-    if (!transaction.payee || !transaction.date || !transaction.amount) {
+    if (!transaction.payee || !transaction.date || transaction.amount === undefined) {
       return '';
     }
 
-    if (isCardPayment(transaction.payee)) {
-      return `payment-${transaction.amount}`;
-    }
+    const formattedAmount = transaction.amount.toFixed(2);
+    const formattedDate = transaction.date;
+    const payee = transaction.payee.trim();
 
-    return `${transaction.date}-${transaction.amount}-${transaction.type}-${transaction.payee}`;
+    // 날짜, 금액, 설명만으로 키 생성
+    return `${formattedDate}-${formattedAmount}-${payee}`;
   };
 
   const removeDuplicateTransactions = (
@@ -140,33 +148,34 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   ): Partial<Transaction>[] => {
     if (!removeDuplicates) return newTransactions;
 
-    const existingPayments = new Map<string, Transaction>();
-    const existingRegular = new Map<string, Transaction>();
+    console.log('[CSV_DEBUG] Checking duplicates. New transactions:', newTransactions);
+    console.log('[CSV_DEBUG] Existing transactions:', existingTransactions);
 
+    const existingKeys = new Set<string>();
+
+    // 기존 거래 내역의 키를 Set에 저장
     existingTransactions.forEach(transaction => {
       const key = getTransactionKey(transaction);
-      if (transaction.payee && isCardPayment(transaction.payee)) {
-        existingPayments.set(key, transaction as Transaction);
-      } else if (transaction.payee) {
-        existingRegular.set(key, transaction as Transaction);
+      if (key) {
+        existingKeys.add(key);
+        console.log('[CSV_DEBUG] Adding existing key:', key);
       }
     });
 
+    // 새로운 거래 내역 중 중복되지 않은 것만 필터링
     const uniqueTransactions = newTransactions.filter(transaction => {
       const key = getTransactionKey(transaction);
-      if (!key) return true;
-
-      if (isCardPayment(transaction.payee!)) {
-        const existingPayment = existingPayments.get(key);
-        if (!existingPayment) return true;
-
-        return !areDatesNear(transaction.date!, existingPayment.date);
-      } else {
-        return !existingRegular.has(key);
-      }
+      const isDuplicate = key && existingKeys.has(key);
+      console.log('[CSV_DEBUG] Checking new transaction:', {
+        key,
+        isDuplicate,
+        transaction
+      });
+      return !isDuplicate;
     });
 
     setDuplicatesFound(newTransactions.length - uniqueTransactions.length);
+    console.log('[CSV_DEBUG] Unique transactions:', uniqueTransactions);
     return uniqueTransactions;
   };
 
@@ -232,65 +241,32 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   };
 
   const validateTransaction = (transaction: Partial<Transaction> & { category?: string }): Partial<Transaction> | null => {
-    if (!transaction.date || !transaction.amount || !transaction.payee) {
-      console.warn('Invalid transaction - missing required fields:', { 
-        date: transaction.date, 
-        amount: transaction.amount, 
-        payee: transaction.payee 
-      });
+    if (!transaction.date?.toString().trim() || !transaction.amount || !transaction.payee?.toString().trim()) {
       return null;
     }
-
-    // 이미 파싱된 날짜인지 확인 (yyyy-MM-dd 형식)
-    let parsedDate: string;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(transaction.date)) {
-      parsedDate = transaction.date;
-    } else {
-      parsedDate = parseDate(transaction.date) || '';
-    }
-    
-    if (!parsedDate) {
-      console.warn('Invalid transaction - could not parse date:', transaction.date);
-      return null;
-    }
-
     let type: TransactionType = transaction.type as TransactionType;
     let amount = Number(transaction.amount);
-    
-    // Validate amount
     if (isNaN(amount) || amount === 0) {
-      console.warn('Invalid transaction - invalid amount:', transaction.amount);
       return null;
     }
-    
-    if (!type) {
-      type = amount < 0 ? 'Expense' : 'Income';
-    }
-    if (type === 'Expense') {
-      amount = -Math.abs(amount);
-    } else if (type === 'Income') {
+    // type이 명확히 들어온 경우(Income/Expense)면 부호만 맞추고, 아니면 amount로 추론
+    if (type === 'Income') {
       amount = Math.abs(amount);
-    }
-
-    // For non-transfer transactions, set category_id to undefined if no category is provided
-    let categoryId: number | undefined = undefined;
-    if (type !== 'Transfer' && transaction.category && transaction.category.trim() !== '') {
-      try {
-        categoryId = getCategoryId(transaction.category);
-      } catch (error) {
-        console.warn('Invalid transaction - invalid category:', error);
-        return null;
-      }
+    } else if (type === 'Expense') {
+      amount = -Math.abs(amount);
+    } else {
+      type = amount < 0 ? 'Expense' : 'Income';
+      if (type === 'Income') amount = Math.abs(amount);
+      else amount = -Math.abs(amount);
     }
     
     return {
-      date: parsedDate,
+      date: transaction.date,
       type,
       amount,
       payee: transaction.payee,
       notes: transaction.notes || '',
       account_id: selectedAccount || 0,
-      category_id: categoryId,
     };
   };
 
@@ -313,7 +289,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     onClose();
   };
 
-  const handleImport = async (transactions: ParsedTransaction[]): Promise<void> => {
+  const handleImport = async (newTransactions: Partial<Transaction>[]): Promise<void> => {
     if (!selectedAccount) {
       setImportStatus({
         status: 'error',
@@ -325,16 +301,17 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     try {
       setImportStatus({ status: 'processing', message: 'Importing transactions...' });
       
-      console.log('Starting import with', transactions.length, 'transactions');
+      console.log('Starting import with', newTransactions.length, 'transactions');
       
-      const validTransactions: Partial<Transaction>[] = transactions
-        .filter((t): t is ParsedTransaction => t.date !== null)
-        .map(t => validateTransaction({ ...t, date: t.date! }))
-        .filter((t): t is Partial<Transaction> => !!t)
-        .map(t => ({
-          ...t,
-          date: t.date || undefined
-        }));
+      const validTransactions: Partial<Transaction>[] = newTransactions
+        .map(t => {
+          const vt = validateTransaction(t);
+          if (!vt) {
+            console.warn('validateTransaction filtered out:', t);
+          }
+          return vt;
+        })
+        .filter((t): t is Partial<Transaction> => !!t);
       
       console.log('Valid transactions after validation:', validTransactions.length);
       
@@ -345,31 +322,18 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         });
         return;
       }
+
+      // Call parent onImport to perform import and get result
+      const result = await onImport(validTransactions);
+      console.log('ImportExportDialog onImport completed');
       
-      // 중복 체크 및 제거
-      const uniqueTransactions = removeDuplicateTransactions(validTransactions as Partial<Transaction>[], transactions as Partial<Transaction>[]);
-      console.log('Transactions after duplicate removal:', uniqueTransactions.length);
-      console.log('Duplicates found:', validTransactions.length - uniqueTransactions.length);
+      // 성공 메시지에 중복 건수 포함
+      setImportStatus({
+        status: 'success',
+        message: `Successfully imported ${result.imported_count} transaction${result.imported_count === 1 ? '' : 's'}${result.duplicate_count > 0 ? ` (${result.duplicate_count} duplicate${result.duplicate_count === 1 ? '' : 's'} skipped)` : ''}`,
+      });
       
-      if (uniqueTransactions.length === 0) {
-        setImportStatus({
-          status: 'error',
-          message: 'All transactions are duplicates. No new transactions to import.',
-        });
-        return;
-      }
-      
-      console.log('ImportExportDialog calling onImport with:', uniqueTransactions);
-      console.log('onImport function type:', typeof onImport);
-      console.log('onImport function name:', onImport.name);
-      console.log('onImport function toString:', onImport.toString());
-      if (typeof onImport === 'function') {
-        await onImport(uniqueTransactions);
-        console.log('ImportExportDialog onImport completed');
-      } else {
-        console.error('onImport is not a function:', onImport);
-      }
-      setImportStatus({ status: 'success', message: `Import completed successfully. ${uniqueTransactions.length} transactions imported.` });
+      // 1.5초 후에 다이얼로그 닫기
       setTimeout(() => {
         handleClose();
       }, 1500);
@@ -379,150 +343,170 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     }
   };
 
+  const findHeaderIndex = (headers: string[], possibleNames: string[]): number => {
+    return headers.findIndex(header => 
+      possibleNames.some(name => 
+        header.toLowerCase().trim().includes(name.toLowerCase().trim())
+      )
+    );
+  };
+
+  const mapHeaders = (headers: string[]): HeaderMapping => {
+    console.log('[CSV_DEBUG] Mapping headers:', headers);
+    
+    const typeNames = ['type', 'transaction type', 'trans type'];
+    const dateNames = ['date', 'date posted', 'trans date', 'transaction date'];
+    const amountNames = ['amount', 'transaction amount', 'trans amount'];
+    const payeeNames = ['description', 'payee', 'merchant', 'details'];
+
+    // First Bank Card 컬럼이 있는 경우 특별 처리
+    const firstBankCardIndex = findHeaderIndex(headers, ['first bank card']);
+    if (firstBankCardIndex !== -1) {
+      // First Bank Card가 있는 경우, 다른 컬럼들의 위치를 찾습니다
+      const mapping: HeaderMapping = {
+        type: findHeaderIndex(headers, ['transaction type']),
+        date: findHeaderIndex(headers, ['date posted']),
+        amount: findHeaderIndex(headers, ['transaction amount']),
+        payee: findHeaderIndex(headers, ['description']),
+      };
+      return mapping;
+    }
+
+    // 일반적인 경우의 매핑
+    const mapping: HeaderMapping = {
+      type: findHeaderIndex(headers, typeNames),
+      date: findHeaderIndex(headers, dateNames),
+      amount: findHeaderIndex(headers, amountNames),
+      payee: findHeaderIndex(headers, payeeNames),
+    };
+
+    console.log('[CSV_DEBUG] Header mapping result:', mapping);
+    return mapping;
+  };
+
   const handleCsvImport = async (content: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const sanitizedContent = content.replace(/^\uFEFF/, '');
-      const allLines = sanitizedContent.split(/\r?\n/).filter(line => line.trim());
-      
-      console.log('CSV Import Debug - Raw content preview:', allLines.slice(0, 5));
-      
-      // 실제 헤더 찾기 (첫 번째 줄이 메타데이터인 경우 처리)
-      let headerLine = allLines[0];
-      let dataStartIndex = 0;
-      
-      // 첫 번째 줄이 메타데이터인지 확인 (날짜/시간 정보가 포함된 경우)
-      if (headerLine.toLowerCase().includes('valid as of') || 
-          headerLine.toLowerCase().includes('year/month/day') ||
-          headerLine.toLowerCase().includes('date') && headerLine.toLowerCase().includes('time')) {
-        // 두 번째 줄을 헤더로 사용
-        if (allLines.length > 1) {
-          headerLine = allLines[1];
-          dataStartIndex = 2;
-          console.log('Detected metadata line, using second line as header:', headerLine);
+      try {
+        const sanitizedContent = content.replace(/^\uFEFF/, '');
+        const allLines = sanitizedContent.split(/\r?\n/);
+        
+        console.log('[CSV_DEBUG] All lines:', allLines);
+        
+        // 네 번째 줄이 헤더 (인덱스 3)
+        const headerLineIndex = 3;
+        if (allLines.length <= headerLineIndex) {
+          throw new Error('CSV file is too short');
         }
-      }
-      
-      console.log('Selected header line:', headerLine);
-      console.log('Data starts from line:', dataStartIndex);
-      
-      // 데이터만 파싱 (헤더 + 데이터)
-      const dataLines = [headerLine, ...allLines.slice(dataStartIndex)];
-      const contentToParse = dataLines.join('\n');
-      
-      Papa.parse<CSVTransaction>(contentToParse, {
-        header: true,
-        skipEmptyLines: true,
-        delimiter: ',',
-        transformHeader: header => header.trim().toLowerCase(),
-        complete: async (results) => {
-          console.log('CSV import header line:', headerLine);
-          console.log('Detected delimiter:', ',');
-          console.log('Parsed raw rows:', results.data.length, 'fields:', results.meta.fields);
-          console.log('Sample data:', results.data.slice(0, 3));
+        
+        // 실제 헤더 라인 사용
+        const headers = allLines[headerLineIndex].split(',').map(h => h.trim());
+        console.log('[CSV_DEBUG] Headers:', headers);
+        
+        const mapping = mapHeaders(headers);
+        console.log('[CSV_DEBUG] Column mapping:', mapping);
+        
+        // 매핑 유효성 검사
+        if (mapping.type === -1 || mapping.date === -1 || mapping.amount === -1 || mapping.payee === -1) {
+          console.error('[CSV_DEBUG] Invalid column mapping:', mapping);
+          throw new Error('Could not map all required columns in CSV file');
+        }
+        
+        const parsedTransactions: Partial<Transaction>[] = [];
+        
+        // 빈 줄을 건너뛰고 실제 데이터 행부터 처리
+        for (let i = 6; i < allLines.length; i++) {  // 데이터는 7번째 줄부터 시작 (인덱스 6)
+          const line = allLines[i];
+          if (!line.trim()) continue;
           
-          try {
-            const fields = results.meta.fields as string[];
-            console.log('Available fields:', fields);
-            
-            const selectedAccountObj = accounts.find(acc => acc.id === selectedAccount);
-            const isCreditCard = selectedAccountObj?.type === 'Credit';
-            
-            // 자동감지 로직: 다양한 은행 포맷 지원
-            const lowerFields = fields.map(f => f.toLowerCase());
-            function autoDetectField(candidates: string[]) {
-              const idx = lowerFields.findIndex(f => candidates.includes(f));
-              return idx !== -1 ? fields[idx] : undefined;
+          const fields = line.split(',').map(f => f.trim().replace(/^['"]|['"]$/g, ''));  // 따옴표 제거
+          console.log(`[CSV_DEBUG] Processing line ${i}:`, fields);
+          
+          if (fields.length >= Math.max(mapping.type, mapping.date, mapping.amount, mapping.payee) + 1) {
+            const transaction = processCSVRow(fields, mapping);
+            console.log(`[CSV_DEBUG] Parsed transaction:`, transaction);
+            if (transaction.date && transaction.amount !== undefined && transaction.payee) {
+              parsedTransactions.push(transaction);
+            } else {
+              console.log(`[CSV_DEBUG] Skipping invalid transaction:`, transaction);
             }
-
-            // Payee/Description
-            const payeeKey = autoDetectField(['payee', 'description', 'desc', 'merchant']) || fields[0];
-            // Amount
-            const amountKey = autoDetectField(['amount', 'transaction amount', 'amt']) || fields[1];
-            // Date (후보군에 'posted date' 추가)
-            const dateKey = autoDetectField(['date', 'transaction date', 'date posted', 'posted date']) || fields[2];
-            // Category/Notes(옵션)
-            const categoryKey = autoDetectField(['category', 'cat']);
-            const notesKey = autoDetectField(['notes', 'memo', 'note']);
-            
-            console.log('Mapped CSV keys:', { dateKey, amountKey, payeeKey, categoryKey, notesKey, accountType: selectedAccountObj?.type });
-            console.log('Sample row:', results.data[0]);
-            // 필터 조건 강화: null/undefined/공백 모두 걸러냄
-            const validRows = (results.data as any[]).filter(row =>
-              row[dateKey] != null && row[dateKey].toString().trim() !== '' &&
-              row[amountKey] != null && row[amountKey].toString().trim() !== ''
-            );
-            console.log('Valid rows after dynamic filtering:', validRows.length);
-            let csvSignLogic = 'standard';
-            try {
-              csvSignLogic = await invoke('get_csv_sign_logic_for_account', { accountId: selectedAccount });
-            } catch (error) {
-              console.warn('Failed to get CSV sign logic for account:', error);
-            }
-            
-            const parsedTransactions: ParsedTransaction[] = validRows.map((row) => {
-              const rawDate = row[dateKey];
-              const transactionType = row['transaction type']?.toString().toUpperCase();
-              
-              let amt = 0;
-              let rawAmt = row[amountKey]?.toString() || '';
-              
-              if (rawAmt) {
-                rawAmt = rawAmt.replace(/[^\d.\-]/g, '');
-                amt = parseFloat(rawAmt);
-              }
-              
-              const parsedDate = parseDate(rawDate);
-              
-              let type: TransactionType;
-              if (isNaN(amt)) {
-                type = 'Expense';
-              } else {
-                console.log('CSV Import Debug:', {
-                  accountName: selectedAccountObj?.name,
-                  isCreditCard,
-                  csvSignLogic,
-                  amount: amt,
-                  transactionType,
-                  payee: row[payeeKey] || '',
-                  rawTransactionType: row['transaction type'],
-                  accountType: selectedAccountObj?.type
-                });
-                
-                // 통합된 로직: csvSignLogic에 따라 결정
-                if (csvSignLogic === 'reversed') {
-                  // Reversed: 양수 = 지출, 음수 = 수입
-                  type = amt > 0 ? 'Expense' : 'Income';
-                  console.log('Reversed logic - positive=expense, negative=income -> type:', type);
-                } else {
-                  // Standard: 양수 = 수입, 음수 = 지출
-                  type = amt > 0 ? 'Income' : 'Expense';
-                  console.log('Standard logic - positive=income, negative=expense -> type:', type);
-                }
-                
-                console.log('Final determined type:', type);
-              }
-              
-              return {
-                date: parsedDate,
-                amount: isNaN(amt) ? 0 : Math.abs(amt),
-                payee: row[payeeKey] || '',
-                category: '',
-                notes: notesKey ? (row[notesKey] || '') : '',
-                type,
-                account_id: selectedAccount || 0,
-              };
-            }).filter(t => t.date !== null); // null인 날짜를 가진 트랜잭션 필터링
-            console.log('handleCsvImport calling handleImport with:', parsedTransactions);
-            await handleImport(parsedTransactions);
-            console.log('handleCsvImport handleImport completed');
-            resolve();
-          } catch (err: any) {
-            reject(err);
+          } else {
+            console.log(`[CSV_DEBUG] Skipping invalid line ${i}, expected ${Math.max(mapping.type, mapping.date, mapping.amount, mapping.payee) + 1} fields but got ${fields.length}:`, fields);
           }
-        },
-        error: (err: any) => reject(err),
-      });
+        }
+        
+        console.log('[CSV_DEBUG] All parsed transactions:', parsedTransactions);
+        
+        if (parsedTransactions.length === 0) {
+          setImportStatus({
+            status: 'error',
+            message: 'No valid transactions found in the CSV file.',
+          });
+          resolve();
+          return;
+        }
+        
+        // 중복 제거는 handleImport에서 처리하므로 여기서는 하지 않습니다.
+        handleImport(parsedTransactions)
+          .then(() => resolve())
+          .catch(reject);
+          
+      } catch (error) {
+        console.error('[CSV_DEBUG] Error during CSV import:', error);
+        setImportStatus({
+          status: 'error',
+          message: error instanceof Error ? error.message : 'Failed to import CSV file',
+        });
+        reject(error);
+      }
     });
+  };
+
+  const processCSVRow = (row: string[], mapping: HeaderMapping): Partial<Transaction> => {
+    const rawType = row[mapping.type]?.trim().toUpperCase() || '';
+    const rawAmount = row[mapping.amount]?.trim() || '0';
+    const rawDate = row[mapping.date]?.trim() || '';
+    
+    // 금액에서 쉼표 제거하고 파싱
+    let amount = parseFloat(rawAmount.replace(/[^0-9.-]/g, ''));
+    
+    console.log('[CSV_DEBUG] Processing row data:', {
+      rawType,
+      rawAmount,
+      amount,
+      rawDate,
+      mappingType: mapping.type,
+      mappingAmount: mapping.amount,
+      fullRow: row
+    });
+
+    // 거래 유형 결정
+    let type: TransactionType;
+    if (rawType === 'CREDIT' || rawType.includes('CREDIT')) {
+      type = 'Income';
+      amount = Math.abs(amount);
+    } else if (rawType === 'DEBIT' || rawType.includes('DEBIT')) {
+      type = 'Expense';
+      amount = -Math.abs(amount);
+    } else {
+      // 금액 기반 판단
+      type = amount >= 0 ? 'Income' : 'Expense';
+    }
+
+    // 날짜 형식 변환 (YYYYMMDD -> YYYY-MM-DD)
+    let formattedDate = rawDate;
+    if (/^\d{8}$/.test(rawDate)) {
+      formattedDate = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+    }
+
+    const transaction = {
+      type,
+      date: formattedDate,
+      amount,
+      payee: row[mapping.payee]?.trim() || '',
+    };
+
+    console.log('[CSV_DEBUG] Created transaction:', transaction);
+    return transaction;
   };
 
   const handleFileImport = async () => {

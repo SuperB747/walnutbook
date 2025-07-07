@@ -3,6 +3,7 @@ use rusqlite::{params, Connection};
 use serde_json::Value;
 use std::collections::HashSet;
 use tauri::AppHandle;
+use serde::Serialize;
 
 use crate::models::Transaction;
 use crate::utils::get_db_path;
@@ -11,6 +12,13 @@ use crate::utils::get_db_path;
 enum TransactionKey {
     Regular(String, i64, String),
     Transfer(String, i64),
+}
+
+#[derive(Serialize)]
+pub struct ImportResult {
+    pub imported: Vec<Transaction>,
+    pub imported_count: usize,
+    pub duplicate_count: usize,
 }
 
 #[tauri::command]
@@ -503,12 +511,12 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
 }
 
 #[tauri::command]
-pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Result<Vec<Transaction>, String> {
+pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Result<ImportResult, String> {
     let path = get_db_path(&app);
     let mut conn = Connection::open(&path).map_err(|e| e.to_string())?;
     
     // Collect existing transactions for duplicate checking
-    let (existing_keys, transfer_keys) = {
+    let (mut existing_keys, mut transfer_keys) = {
         let mut existing_keys = HashSet::new();
         let mut transfer_keys = HashSet::new();
         let mut stmt = conn.prepare("SELECT date, amount, payee, type FROM transactions").map_err(|e| e.to_string())?;
@@ -519,7 +527,8 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
             let ttype: String = row.get(3)?;
             // 더 정확한 중복 체크를 위해 센트 단위로 반올림
             let cents = (amount * 100.0).round() as i64;
-            Ok(if ttype == "transfer" {
+            // Case-insensitive type check
+            Ok(if ttype.to_lowercase() == "transfer" {
                 TransactionKey::Transfer(date, cents)
             } else {
                 TransactionKey::Regular(date, cents, payee)
@@ -542,28 +551,25 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let mut imported_count = 0;
     let mut duplicate_count = 0;
+    let mut imported_ids = Vec::new();
     
     // Import new transactions
     for t in transactions {
-        if t.date.is_empty() { return Err("Missing date".into()); }
-        
+        println!("[IMPORT] Checking transaction: date={}, amount={}, payee={}, type={}", t.date, t.amount, t.payee, t.transaction_type);
         let cents = (t.amount * 100.0).round() as i64;
         let key = (t.date.clone(), cents, t.payee.clone());
-        
-        // Skip if duplicate
-        if existing_keys.contains(&key) { 
+        if existing_keys.contains(&key) {
+            println!("[IMPORT] Duplicate detected, skipping: {:?}", key);
             duplicate_count += 1;
-            continue; 
+            continue;
         }
-        
-        // Skip if duplicate transfer
         let transfer_key = (t.date.clone(), cents);
-        if transfer_keys.contains(&transfer_key) { 
+        if transfer_keys.contains(&transfer_key) {
+            println!("[IMPORT] Duplicate transfer detected, skipping: {:?}", transfer_key);
             duplicate_count += 1;
-            continue; 
+            continue;
         }
-        
-        // Insert new transaction
+        println!("[IMPORT] Inserting transaction: date={}, amount={}, payee={}, type={}", t.date, t.amount, t.payee, t.transaction_type);
         tx.execute(
             "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
@@ -577,21 +583,40 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
                 None::<i64>
             ],
         ).map_err(|e| e.to_string())?;
-        
+        // After successful insert, add to sets to skip duplicates in same batch
+        existing_keys.insert((t.date.clone(), cents, t.payee.clone()));
+        transfer_keys.insert((t.date.clone(), cents));
         imported_count += 1;
+        imported_ids.push(tx.last_insert_rowid());
     }
     
     tx.commit().map_err(|e| e.to_string())?;
     
-    // Return transactions with import statistics
-    let mut result = get_transactions(app)?;
+    // Get only the imported transactions using the original connection
+    let mut result = Vec::new();
+    for id in imported_ids {
+        let transaction = conn.query_row(
+            "SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, created_at FROM transactions WHERE id = ?1",
+            params![id],
+            |row| Ok(Transaction {
+                id: row.get(0)?, date: row.get(1)?, account_id: row.get(2)?,
+                transaction_type: row.get(3)?, category_id: row.get(4)?, amount: row.get(5)?,
+                payee: row.get(6)?, notes: row.get(7)?, transfer_id: row.get(8)?, created_at: row.get(9)?,
+            }),
+        ).map_err(|e| e.to_string())?;
+        result.push(transaction);
+    }
     
     // Add import statistics to the first transaction (temporary storage)
     if !result.is_empty() {
         result[0].notes = Some(format!("IMPORT_STATS: imported={}, duplicates={}", imported_count, duplicate_count));
     }
     
-    Ok(result)
+    Ok(ImportResult {
+        imported: result,
+        imported_count,
+        duplicate_count,
+    })
 }
 
 #[tauri::command]

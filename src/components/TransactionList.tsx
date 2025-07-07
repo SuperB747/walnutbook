@@ -61,19 +61,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
     console.log('TransactionList useEffect triggered with importedIds:', importedIds);
     if (importedIds.length > 0) {
       console.log('Auto-selecting imported transactions:', importedIds);
-      // Force immediate update of selectedIds
-      setTimeout(() => {
-        setSelectedIds(prev => {
-          const newSelected = [...prev];
-          importedIds.forEach(id => {
-            if (!newSelected.includes(id)) {
-              newSelected.push(id);
-            }
-          });
-          console.log('Updated selectedIds:', newSelected);
-          return newSelected;
-        });
-      }, 0);
+      setSelectedIds(importedIds);
+      console.log('Updated selectedIds:', importedIds);
     }
   }, [importedIds]);
   const [editDescriptionId, setEditDescriptionId] = useState<number | null>(null);

@@ -708,51 +708,34 @@ const App: React.FC = () => {
           onClose={() => setImportExportDialogOpen(false)}
           onImport={async (transactions) => {
             try {
-              const createdList = await invoke<Transaction[]>('import_transactions', { transactions });
-              
-              // Extract import statistics from the first transaction's notes
-              let importedCount = createdList.length;
-              let duplicateCount = 0;
-              
-              if (createdList.length > 0 && createdList[0].notes) {
-                const statsMatch = createdList[0].notes.match(/IMPORT_STATS: imported=(\d+), duplicates=(\d+)/);
-                if (statsMatch) {
-                  importedCount = parseInt(statsMatch[1]);
-                  duplicateCount = parseInt(statsMatch[2]);
-                }
-              }
-              
-              // 로컬 상태를 즉시 업데이트하여 부드러운 UI 전환
+              const result = await invoke<{ imported: Transaction[]; imported_count: number; duplicate_count: number }>('import_transactions', { transactions });
+              // Refresh data
               const [newAccounts, newTransactions] = await Promise.all([
                 invoke<Account[]>('get_accounts'),
                 invoke<Transaction[]>('get_transactions')
               ]);
-              
               setAccounts(newAccounts);
               setTransactions(newTransactions);
-              
-              // 모든 페이지가 데이터를 새로고침하도록 이벤트 발생
               window.dispatchEvent(new Event('accountsUpdated'));
               window.dispatchEvent(new Event('transactionsUpdated'));
               window.dispatchEvent(new Event('budgetsUpdated'));
-              
-              // Dispatch custom event with imported transaction IDs for auto-checking
-              const importedTransactionIds = createdList.map(t => t.id);
+              const importedTransactionIds = result.imported.map(t => t.id);
               window.dispatchEvent(new CustomEvent('transactionsImported', {
-                detail: { importedIds: importedTransactionIds }
+                detail: { importedIds: importedTransactionIds, duplicateCount: result.duplicate_count }
               }));
-              
               setSnackbar({
                 open: true,
-                message: `Imported ${importedCount} transactions, skipped ${duplicateCount} duplicates.`,
+                message: `Imported ${result.imported_count} transaction${result.imported_count === 1 ? '' : 's'}${result.duplicate_count > 0 ? ` (${result.duplicate_count} duplicates skipped)` : ''}`,
                 severity: 'success',
               });
+              return result;
             } catch (error) {
               setSnackbar({
                 open: true,
                 message: 'Failed to import transactions: ' + String(error),
                 severity: 'error',
               });
+              return { imported: [], imported_count: 0, duplicate_count: 0 };
             }
           }}
           accounts={accounts}

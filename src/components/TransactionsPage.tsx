@@ -93,6 +93,7 @@ const TransactionsPage: React.FC = () => {
     const handleTransactionsImported = (event: CustomEvent) => {
       console.log('TransactionsPage received transactionsImported event:', event.detail);
       setImportedIds(event.detail.importedIds);
+      setImportedDuplicateCount(event.detail.duplicateCount || 0);
     };
     
     window.addEventListener('transactionsUpdated', handleDataUpdate);
@@ -107,6 +108,19 @@ const TransactionsPage: React.FC = () => {
       window.removeEventListener('transactionsImported', handleTransactionsImported as EventListener);
     };
   }, []);
+
+  useEffect(() => {
+    if (importedIds.length > 0) {
+      const message = `Successfully imported ${importedIds.length} transaction${importedIds.length === 1 ? '' : 's'}${importedDuplicateCount > 0 ? ` (${importedDuplicateCount} duplicate${importedDuplicateCount === 1 ? '' : 's'} skipped)` : ''}`;
+      setSnackbar({
+        open: true,
+        message,
+        severity: 'success',
+      });
+      setImportedDuplicateCount(0);
+      setImportedIds([]);
+    }
+  }, [importedIds, importedDuplicateCount]);
 
   const handleTransactionSave = async (transaction: Partial<Transaction>): Promise<void> => {
     try {
@@ -261,47 +275,21 @@ const TransactionsPage: React.FC = () => {
     }
   };
 
-  const handleImport = async (importTxs: Partial<Transaction>[]): Promise<void> => {
-    console.log('=== TRANSACTIONSPAGE handleImport START ===');
-    console.log('handleImport called with:', importTxs);
-    console.log('This is the REAL handleImport function from TransactionsPage');
+  const handleImport = async (importTxs: Partial<Transaction>[]): Promise<{ imported: Transaction[]; imported_count: number; duplicate_count: number; }> => {
     try {
-      const createdList = await invoke<Transaction[]>('import_transactions', { transactions: importTxs });
-      console.log('import_transactions returned:', createdList);
-      
-      // Extract import statistics from the first transaction's notes
-      let importedCount = createdList.length;
-      let duplicateCount = 0;
-      
-      if (createdList.length > 0 && createdList[0].notes) {
-        const statsMatch = createdList[0].notes.match(/IMPORT_STATS: imported=(\d+), duplicates=(\d+)/);
-        if (statsMatch) {
-          importedCount = parseInt(statsMatch[1]);
-          duplicateCount = parseInt(statsMatch[2]);
-          console.log('Extracted import stats:', { importedCount, duplicateCount });
-        }
-      }
-      
-      const [newAccounts, newTransactions] = await Promise.all([
-        invoke<Account[]>('get_accounts'),
-        invoke<Transaction[]>('get_transactions')
-      ]);
-      setAccounts(newAccounts);
-      setTransactions(newTransactions);
-      
-      const importedTransactionIds = createdList.map(t => t.id);
-      console.log('Setting importedIds:', importedTransactionIds);
-      console.log('Created transactions:', createdList);
-      console.log('importedTransactionIds length:', importedTransactionIds.length);
-      
-      setImportedIds(importedTransactionIds);
-      setImportedDuplicateCount(duplicateCount);
+      // Call backend to import transactions with duplicate detection
+      const result = await invoke<{ imported: Transaction[]; imported_count: number; duplicate_count: number; }>('import_transactions', { transactions: importTxs });
+      const importedIds = result.imported.map(t => t.id);
+      setImportedIds(importedIds);
+      setImportedDuplicateCount(result.duplicate_count);
+      // Refresh data
       window.dispatchEvent(new Event('transactionsUpdated'));
-      setSnackbar({ open: true, message: `Imported ${importedCount} transactions, skipped ${duplicateCount} duplicates.`, severity: 'success' });
-      console.log('=== TRANSACTIONSPAGE handleImport END ===');
+      return result;
     } catch (error) {
       console.error('Import failed:', error);
       setSnackbar({ open: true, message: 'Failed to import transactions', severity: 'error' });
+      // Return default result on error
+      return { imported: [], imported_count: 0, duplicate_count: 0 };
     }
   };
 
