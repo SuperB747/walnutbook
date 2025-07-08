@@ -3,7 +3,7 @@ import { Transaction, TransactionType } from '../../db';
 
 export class BMOImporter extends BaseImporter {
   name = 'BMO Checking';
-  description = 'Import transactions from BMO Checking account CSV files';
+  description = 'CSV format';
   supportedFormats = ['BMO CSV'];
   
   detectFormat(headers: string[]): boolean {

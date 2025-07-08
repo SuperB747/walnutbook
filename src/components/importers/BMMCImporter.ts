@@ -2,8 +2,8 @@ import { BaseImporter, ColumnMapping } from './BaseImporter';
 import { Transaction, TransactionType } from '../../db';
 
 export class BMMCImporter extends BaseImporter {
-  name = 'BMO Mastercard (BMMC)';
-  description = 'Import transactions from BMO Mastercard CSV files';
+  name = 'BMMC';
+  description = 'CSV format';
   supportedFormats = ['BMMC CSV'];
   
   detectFormat(headers: string[]): boolean {

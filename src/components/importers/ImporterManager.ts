@@ -1,6 +1,8 @@
 import { BaseImporter, ImportResult } from './BaseImporter';
 import { BMOImporter } from './BMOImporter';
 import { BMMCImporter } from './BMMCImporter';
+import { PCMCImporter } from './PCMCImporter';
+import { CIMCImporter } from './CIMCImporter';
 import { Transaction } from '../../db';
 
 export class ImporterManager {
@@ -10,6 +12,8 @@ export class ImporterManager {
     // Register all available importers
     this.registerImporter(new BMOImporter());
     this.registerImporter(new BMMCImporter());
+    this.registerImporter(new PCMCImporter());
+    this.registerImporter(new CIMCImporter());
     // Add more importers here as needed
   }
   
@@ -67,6 +71,23 @@ export class ImporterManager {
         if (fields.length > 2 && 
             fields.some(field => field.toLowerCase().includes('item #')) &&
             fields.some(field => field.toLowerCase().includes('card #'))) {
+          headerIndex = i;
+          break;
+        }
+        
+        // Special check for PCMC format
+        if (fields.length > 2 && 
+            fields.some(field => field.toLowerCase().includes('description')) &&
+            fields.some(field => field.toLowerCase().includes('type')) &&
+            fields.some(field => field.toLowerCase().includes('card holder name'))) {
+          headerIndex = i;
+          break;
+        }
+        
+        // Special check for CIMC format (no headers, date in first column)
+        if (fields.length >= 3 && 
+            /^\d{4}-\d{2}-\d{2}$/.test(fields[0]) && // YYYY-MM-DD format
+            !isNaN(parseFloat(fields[2]))) { // Third column is numeric
           headerIndex = i;
           break;
         }

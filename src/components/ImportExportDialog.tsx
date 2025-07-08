@@ -214,12 +214,12 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ pb: 1 }}>
         Import/Export Transactions
       </DialogTitle>
-      <DialogContent>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+      <DialogContent sx={{ px: 2, py: 1 }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 1.5 }}>
           <Tabs value={activeTab} onChange={handleTabChange}>
             <Tab label="Import" />
             <Tab label="Export" />
@@ -229,7 +229,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         {activeTab === 0 && (
           <Box>
             {/* Account Selection */}
-            <FormControl fullWidth sx={{ mb: 2 }}>
+            <FormControl fullWidth sx={{ mb: 1.5 }}>
               <InputLabel>Select Account</InputLabel>
               <Select
                 value={selectedAccount.toString()}
@@ -245,7 +245,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             </FormControl>
 
             {/* Importer Selection */}
-            <FormControl fullWidth sx={{ mb: 2 }}>
+            <FormControl fullWidth sx={{ mb: 1.5 }}>
               <InputLabel>CSV Format (Auto-detect)</InputLabel>
               <Select
                 value={selectedImporter?.name || ''}
@@ -269,10 +269,10 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
               sx={{
                 border: '2px dashed #ccc',
                 borderRadius: 1,
-                p: 3,
+                p: 2,
                 textAlign: 'center',
                 cursor: 'pointer',
-                mb: 2,
+                mb: 1.5,
                 backgroundColor: isDragActive ? '#f0f0f0' : 'transparent',
               }}
             >
@@ -295,21 +295,21 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 />
               }
               label="Remove duplicate transactions"
-              sx={{ mb: 2 }}
+              sx={{ mb: 1.5 }}
             />
 
             {/* Status */}
             {importStatus.status !== 'ready' && (
-              <Alert severity={importStatus.status === 'error' ? 'error' : importStatus.status === 'success' ? 'success' : 'info'} sx={{ mb: 2 }}>
-                {importStatus.status === 'processing' && <CircularProgress size={20} sx={{ mr: 1 }} />}
+              <Alert severity={importStatus.status === 'error' ? 'error' : importStatus.status === 'success' ? 'success' : 'info'} sx={{ mb: 1.5 }}>
+                {importStatus.status === 'processing' && <CircularProgress size={16} sx={{ mr: 1 }} />}
                 {importStatus.message}
               </Alert>
             )}
 
             {/* Errors and Warnings */}
             {importErrors.length > 0 && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>Errors:</Typography>
+              <Alert severity="error" sx={{ mb: 1.5 }}>
+                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Errors:</Typography>
                 <List dense>
                   {importErrors.map((error, index) => (
                     <ListItem key={index}>
@@ -321,8 +321,8 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             )}
 
             {importWarnings.length > 0 && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>Warnings:</Typography>
+              <Alert severity="warning" sx={{ mb: 1.5 }}>
+                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Warnings:</Typography>
                 <List dense>
                   {importWarnings.map((warning, index) => (
                     <ListItem key={index}>
@@ -335,21 +335,27 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
 
             {/* Preview */}
             {showPreview && (importPreview.length > 0 || skippedTransactions.length > 0) && (
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="h6" sx={{ mb: 1 }}>
+              <Box sx={{ mb: 1.5 }}>
+                <Typography variant="h6" sx={{ mb: 0.5 }}>
                   Preview ({importPreview.length} to import, {skippedTransactions.length} skipped)
                 </Typography>
                 
                 {/* Transactions to import */}
                 {importPreview.length > 0 && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" sx={{ mb: 1, color: 'success.main' }}>
+                  <Box sx={{ mb: 1.5 }}>
+                    <Typography variant="subtitle2" sx={{ mb: 0.5, color: 'success.main' }}>
                       To Import ({importPreview.length}):
                     </Typography>
-                    <Box sx={{ maxHeight: 150, overflow: 'auto', border: 1, borderColor: 'success.main', p: 1, backgroundColor: 'success.50' }}>
+                    <Box sx={{ maxHeight: 120, overflow: 'auto', border: 1, borderColor: 'success.main', p: 0.5, backgroundColor: 'success.50' }}>
                       {importPreview.slice(0, 8).map((transaction, index) => (
-                        <Box key={index} sx={{ mb: 1, p: 1, backgroundColor: 'success.100' }}>
-                          <Typography variant="body2">
+                        <Box key={index} sx={{ mb: 0.5, p: 0.5, backgroundColor: 'success.100' }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: transaction.type === 'Expense' ? 'error.main' : 'success.main',
+                              fontWeight: 500
+                            }}
+                          >
                             {transaction.date} - {transaction.payee} - ${transaction.amount?.toFixed(2)}
                           </Typography>
                         </Box>
@@ -365,14 +371,20 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 
                 {/* Skipped transactions */}
                 {skippedTransactions.length > 0 && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" sx={{ mb: 1, color: 'warning.main' }}>
+                  <Box sx={{ mb: 1.5 }}>
+                    <Typography variant="subtitle2" sx={{ mb: 0.5, color: 'warning.main' }}>
                       Skipped ({skippedTransactions.length}):
                     </Typography>
-                    <Box sx={{ maxHeight: 150, overflow: 'auto', border: 1, borderColor: 'warning.main', p: 1, backgroundColor: 'warning.50' }}>
+                    <Box sx={{ maxHeight: 120, overflow: 'auto', border: 1, borderColor: 'warning.main', p: 0.5, backgroundColor: 'warning.50' }}>
                       {skippedTransactions.slice(0, 8).map((transaction, index) => (
-                        <Box key={index} sx={{ mb: 1, p: 1, backgroundColor: 'warning.100' }}>
-                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                        <Box key={index} sx={{ mb: 0.5, p: 0.5, backgroundColor: 'warning.100' }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: transaction.type === 'Expense' ? 'error.main' : 'success.main',
+                              fontWeight: 500
+                            }}
+                          >
                             {transaction.date} - {transaction.payee} - ${transaction.amount?.toFixed(2)}
                           </Typography>
                         </Box>
