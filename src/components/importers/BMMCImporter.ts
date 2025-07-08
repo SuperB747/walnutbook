@@ -49,7 +49,7 @@ export class BMMCImporter extends BaseImporter {
     return mapping;
   }
   
-  parseRow(row: string[], mapping: ColumnMapping): Partial<Transaction> | null {
+  parseRow(row: string[], mapping: ColumnMapping, accountType?: string): Partial<Transaction> | null {
     try {
       // Extract data from row
       const dateStr = row[mapping.date]?.trim() || '';

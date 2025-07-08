@@ -22,9 +22,12 @@ import {
   ListItem,
   ListItemText,
   Divider,
+  TextField,
+  Switch,
+  FormGroup,
 } from '@mui/material';
 import { useDropzone } from 'react-dropzone';
-import { Transaction, Account, Category } from '../db';
+import { Transaction, Account, Category, TransactionType } from '../db';
 import { invoke } from '@tauri-apps/api/core';
 import { ImportService } from '../services/ImportService';
 import { BaseImporter } from './importers/BaseImporter';
@@ -63,6 +66,13 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [skippedTransactions, setSkippedTransactions] = useState<Partial<Transaction>[]>([]);
+  
+  // Paste functionality
+  const [usePaste, setUsePaste] = useState(false);
+  const [pastedData, setPastedData] = useState('');
+  
+  // Reverse toggle functionality
+  const [reverseIncomeExpense, setReverseIncomeExpense] = useState(false);
 
   const importService = new ImportService();
   const availableImporters = importService.getAvailableImporters();
@@ -81,6 +91,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         setImportErrors([]);
         setImportWarnings([]);
         setShowPreview(false);
+        setUsePaste(false);
       }
     },
   });
@@ -110,31 +121,71 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     setImportWarnings([]);
     setShowPreview(false);
     setSkippedTransactions([]);
+    setUsePaste(false);
+    setPastedData('');
+    setReverseIncomeExpense(false);
     onClose();
   };
 
   const handlePreview = async () => {
-    if (!selectedFile || !selectedAccount) {
+    if (!selectedAccount) {
       setImportStatus({
         status: 'error',
-        message: selectedAccount ? 'Please select a file' : 'Please select an account',
+        message: 'Please select an account',
+      });
+      return;
+    }
+
+    if (usePaste && !pastedData.trim()) {
+      setImportStatus({
+        status: 'error',
+        message: 'Please paste some data or select a file',
+      });
+      return;
+    }
+
+    if (!usePaste && !selectedFile) {
+      setImportStatus({
+        status: 'error',
+        message: 'Please select a file or use paste mode',
       });
       return;
     }
 
     try {
-      setImportStatus({ status: 'processing', message: 'Analyzing CSV file...' });
+      setImportStatus({ status: 'processing', message: 'Analyzing data...' });
       
-      const content = await selectedFile.text();
+      let content: string;
+      if (usePaste) {
+        content = pastedData;
+      } else {
+        content = await selectedFile!.text();
+      }
+      
       const sanitizedContent = content.replace(/^\uFEFF/, ''); // Remove BOM
+      
+      // Get the selected account type
+      const selectedAccountData = accounts.find(acc => acc.id === selectedAccount);
+      const accountType = selectedAccountData?.type;
       
       const result = await importService.importCSV(
         sanitizedContent,
         selectedImporter || undefined,
-        transactions
+        transactions,
+        accountType
       );
 
-      setImportPreview(result.imported);
+      // Apply reverse toggle if enabled
+      let processedTransactions = result.imported;
+      if (reverseIncomeExpense) {
+        processedTransactions = result.imported.map(tx => ({
+          ...tx,
+          type: (tx.type === 'Income' ? 'Expense' : 'Income') as 'Income' | 'Expense',
+          amount: tx.amount ? -tx.amount : tx.amount
+        }));
+      }
+
+      setImportPreview(processedTransactions);
       setSkippedTransactions(result.skipped || []);
       setImportErrors(result.errors);
       setImportWarnings(result.warnings);
@@ -149,7 +200,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       console.error('Preview failed:', error);
       setImportStatus({
         status: 'error',
-        message: error instanceof Error ? error.message : 'Failed to analyze CSV file',
+        message: error instanceof Error ? error.message : 'Failed to analyze data',
       });
     }
   };
@@ -166,7 +217,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     if (importPreview.length === 0) {
       setImportStatus({
         status: 'error',
-        message: 'No transactions to import. Please preview the file first.',
+        message: 'No transactions to import. Please preview the data first.',
       });
       return;
     }
@@ -244,201 +295,220 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
               </Select>
             </FormControl>
 
-            {/* Importer Selection */}
-            <FormControl fullWidth sx={{ mb: 1.5 }}>
-              <InputLabel>CSV Format (Auto-detect)</InputLabel>
-              <Select
-                value={selectedImporter?.name || ''}
-                onChange={handleImporterChange}
-                label="CSV Format (Auto-detect)"
-              >
-                <MenuItem value="">
-                  <em>Auto-detect format</em>
-                </MenuItem>
-                {availableImporters.map((importer) => (
-                  <MenuItem key={importer.name} value={importer.name}>
-                    {importer.name} - {importer.description}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            {/* Import Mode Selection */}
+            <FormGroup sx={{ mb: 1.5 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={usePaste}
+                    onChange={(e) => setUsePaste(e.target.checked)}
+                  />
+                }
+                label="Paste online banking data"
+              />
+            </FormGroup>
 
-            {/* File Upload */}
-            <Box
-              {...getRootProps()}
-              sx={{
-                border: '2px dashed #ccc',
-                borderRadius: 1,
-                p: 2,
-                textAlign: 'center',
-                cursor: 'pointer',
-                mb: 1.5,
-                backgroundColor: isDragActive ? '#f0f0f0' : 'transparent',
-              }}
-            >
-              <input {...getInputProps()} />
-              {selectedFile ? (
-                <Typography>Selected: {selectedFileName}</Typography>
-              ) : (
-                <Typography>
-                  {isDragActive ? 'Drop the CSV file here' : 'Drag and drop a CSV file here, or click to select'}
-                </Typography>
-              )}
-            </Box>
-
-            {/* Options */}
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={removeDuplicates}
-                  onChange={(e) => setRemoveDuplicates(e.target.checked)}
-                />
-              }
-              label="Remove duplicate transactions"
-              sx={{ mb: 1.5 }}
-            />
-
-            {/* Status */}
-            {importStatus.status !== 'ready' && (
-              <Alert severity={importStatus.status === 'error' ? 'error' : importStatus.status === 'success' ? 'success' : 'info'} sx={{ mb: 1.5 }}>
-                {importStatus.status === 'processing' && <CircularProgress size={16} sx={{ mr: 1 }} />}
-                {importStatus.message}
-              </Alert>
-            )}
-
-            {/* Errors and Warnings */}
-            {importErrors.length > 0 && (
-              <Alert severity="error" sx={{ mb: 1.5 }}>
-                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Errors:</Typography>
-                <List dense>
-                  {importErrors.map((error, index) => (
-                    <ListItem key={index}>
-                      <ListItemText primary={error} />
-                    </ListItem>
-                  ))}
-                </List>
-              </Alert>
-            )}
-
-            {importWarnings.length > 0 && (
-              <Alert severity="warning" sx={{ mb: 1.5 }}>
-                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Warnings:</Typography>
-                <List dense>
-                  {importWarnings.map((warning, index) => (
-                    <ListItem key={index}>
-                      <ListItemText primary={warning} />
-                    </ListItem>
-                  ))}
-                </List>
-              </Alert>
-            )}
-
-            {/* Preview */}
-            {showPreview && (importPreview.length > 0 || skippedTransactions.length > 0) && (
+            {usePaste ? (
+              /* Paste Mode */
               <Box sx={{ mb: 1.5 }}>
-                <Typography variant="h6" sx={{ mb: 0.5 }}>
-                  Preview ({importPreview.length} to import, {skippedTransactions.length} skipped)
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Paste your online banking transaction data here:
                 </Typography>
-                
-                {/* Transactions to import */}
-                {importPreview.length > 0 && (
-                  <Box sx={{ mb: 1.5 }}>
-                    <Typography variant="subtitle2" sx={{ mb: 0.5, color: 'success.main' }}>
-                      To Import ({importPreview.length}):
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={8}
+                  variant="outlined"
+                  placeholder="Paste your banking data here...&#10;Example:&#10;12/15/2023  WALMART STORE  -$45.67&#10;12/14/2023  DEPOSIT  +$500.00"
+                  value={pastedData}
+                  onChange={(e) => setPastedData(e.target.value)}
+                  sx={{ fontFamily: 'monospace' }}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                  Tip: Copy transaction data from your online banking website and paste it here
+                </Typography>
+              </Box>
+            ) : (
+              /* File Upload Mode */
+              <>
+                {/* Importer Selection */}
+                <FormControl fullWidth sx={{ mb: 1.5 }}>
+                  <InputLabel>CSV Format (Auto-detect)</InputLabel>
+                  <Select
+                    value={selectedImporter?.name || ''}
+                    onChange={handleImporterChange}
+                    label="CSV Format (Auto-detect)"
+                  >
+                    <MenuItem value="">
+                      <em>Auto-detect format</em>
+                    </MenuItem>
+                    {availableImporters.map((importer) => (
+                      <MenuItem key={importer.name} value={importer.name}>
+                        {importer.name} - {importer.description}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                {/* File Upload */}
+                <Box
+                  {...getRootProps()}
+                  sx={{
+                    border: '2px dashed',
+                    borderColor: isDragActive ? 'primary.main' : 'grey.300',
+                    borderRadius: 1,
+                    p: 3,
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    backgroundColor: isDragActive ? 'action.hover' : 'background.paper',
+                    mb: 1.5,
+                  }}
+                >
+                  <input {...getInputProps()} />
+                  {selectedFile ? (
+                    <Typography variant="body2" color="primary">
+                      Selected: {selectedFileName}
                     </Typography>
-                    <Box sx={{ maxHeight: 120, overflow: 'auto', border: 1, borderColor: 'success.main', p: 0.5, backgroundColor: 'success.50' }}>
-                      {importPreview.slice(0, 8).map((transaction, index) => (
-                        <Box key={index} sx={{ mb: 0.5, p: 0.5, backgroundColor: 'success.100' }}>
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              color: transaction.type === 'Expense' ? 'error.main' : 'success.main',
-                              fontWeight: 500
-                            }}
-                          >
-                            {transaction.date} - {transaction.payee} - ${transaction.amount?.toFixed(2)}
-                          </Typography>
-                        </Box>
-                      ))}
-                      {importPreview.length > 8 && (
-                        <Typography variant="body2" color="text.secondary">
-                          ... and {importPreview.length - 8} more
-                        </Typography>
-                      )}
-                    </Box>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      {isDragActive
+                        ? 'Drop the CSV file here...'
+                        : 'Drag and drop a CSV file here, or click to select'}
+                    </Typography>
+                  )}
+                </Box>
+              </>
+            )}
+
+            {/* Status and Preview */}
+            {importStatus.status !== 'ready' && (
+              <Box sx={{ mb: 1.5 }}>
+                {importStatus.status === 'processing' && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CircularProgress size={20} />
+                    <Typography variant="body2">{importStatus.message}</Typography>
                   </Box>
                 )}
-                
-                {/* Skipped transactions */}
-                {skippedTransactions.length > 0 && (
-                  <Box sx={{ mb: 1.5 }}>
-                    <Typography variant="subtitle2" sx={{ mb: 0.5, color: 'warning.main' }}>
-                      Skipped ({skippedTransactions.length}):
-                    </Typography>
-                    <Box sx={{ maxHeight: 120, overflow: 'auto', border: 1, borderColor: 'warning.main', p: 0.5, backgroundColor: 'warning.50' }}>
-                      {skippedTransactions.slice(0, 8).map((transaction, index) => (
-                        <Box key={index} sx={{ mb: 0.5, p: 0.5, backgroundColor: 'warning.100' }}>
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              color: transaction.type === 'Expense' ? 'error.main' : 'success.main',
-                              fontWeight: 500
-                            }}
-                          >
-                            {transaction.date} - {transaction.payee} - ${transaction.amount?.toFixed(2)}
-                          </Typography>
-                        </Box>
-                      ))}
-                      {skippedTransactions.length > 8 && (
-                        <Typography variant="body2" color="text.secondary">
-                          ... and {skippedTransactions.length - 8} more
-                        </Typography>
-                      )}
-                    </Box>
-                  </Box>
+                {importStatus.status === 'success' && (
+                  <Alert severity="success" sx={{ mb: 1 }}>
+                    {importStatus.message}
+                  </Alert>
+                )}
+                {importStatus.status === 'error' && (
+                  <Alert severity="error" sx={{ mb: 1 }}>
+                    {importStatus.message}
+                  </Alert>
                 )}
               </Box>
             )}
+
+            {/* Preview Section */}
+            {showPreview && (
+              <Box sx={{ mb: 1.5 }}>
+                <Typography variant="h6" sx={{ mb: 1 }}>
+                  Preview ({importPreview.length} transactions)
+                </Typography>
+                
+                {/* Reverse Toggle */}
+                <FormGroup sx={{ mb: 1 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={reverseIncomeExpense}
+                        onChange={(e) => {
+                          setReverseIncomeExpense(e.target.checked);
+                          // Re-apply the reverse logic
+                          if (e.target.checked) {
+                            const reversedTransactions = importPreview.map(tx => ({
+                              ...tx,
+                              type: (tx.type === 'Income' ? 'Expense' : 'Income') as 'Income' | 'Expense',
+                              amount: tx.amount ? -tx.amount : tx.amount
+                            }));
+                            setImportPreview(reversedTransactions);
+                          } else {
+                            // Re-run preview to get original data
+                            handlePreview();
+                          }
+                        }}
+                      />
+                    }
+                    label="Reverse Income/Expense"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Toggle to swap Income and Expense types
+                  </Typography>
+                </FormGroup>
+                
+                <List dense sx={{ maxHeight: 200, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                  {importPreview.slice(0, 10).map((tx, index) => (
+                    <ListItem key={index} divider>
+                      <ListItemText
+                        primary={tx.payee}
+                        secondary={`${tx.date} - ${tx.amount?.toFixed(2)} (${tx.type})`}
+                      />
+                    </ListItem>
+                  ))}
+                  {importPreview.length > 10 && (
+                    <ListItem>
+                      <ListItemText
+                        primary={`... and ${importPreview.length - 10} more transactions`}
+                        sx={{ fontStyle: 'italic' }}
+                      />
+                    </ListItem>
+                  )}
+                </List>
+                
+                {importErrors.length > 0 && (
+                  <Alert severity="error" sx={{ mt: 1 }}>
+                    <Typography variant="body2">
+                      Errors: {importErrors.join(', ')}
+                    </Typography>
+                  </Alert>
+                )}
+                
+                {importWarnings.length > 0 && (
+                  <Alert severity="warning" sx={{ mt: 1 }}>
+                    <Typography variant="body2">
+                      Warnings: {importWarnings.join(', ')}
+                    </Typography>
+                  </Alert>
+                )}
+              </Box>
+            )}
+
+            {/* Action Buttons */}
+            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+              <Button onClick={handleClose}>Cancel</Button>
+              <Button 
+                onClick={handlePreview} 
+                variant="outlined"
+                disabled={!selectedAccount || (usePaste ? !pastedData.trim() : !selectedFile)}
+              >
+                Preview
+              </Button>
+              <Button 
+                onClick={handleImport} 
+                variant="contained" 
+                color="primary"
+                disabled={importPreview.length === 0}
+              >
+                Import
+              </Button>
+            </Box>
           </Box>
         )}
 
         {activeTab === 1 && (
           <Box>
-            <Typography variant="body1" sx={{ mb: 2 }}>
-              Export all transactions to CSV format.
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Export all transactions to a CSV file
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              This will export {transactions.length} transactions.
-            </Typography>
+            <Button onClick={handleExport} variant="contained" color="primary">
+              Export Transactions
+            </Button>
           </Box>
         )}
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose}>Cancel</Button>
-        {activeTab === 0 && (
-          <>
-            <Button 
-              onClick={handlePreview}
-              disabled={!selectedFile || !selectedAccount || importStatus.status === 'processing'}
-              variant="outlined"
-            >
-              Preview
-            </Button>
-            <Button 
-              onClick={handleImport}
-              disabled={importPreview.length === 0 || importStatus.status === 'processing'}
-              variant="contained"
-            >
-              Import
-            </Button>
-          </>
-        )}
-        {activeTab === 1 && (
-          <Button onClick={handleExport} variant="contained">
-            Export
-          </Button>
-        )}
-      </DialogActions>
     </Dialog>
   );
 };

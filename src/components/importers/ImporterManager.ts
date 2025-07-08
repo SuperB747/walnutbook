@@ -3,6 +3,7 @@ import { BMOImporter } from './BMOImporter';
 import { BMMCImporter } from './BMMCImporter';
 import { PCMCImporter } from './PCMCImporter';
 import { CIMCImporter } from './CIMCImporter';
+import { PasteImporter } from './PasteImporter';
 import { Transaction } from '../../db';
 
 export class ImporterManager {
@@ -14,6 +15,7 @@ export class ImporterManager {
     this.registerImporter(new BMMCImporter());
     this.registerImporter(new PCMCImporter());
     this.registerImporter(new CIMCImporter());
+    this.registerImporter(new PasteImporter());
     // Add more importers here as needed
   }
   
@@ -21,7 +23,7 @@ export class ImporterManager {
     this.importers.push(importer);
   }
   
-  detectImporter(headers: string[]): BaseImporter | null {
+  private detectImporter(headers: string[]): BaseImporter | null {
     for (const importer of this.importers) {
       if (importer.detectFormat(headers)) {
         return importer;
@@ -34,7 +36,7 @@ export class ImporterManager {
     return this.importers;
   }
   
-  async importCSV(content: string, selectedImporter?: BaseImporter): Promise<ImportResult> {
+  async importCSV(content: string, selectedImporter?: BaseImporter, accountType?: string): Promise<ImportResult> {
     const lines = content.split(/\r?\n/).filter(line => line.trim());
     
     if (lines.length < 2) {
@@ -43,6 +45,22 @@ export class ImporterManager {
         errors: ['CSV file is too short or empty'],
         warnings: []
       };
+    }
+    
+    // Check if this looks like multi-line paste data (not CSV format)
+    const isMultiLinePaste = this.isMultiLinePasteData(lines);
+    
+    if (isMultiLinePaste) {
+      // Use PasteImporter for multi-line data
+      const pasteImporter = this.importers.find(imp => imp.name === 'Paste') as any;
+      if (pasteImporter && pasteImporter.parseMultiLineTransactions) {
+        const transactions = pasteImporter.parseMultiLineTransactions(content);
+        return {
+          transactions,
+          errors: [],
+          warnings: []
+        };
+      }
     }
     
     // Try to find headers (skip empty lines and metadata)
@@ -124,28 +142,28 @@ export class ImporterManager {
     const errors: string[] = [];
     const warnings: string[] = [];
     
+    // Skip header row and process data rows
     for (let i = headerIndex + 1; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line.trim()) continue;
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const fields = this.parseCSVLine(line);
+      if (fields.length < 2) {
+        warnings.push(`Line ${i + 1}: Skipped - insufficient data`);
+        continue;
+      }
       
       try {
-        const fields = this.parseCSVLine(line);
-        
-        if (fields.length < Math.max(mapping.date, mapping.amount, mapping.payee) + 1) {
-          warnings.push(`Line ${i + 1}: Insufficient fields, skipping`);
-          continue;
-        }
-        
-        const transaction = importer.parseRow(fields, mapping);
+        const transaction = importer.parseRow(fields, mapping, accountType);
         if (transaction) {
           const validated = importer.validateTransaction(transaction);
           if (validated) {
             transactions.push(validated);
           } else {
-            warnings.push(`Line ${i + 1}: Invalid transaction data`);
+            warnings.push(`Line ${i + 1}: Skipped - validation failed`);
           }
         } else {
-          warnings.push(`Line ${i + 1}: Could not parse transaction`);
+          warnings.push(`Line ${i + 1}: Skipped - could not parse`);
         }
       } catch (error) {
         errors.push(`Line ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -179,5 +197,30 @@ export class ImporterManager {
     
     fields.push(current.trim());
     return fields.map(field => field.replace(/^["']|["']$/g, ''));
+  }
+
+  private isMultiLinePasteData(lines: string[]): boolean {
+    // Check if this looks like multi-line paste data
+    // Look for patterns like: date on one line, description on next, amount on next
+    let dateCount = 0;
+    let amountCount = 0;
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+      
+      // Check for date pattern
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmedLine)) {
+        dateCount++;
+      }
+      
+      // Check for amount pattern
+      if (/^\$[\d,.-]+$/.test(trimmedLine)) {
+        amountCount++;
+      }
+    }
+    
+    // If we have multiple dates and amounts, it's likely multi-line paste data
+    return dateCount > 1 && amountCount > 1;
   }
 } 

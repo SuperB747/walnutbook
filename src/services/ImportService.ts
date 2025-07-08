@@ -25,11 +25,12 @@ export class ImportService {
   async importCSV(
     content: string, 
     selectedImporter?: BaseImporter,
-    existingTransactions: Transaction[] = []
+    existingTransactions: Transaction[] = [],
+    accountType?: string
   ): Promise<ImportServiceResult> {
     try {
       // Parse CSV using importer manager
-      const parseResult = await this.importerManager.importCSV(content, selectedImporter);
+      const parseResult = await this.importerManager.importCSV(content, selectedImporter, accountType);
       
       if (parseResult.transactions.length === 0) {
         return {

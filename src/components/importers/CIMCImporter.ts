@@ -28,13 +28,13 @@ export class CIMCImporter extends BaseImporter {
     };
   }
 
-  parseRow(row: string[], mapping: ColumnMapping): Partial<Transaction> | null {
+  parseRow(row: string[], mapping: ColumnMapping, accountType?: string): Partial<Transaction> | null {
     const dateStr = row[0]?.trim();
     const description = row[1]?.trim();
     const expenseStr = row[2]?.trim();
     const incomeStr = row[3]?.trim();
 
-    console.log('CIMC parsing row:', { dateStr, description, expenseStr, incomeStr, row });
+    console.log('CIMC parsing row:', { dateStr, description, expenseStr, incomeStr, row, accountType });
 
     if (!dateStr || !description) {
       console.log('CIMC: Missing date or description');
@@ -76,12 +76,21 @@ export class CIMCImporter extends BaseImporter {
         .replace(/^\s+/, ''); // Remove leading spaces
     }
 
-    // For CIMC: Expense should be negative, Income should be positive
+    // 금액 처리 로직:
+    // Credit 계좌: 거래 금액을 그대로 사용 (부호 변환 없음)
+    // 다른 계좌들: Expense는 음수, Income은 양수로 변환
     let finalAmount = amount;
-    if (transactionType === 'Expense') {
-      finalAmount = -Math.abs(amount);
+    
+    if (accountType === 'Credit') {
+      // Credit 계좌: 거래 금액을 그대로 사용
+      finalAmount = amount;
     } else {
-      finalAmount = Math.abs(amount);
+      // 다른 계좌들: 부호 변환 적용
+      if (transactionType === 'Expense') {
+        finalAmount = -Math.abs(amount);
+      } else {
+        finalAmount = Math.abs(amount);
+      }
     }
 
     return {

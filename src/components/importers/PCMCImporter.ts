@@ -21,7 +21,7 @@ export class PCMCImporter extends BaseImporter {
     };
   }
 
-  parseRow(row: string[], mapping: ColumnMapping): Partial<Transaction> | null {
+  parseRow(row: string[], mapping: ColumnMapping, accountType?: string): Partial<Transaction> | null {
     const description = mapping.payee >= 0 ? row[mapping.payee]?.trim() : '';
     const type = mapping.type !== undefined && mapping.type >= 0 ? row[mapping.type]?.trim() : '';
     const dateStr = mapping.date >= 0 ? row[mapping.date]?.trim() : '';

@@ -22,7 +22,7 @@ export abstract class BaseImporter {
   
   abstract detectFormat(headers: string[]): boolean;
   abstract mapColumns(headers: string[]): ColumnMapping;
-  abstract parseRow(row: string[], mapping: ColumnMapping): Partial<Transaction> | null;
+  abstract parseRow(row: string[], mapping: ColumnMapping, accountType?: string): Partial<Transaction> | null;
   abstract validateTransaction(transaction: Partial<Transaction>): Partial<Transaction> | null;
   
   // Common utility methods
