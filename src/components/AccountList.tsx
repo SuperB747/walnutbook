@@ -150,7 +150,7 @@ const AccountList: React.FC<AccountListProps> = ({
               <TableCell sx={{ width: 130, minWidth: 130, maxWidth: 130 }}>Name</TableCell>
               <TableCell sx={{ minWidth: 200, maxWidth: 'none' }}>Description</TableCell>
               <TableCell align="center" sx={{ width: 80, minWidth: 80, maxWidth: 80 }}>Type</TableCell>
-              <TableCell align="right" sx={{ width: 100, minWidth: 100, maxWidth: 100 }}>Balance</TableCell>
+              <TableCell align="right" sx={{ width: 140, minWidth: 140, maxWidth: 140 }}>Balance</TableCell>
               <TableCell align="center" sx={{ width: 120, minWidth: 120, maxWidth: 120 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -168,7 +168,7 @@ const AccountList: React.FC<AccountListProps> = ({
                 <TableCell align="center" sx={{ width: 80, minWidth: 80, maxWidth: 80 }}>
                   <Box sx={{ width: '70%', height: 16, bgcolor: 'grey.200', borderRadius: 1, mx: 'auto' }} />
                 </TableCell>
-                <TableCell align="right" sx={{ width: 100, minWidth: 100, maxWidth: 100 }}>
+                <TableCell align="right" sx={{ width: 140, minWidth: 140, maxWidth: 140 }}>
                   <Box sx={{ width: '60%', height: 16, bgcolor: 'grey.200', borderRadius: 1, ml: 'auto' }} />
                 </TableCell>
                 <TableCell align="center" sx={{ width: 120, minWidth: 120, maxWidth: 120 }}>
