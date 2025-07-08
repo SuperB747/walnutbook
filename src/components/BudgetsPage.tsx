@@ -206,9 +206,8 @@ const BudgetsPage: React.FC = () => {
       }
 
       const allCategories = await invoke<Category[]>('get_categories_full');
-      const excluded = ['Reimbursement', 'Transfer', 'Adjust'];
       const eligible = allCategories
-        .filter(c => c.type === 'Expense' && !excluded.some(ex => c.name.includes(ex)));
+        .filter(c => c.type === 'Expense' && !c.is_reimbursement && c.name !== 'Transfer' && c.name !== 'Adjust');
 
       let createdCount = 0;
       let skippedCount = 0;

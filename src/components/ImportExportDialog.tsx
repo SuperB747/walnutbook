@@ -332,55 +332,55 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             ) : (
               /* File Upload Mode */
               <>
-                {/* Importer Selection */}
-                <FormControl fullWidth sx={{ mb: 1.5 }}>
-                  <InputLabel>CSV Format (Auto-detect)</InputLabel>
-                  <Select
-                    value={selectedImporter?.name || ''}
-                    onChange={handleImporterChange}
-                    label="CSV Format (Auto-detect)"
-                  >
-                    <MenuItem value="">
-                      <em>Auto-detect format</em>
-                    </MenuItem>
+            {/* Importer Selection */}
+            <FormControl fullWidth sx={{ mb: 1.5 }}>
+              <InputLabel>CSV Format (Auto-detect)</InputLabel>
+              <Select
+                value={selectedImporter?.name || ''}
+                onChange={handleImporterChange}
+                label="CSV Format (Auto-detect)"
+              >
+                <MenuItem value="">
+                  <em>Auto-detect format</em>
+                </MenuItem>
                     {availableImporters
                       .filter(importer => importer.name !== 'Paste') // Remove Paste importer from dropdown
                       .sort((a, b) => a.name.localeCompare(b.name)) // Sort alphabetically
                       .map((importer) => (
-                        <MenuItem key={importer.name} value={importer.name}>
-                          {importer.name} - {importer.description}
-                        </MenuItem>
-                      ))}
-                  </Select>
-                </FormControl>
+                  <MenuItem key={importer.name} value={importer.name}>
+                    {importer.name} - {importer.description}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-                {/* File Upload */}
-                <Box
-                  {...getRootProps()}
-                  sx={{
+            {/* File Upload */}
+            <Box
+              {...getRootProps()}
+              sx={{
                     border: '2px dashed',
                     borderColor: isDragActive ? 'primary.main' : 'grey.300',
-                    borderRadius: 1,
+                borderRadius: 1,
                     p: 3,
-                    textAlign: 'center',
-                    cursor: 'pointer',
+                textAlign: 'center',
+                cursor: 'pointer',
                     backgroundColor: isDragActive ? 'action.hover' : 'background.paper',
-                    mb: 1.5,
-                  }}
-                >
-                  <input {...getInputProps()} />
-                  {selectedFile ? (
+                mb: 1.5,
+              }}
+            >
+              <input {...getInputProps()} />
+              {selectedFile ? (
                     <Typography variant="body2" color="primary">
                       Selected: {selectedFileName}
                     </Typography>
-                  ) : (
+              ) : (
                     <Typography variant="body2" color="text.secondary">
                       {isDragActive
                         ? 'Drop the CSV file here...'
                         : 'Drag and drop a CSV file here, or click to select'}
-                    </Typography>
-                  )}
-                </Box>
+                </Typography>
+              )}
+            </Box>
               </>
             )}
 
@@ -400,9 +400,9 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 )}
                 {importStatus.status === 'error' && (
                   <Alert severity="error" sx={{ mb: 1 }}>
-                    {importStatus.message}
-                  </Alert>
-                )}
+                {importStatus.message}
+              </Alert>
+            )}
               </Box>
             )}
 
@@ -484,9 +484,9 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                     <Typography variant="body2">
                       Errors: {importErrors.join(', ')}
                     </Typography>
-                  </Alert>
-                )}
-                
+              </Alert>
+            )}
+
                 {importWarnings.length > 0 && (
                   <Alert severity="warning" sx={{ mt: 1 }}>
                     <Typography variant="body2">
@@ -525,7 +525,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                                 <Chip
                                   label="Duplicate"
                                   size="small"
-                                  sx={{
+                            sx={{ 
                                     backgroundColor: '#ff9800',
                                     color: 'white',
                                     fontWeight: 'bold',
@@ -533,7 +533,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                                     height: '20px'
                                   }}
                                 />
-                              </Box>
+                        </Box>
                             }
                           />
                         </ListItem>

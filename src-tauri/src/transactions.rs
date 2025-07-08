@@ -260,7 +260,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let mut conn = Connection::open(&path).map_err(|e| e.to_string())?;
     
     // 기존 거래 정보 조회
-    let (old_type, _old_transfer_id) = {
+    let (old_type, old_transfer_id) = {
         let mut sel = conn.prepare("SELECT type, transfer_id FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
         let mut rows = sel.query_map(params![transaction.id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
@@ -268,8 +268,32 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
         rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?
     };
     
+    // Transfer 거래의 notes만 수정하는 경우 특별 처리
+    if old_type == "Transfer" && transaction.transaction_type == "Transfer" {
+        println!("[DEBUG] Updating Transfer transaction notes only");
+        
+        // Transfer 거래의 경우 양쪽 거래 모두 업데이트
+        if let Some(transfer_id) = old_transfer_id {
+            let tx = conn.transaction().map_err(|e| e.to_string())?;
+            
+            // 같은 transfer_id를 가진 모든 거래의 notes 업데이트
+            tx.execute(
+                "UPDATE transactions SET notes = ?1 WHERE transfer_id = ?2",
+                params![transaction.notes.clone().unwrap_or_default(), transfer_id]
+            ).map_err(|e| e.to_string())?;
+            
+            tx.commit().map_err(|e| e.to_string())?;
+            println!("[DEBUG] Transfer notes updated successfully");
+        } else {
+            // transfer_id가 없는 경우 해당 거래만 업데이트
+            conn.execute(
+                "UPDATE transactions SET notes = ?1 WHERE id = ?2",
+                params![transaction.notes.clone().unwrap_or_default(), transaction.id]
+            ).map_err(|e| e.to_string())?;
+        }
+    }
     // Transfer로 변경하는 경우 특별 처리
-    if old_type != "Transfer" && transaction.transaction_type == "Transfer" {
+    else if old_type != "Transfer" && transaction.transaction_type == "Transfer" {
         println!("[DEBUG] Converting transaction {} from {} to Transfer", transaction.id, old_type);
         
         let tx = conn.transaction().map_err(|e| e.to_string())?;
@@ -516,7 +540,7 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
     let mut conn = Connection::open(&path).map_err(|e| e.to_string())?;
     
     // Collect existing transactions for duplicate checking
-    let (mut existing_keys, mut transfer_keys) = {
+    let (existing_keys, transfer_keys) = {
         let mut existing_keys = HashSet::new();
         let mut transfer_keys = HashSet::new();
         let mut stmt = conn.prepare("SELECT date, amount, payee, type FROM transactions").map_err(|e| e.to_string())?;

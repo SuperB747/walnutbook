@@ -160,12 +160,12 @@ export class ImporterManager {
       const line = lines[i].trim();
       if (!line) continue;
       
-      const fields = this.parseCSVLine(line);
+        const fields = this.parseCSVLine(line);
       if (fields.length < 2) {
         warnings.push(`Line ${i + 1}: Skipped - insufficient data`);
-        continue;
-      }
-      
+          continue;
+        }
+        
       try {
         const transaction = importer.parseRow(fields, mapping, accountType);
         if (transaction) {

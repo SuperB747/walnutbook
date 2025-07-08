@@ -72,8 +72,8 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
       const result = await invoke<Category[]>('add_category', {
         name: newName.trim(),
         categoryType,
-        isReimbursement: currentTab === 0 ? isReimbursement : false,
-        reimbursementTargetCategoryId: currentTab === 0 && isReimbursement ? reimbursementTargetCategoryId : null,
+        isReimbursement: isReimbursement,
+        reimbursementTargetCategoryId: isReimbursement ? reimbursementTargetCategoryId : null,
       });
       setNewName('');
       setIsReimbursement(false);
@@ -92,8 +92,8 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
       id: editId,
       name: editName.trim(),
       categoryType: currentTab === 0 ? 'Income' : 'Expense',
-      isReimbursement: currentTab === 0 ? editIsReimbursement : false,
-      reimbursementTargetCategoryId: currentTab === 0 && editIsReimbursement ? editReimbursementTargetCategoryId : null,
+      isReimbursement: editIsReimbursement,
+      reimbursementTargetCategoryId: editIsReimbursement ? editReimbursementTargetCategoryId : null,
     });
     
     try {
@@ -102,8 +102,8 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
         id: editId,
         name: editName.trim(),
         categoryType,
-        isReimbursement: currentTab === 0 ? editIsReimbursement : false,
-        reimbursementTargetCategoryId: currentTab === 0 && editIsReimbursement ? editReimbursementTargetCategoryId : null,
+        isReimbursement: editIsReimbursement,
+        reimbursementTargetCategoryId: editIsReimbursement ? editReimbursementTargetCategoryId : null,
       });
       
       console.log('Update successful, result:', result);
@@ -194,27 +194,27 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
             }}
             variant="outlined"
           />
-          {currentTab === 0 && (
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={isReimbursement}
-                  onChange={(e) => setIsReimbursement(e.target.checked)}
-                />
-              }
-              label="Reimbursement"
-            />
-          )}
-          {currentTab === 0 && isReimbursement && (
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={isReimbursement}
+                onChange={(e) => setIsReimbursement(e.target.checked)}
+              />
+            }
+            label="Reimbursement"
+          />
+          {isReimbursement && (
             <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel id="reim-target-label">Target Expense Category</InputLabel>
+              <InputLabel id="reim-target-label">
+                {currentTab === 0 ? 'Target Expense Category' : 'Target Income Category'}
+              </InputLabel>
               <Select
                 labelId="reim-target-label"
                 value={reimbursementTargetCategoryId}
-                label="Target Expense Category"
+                label={currentTab === 0 ? 'Target Expense Category' : 'Target Income Category'}
                 onChange={(e) => setReimbursementTargetCategoryId(e.target.value as number)}
               >
-                {expenseCategories.map(c => (
+                {(currentTab === 0 ? expenseCategories : incomeCategories).map(c => (
                   <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
                 ))}
               </Select>
@@ -254,13 +254,11 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
                             sx={{ width: '40%' }}
                             variant="outlined"
                           />
-                          {currentTab === 0 && (
-                            <FormControlLabel
-                              control={<Checkbox checked={editIsReimbursement} onChange={e => setEditIsReimbursement(e.target.checked)} />}
-                              label="Reimbursement"
-                            />
-                          )}
-                          {currentTab === 0 && editIsReimbursement && (
+                          <FormControlLabel
+                            control={<Checkbox checked={editIsReimbursement} onChange={e => setEditIsReimbursement(e.target.checked)} />}
+                            label="Reimbursement"
+                          />
+                          {editIsReimbursement && (
                             <FormControl size="small" sx={{ minWidth: 140 }}>
                               <InputLabel id="edit-reim-target-label">Target</InputLabel>
                               <Select
@@ -269,7 +267,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
                                 label="Target"
                                 onChange={e => setEditReimbursementTargetCategoryId(e.target.value as number)}
                               >
-                                {expenseCategories.map(ec => (
+                                {(currentTab === 0 ? expenseCategories : incomeCategories).map(ec => (
                                   <MenuItem key={ec.id} value={ec.id}>{ec.name}</MenuItem>
                                 ))}
                               </Select>
