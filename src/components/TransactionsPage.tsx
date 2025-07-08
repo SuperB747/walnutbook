@@ -287,8 +287,7 @@ const TransactionsPage: React.FC = () => {
       return result;
     } catch (error) {
       console.error('Import failed:', error);
-      setSnackbar({ open: true, message: 'Failed to import transactions', severity: 'error' });
-      // Return default result on error
+      // Don't show snackbar here - let the main app handle it
       return { imported: [], imported_count: 0, duplicate_count: 0 };
     }
   };
@@ -303,6 +302,19 @@ const TransactionsPage: React.FC = () => {
       }
     } catch {
       setSnackbar({ open: true, message: 'Failed to update description', severity: 'error' });
+    }
+  };
+
+  const handleNotesChange = async (id: number, notes: string): Promise<void> => {
+    try {
+      const tx = transactions.find(t => t.id === id);
+      if (tx) {
+        await invoke('update_transaction', { transaction: { ...tx, notes } });
+        setTransactions(prev => prev.map(t => t.id === id ? { ...t, notes } : t));
+        setSnackbar({ open: true, message: 'Notes updated', severity: 'success' });
+      }
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to update notes', severity: 'error' });
     }
   };
 
@@ -378,6 +390,7 @@ const TransactionsPage: React.FC = () => {
           }
         }}
         onDescriptionChange={handleDescriptionChange}
+        onNotesChange={handleNotesChange}
         initialSelectedIds={importedIds}
         importedIds={importedIds}
         onAddTransaction={() => setFormOpen(true)}

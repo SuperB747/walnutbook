@@ -333,7 +333,7 @@ const App: React.FC = () => {
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
-    severity: 'success' | 'error';
+    severity: 'success' | 'error' | 'warning' | 'info';
   }>({
     open: false,
     message: '',
@@ -723,11 +723,26 @@ const App: React.FC = () => {
               window.dispatchEvent(new CustomEvent('transactionsImported', {
                 detail: { importedIds: importedTransactionIds, duplicateCount: result.duplicate_count }
               }));
-              setSnackbar({
-                open: true,
-                message: `Imported ${result.imported_count} transaction${result.imported_count === 1 ? '' : 's'}${result.duplicate_count > 0 ? ` (${result.duplicate_count} duplicates skipped)` : ''}`,
-                severity: 'success',
-              });
+              // Show success message with import and skip counts
+              if (result.imported_count > 0) {
+                const message = result.duplicate_count > 0 
+                  ? `Successfully imported ${result.imported_count} transactions, ${result.duplicate_count} duplicates skipped`
+                  : `Successfully imported ${result.imported_count} transactions`;
+                setSnackbar({ 
+                  open: true, 
+                  message, 
+                  severity: 'success' 
+                });
+              } else {
+                const message = result.duplicate_count > 0 
+                  ? `No transactions imported, ${result.duplicate_count} duplicates found`
+                  : 'No transactions were imported';
+                setSnackbar({ 
+                  open: true, 
+                  message, 
+                  severity: 'warning' 
+                });
+              }
               return result;
             } catch (error) {
               setSnackbar({

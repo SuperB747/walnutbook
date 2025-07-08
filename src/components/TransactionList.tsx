@@ -17,6 +17,7 @@ export interface TransactionListProps {
   onBulkDelete?: (ids: number[]) => Promise<void>;
   onCategoryChange: (id: number, categoryId: number | undefined) => Promise<void>;
   onDescriptionChange?: (id: number, description: string) => Promise<void>;
+  onNotesChange?: (id: number, notes: string) => Promise<void>;
   initialSelectedIds?: number[];
   importedIds?: number[];
   onAddTransaction?: () => void;
@@ -41,6 +42,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   onBulkDelete,
   onCategoryChange,
   onDescriptionChange,
+  onNotesChange,
   initialSelectedIds = [],
   importedIds = [],
   onAddTransaction,
@@ -145,7 +147,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
         
         // Description과 Notes 결합
         if (cleanNotes) {
-          return `${description} ${cleanNotes}`;
+          return `${description} [${cleanNotes}]`;
         } else {
           return description;
         }
@@ -171,7 +173,17 @@ const TransactionList: React.FC<TransactionListProps> = ({
       if (description) return description;
       return transaction.payee;
     }
+    
+    // 일반 거래의 경우 Description만 반환 (Notes는 별도로 처리)
     return transaction.payee;
+  };
+
+  const getDisplayNotes = (transaction: Transaction) => {
+    if (transaction.type === 'Transfer') {
+      return null; // Transfer는 이미 getDisplayPayee에서 처리됨
+    }
+    
+    return transaction.notes;
   };
   const isEditableTransfer = (transaction: Transaction) => {
     if (transaction.type !== 'Transfer') return true;
@@ -249,21 +261,21 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   </TableCell>
                   <TableCell sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{transaction.date}</TableCell>
                   <TableCell sx={{ width: 100, minWidth: 100, whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{getAccountName(accounts, transaction.account_id)}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => { setEditDescriptionId(transaction.id); setEditDescriptionValue(transaction.payee); }} style={{ cursor: 'text' }}>
+                  <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => { setEditDescriptionId(transaction.id); setEditDescriptionValue(transaction.notes || ''); }} style={{ cursor: 'text' }}>
                     {editDescriptionId === transaction.id ? (
                       <TextField value={editDescriptionValue} size="small" variant="standard" onChange={e => setEditDescriptionValue(e.target.value)} onBlur={async () => { 
                         const newValue = editDescriptionValue.trim();
-                        const originalValue = transaction.payee;
-                        if (newValue !== originalValue && typeof onDescriptionChange === 'function') {
-                          await onDescriptionChange(transaction.id, newValue);
+                        const originalValue = transaction.notes || '';
+                        if (newValue !== originalValue && typeof onNotesChange === 'function') {
+                          await onNotesChange(transaction.id, newValue);
                         }
                         setEditDescriptionId(null); 
                       }} onKeyDown={async e => { 
                         if (e.key === 'Enter') { 
                           const newValue = editDescriptionValue.trim();
-                          const originalValue = transaction.payee;
-                          if (newValue !== originalValue && typeof onDescriptionChange === 'function') {
-                            await onDescriptionChange(transaction.id, newValue);
+                          const originalValue = transaction.notes || '';
+                          if (newValue !== originalValue && typeof onNotesChange === 'function') {
+                            await onNotesChange(transaction.id, newValue);
                           }
                           setEditDescriptionId(null); 
                         } else if (e.key === 'Escape') { 
@@ -271,31 +283,42 @@ const TransactionList: React.FC<TransactionListProps> = ({
                         } 
                       }} autoFocus sx={{ width: '100%', fontSize: '0.9rem', p: 0, '& .MuiInputBase-input': { fontSize: '0.9rem !important', lineHeight: '1.2', padding: '0 !important' }, '& .MuiInputBase-root': { fontSize: '0.9rem !important' } }} />
                     ) : (
-                      <Typography noWrap sx={{ fontSize: '0.9rem' }}>{getDisplayPayee(transaction)}</Typography>
+                      <Typography noWrap sx={{ fontSize: '0.9rem' }}>
+                        {getDisplayPayee(transaction)}
+                        {getDisplayNotes(transaction) && (
+                          <span style={{ 
+                            fontSize: '0.9rem',
+                            color: '#1e3a8a', // 진한 Navy 색상
+                            fontWeight: 500
+                          }}>
+                            {' '}[{getDisplayNotes(transaction)}]
+                          </span>
+                        )}
+                      </Typography>
                     )}
                   </TableCell>
                   <TableCell align="center" sx={{ width: 180, minWidth: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>
                     {(transaction.type === 'Income' || transaction.type === 'Expense') ? (
-                      <Select 
-                        value={transaction.category_id || ''} 
-                        size="small" 
-                        variant="standard" 
-                        disableUnderline 
-                        onChange={e => { 
-                          const categoryId = e.target.value ? Number(e.target.value) : undefined;
-                          onCategoryChange(transaction.id, categoryId);
-                        }} 
-                        sx={{ 
-                          width: '100%', 
-                          height: '24px', 
-                          padding: '0 4px', 
-                          fontSize: '0.9rem', 
-                          '.MuiSelect-icon': { 
-                            fontSize: '1rem', 
-                            right: 4 
-                          } 
-                        }}
-                      >
+                                              <Select 
+                          value={transaction.category_id || ''} 
+                          size="small" 
+                          variant="standard" 
+                          disableUnderline 
+                          onChange={e => { 
+                            const categoryId = e.target.value ? Number(e.target.value) : undefined;
+                            onCategoryChange(transaction.id, categoryId);
+                          }} 
+                          sx={{ 
+                            width: '100%', 
+                            height: '24px', 
+                            padding: '0 4px', 
+                            fontSize: '0.9rem', 
+                            '.MuiSelect-icon': { 
+                              fontSize: '1rem', 
+                              right: 4 
+                            } 
+                          }}
+                        >
                         <MenuItem value="">
                           <em>Select a category</em>
                         </MenuItem>
