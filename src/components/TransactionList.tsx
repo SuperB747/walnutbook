@@ -198,8 +198,50 @@ const TransactionList: React.FC<TransactionListProps> = ({
           <Select multiple value={filter.categories} onChange={e => setFilter(f => ({ ...f, categories: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value }))} input={<OutlinedInput label="Category" />} renderValue={selected => <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, pr: 2 }}>{selected.map((value: string) => <Chip key={value} label={value} size="small" />)}</Box>} MenuProps={{ MenuListProps: { dense: true } }}>{uniqueCategories.sort().map(category => (<MenuItem key={category} value={category} dense><Checkbox checked={filter.categories.indexOf(category) > -1} size="small" /><ListItemText primary={category} /></MenuItem>))}</Select>
         </FormControl>
         <LocalizationProvider dateAdapter={AdapterDateFns}>
-          <DatePicker label="From Date" value={filter.dateRange.start ? parse(filter.dateRange.start, 'yyyy-MM-dd', new Date()) : null} onChange={newDate => setFilter(f => ({ ...f, dateRange: { ...f.dateRange, start: newDate ? newDate.toISOString().split('T')[0] : '' } }))} slotProps={{ textField: { size: 'small', sx: { width: 150 } } }} />
-          <DatePicker label="To Date" value={filter.dateRange.end ? parse(filter.dateRange.end, 'yyyy-MM-dd', new Date()) : null} onChange={newDate => setFilter(f => ({ ...f, dateRange: { ...f.dateRange, end: newDate ? newDate.toISOString().split('T')[0] : '' } }))} slotProps={{ textField: { size: 'small', sx: { width: 150 } } }} />
+          <DatePicker 
+            label="From Date" 
+            value={filter.dateRange.start ? parse(filter.dateRange.start, 'yyyy-MM-dd', new Date()) : null} 
+            onChange={newDate => setFilter(f => ({ ...f, dateRange: { ...f.dateRange, start: newDate ? newDate.toISOString().split('T')[0] : '' } }))} 
+            slotProps={{ 
+              textField: { 
+                size: 'small', 
+                sx: { 
+                  width: 150,
+                  '& .MuiInputAdornment-root': {
+                    '& .MuiButtonBase-root': {
+                      bgcolor: 'transparent',
+                      '&:hover': {
+                        bgcolor: 'rgba(0, 0, 0, 0.04)',
+                        color: 'primary.main'
+                      }
+                    }
+                  }
+                } 
+              } 
+            }} 
+          />
+          <DatePicker 
+            label="To Date" 
+            value={filter.dateRange.end ? parse(filter.dateRange.end, 'yyyy-MM-dd', new Date()) : null} 
+            onChange={newDate => setFilter(f => ({ ...f, dateRange: { ...f.dateRange, end: newDate ? newDate.toISOString().split('T')[0] : '' } }))} 
+            slotProps={{ 
+              textField: { 
+                size: 'small', 
+                sx: { 
+                  width: 150,
+                  '& .MuiInputAdornment-root': {
+                    '& .MuiButtonBase-root': {
+                      bgcolor: 'transparent',
+                      '&:hover': {
+                        bgcolor: 'rgba(0, 0, 0, 0.04)',
+                        color: 'primary.main'
+                      }
+                    }
+                  }
+                } 
+              } 
+            }} 
+          />
         </LocalizationProvider>
         <Button variant="outlined" size="small" onClick={handleClearFilters} sx={{ minWidth: 100, height: 40 }}>Clear Filters</Button>
       </Box>
