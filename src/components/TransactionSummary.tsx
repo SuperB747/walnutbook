@@ -161,32 +161,10 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       }
     });
 
-    // 디버깅: reimbursement 매핑과 최종 결과 로그
-    console.log('Reimbursements by target:', reimbursementsByTarget);
-    console.log('Expenses by category (with reimbursement):', expensesByCategory);
-    
-    // 상세 디버깅: Reimbursable과 Reimbursement 계산
-    const reimbursableId = 25;
-    const reimbursementId = 26;
-    const reimbursableExpense = expensesByCategory[reimbursableId] || 0;
-    const reimbursementAmount = reimbursementsByTarget[reimbursableId] || 0;
-    console.log('Reimbursable ID:', reimbursableId, 'Expense:', reimbursableExpense, 'Reimbursement:', reimbursementAmount);
-    
-    // 상세 디버깅: 각 트랜잭션별 계산
-    console.log('=== Detailed Transaction Debug ===');
-    transactionsToSummarize.forEach(tx => {
-      if (tx.category_id === 25 || (tx.type === 'Income' && tx.category_id === 26)) {
-        console.log('Transaction:', tx.date, tx.type, tx.amount, 'Category:', tx.category_id);
-      }
-    });
-    console.log('=== End Debug ===');
-
     // 0이 아닌 카테고리만 필터링하고 정렬 (절대값이 큰 순)
     const filteredAndSorted = Object.entries(expensesByCategory)
-      .filter(([, amount]) => amount !== 0)
+      .filter(([, amount]) => amount < 0)
       .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a));
-
-    console.log('Filtered and sorted expenses:', filteredAndSorted);
 
     return {
       labels: filteredAndSorted.map(([id]) => Number(id)), // id 배열
@@ -212,12 +190,23 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
 
     // 트랜잭션 날짜들을 파싱하여 최소/최대 날짜 찾기
     const transactionDates = allTransactions
-      .filter(tx => tx.date && typeof tx.date === 'string') // Filter out transactions with invalid dates
+      .filter(tx => tx.date && typeof tx.date === 'string')
       .map(tx => {
-        // Parse date string to avoid timezone issues
         const [year, month, day] = tx.date.split('-').map(Number);
-        return new Date(year, month - 1, day); // month is 0-based in JavaScript
-      });
+        return new Date(year, month - 1, day);
+      })
+      // filter out invalid dates
+      .filter(date => !isNaN(date.getTime()));
+
+    // Guard against no valid dates
+    if (transactionDates.length === 0) {
+      return {
+        labels: [],
+        income: [],
+        expense: [],
+      };
+    }
+
     const minDate = new Date(Math.min(...transactionDates.map(d => d.getTime())));
     const maxDate = new Date(Math.max(...transactionDates.map(d => d.getTime())));
 
@@ -488,7 +477,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
         amount: Math.abs(categoryExpenses.data[index]),
         percentage: categoryPercentages[labelsForDisplay[index]] || 0
       }))
-      .filter(item => item.amount > 0)
+      .filter(item => item.amount > 0 && item.id !== -1)
       .sort((a, b) => b.percentage - a.percentage) // 퍼센테이지 순으로 정렬
       .map(item => item.id);
     
@@ -539,6 +528,75 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       ChartJS.defaults.maintainAspectRatio = true;
     };
   }, []);
+
+  const legendItemStyle = {
+    display: 'flex', alignItems: 'center', mb: 0.5, cursor: 'pointer', p: 0.5, borderRadius: 1,
+    transition: 'all 0.2s ease', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)', transform: 'scale(1.02)' }
+  };
+
+  const renderLegendItems = (legendIds: number[]) =>
+    legendIds.map(id => {
+      const idx = categoryExpenses.labels.indexOf(id);
+      const label = labelsForDisplay[idx];
+      return (
+        <Box key={id} sx={legendItemStyle} onMouseEnter={() => handleLegendHover(label)} onMouseLeave={handleLegendLeave}>
+          <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColorById(id), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
+          <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>{label}</Typography>
+        </Box>
+      );
+    });
+
+  const donutChartData = useMemo(() => {
+    // filter out undefined category (id -1)
+    const items = categoryExpenses.labels.map((id, idx) => ({
+      id,
+      label: labelsForDisplay[idx],
+      value: Math.abs(categoryExpenses.data[idx]),
+    })).filter(item => item.id !== -1);
+    return {
+      labels: items.map(item => item.label),
+      datasets: [
+        {
+          data: items.map(item => item.value),
+          backgroundColor: items.map(item => getCategoryColorById(item.id)),
+        },
+      ],
+    };
+  }, [labelsForDisplay, categoryExpenses, getCategoryColorById]);
+
+  const donutChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: true,
+    layout: { padding: 0 },
+    animation: { duration: 0 },
+    hover: { mode: 'nearest' as const, intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        enabled: true,
+        position: 'nearest' as const,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleColor: 'white',
+        bodyColor: 'white',
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        borderWidth: 1,
+        cornerRadius: 8,
+        displayColors: false,
+        callbacks: {
+          title: function(context: any[]) {
+            const item = context[0];
+            const label = item.label || '';
+            const percentage = categoryPercentages[label]?.toFixed(1) || '0.0';
+            return `${label} (${percentage}%)`;
+          },
+          label: function(context: any) {
+            const rawValue = context.parsed as number;
+            return `  ${formatCurrency(Math.abs(rawValue))}`;
+          }
+        }
+      }
+    }
+  }), [labelsForDisplay, categoryPercentages, categoryExpenses, formatCurrency]);
 
   return (
     <Box sx={{ mb: 3 }}>
@@ -641,119 +699,15 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
             }}>
               {/* 왼쪽 범례 */}
               <Box sx={{ minWidth: 100, maxWidth: 120 }}>
-                {leftLegend.map((id) => {
-                  const label = labelsForDisplay[categoryExpenses.labels.indexOf(id)];
-                  return (
-                    <Box 
-                      key={id} 
-                      sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        mb: 0.5, 
-                        cursor: 'pointer',
-                        p: 0.5,
-                        borderRadius: 1,
-                        transition: 'all 0.2s ease',
-                        '&:hover': {
-                          backgroundColor: 'rgba(0, 0, 0, 0.05)',
-                          transform: 'scale(1.02)'
-                        }
-                      }}
-                      onMouseEnter={() => handleLegendHover(label)}
-                      onMouseLeave={handleLegendLeave}
-                    >
-                      <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColorById(id), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
-                      <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>
-                        {label}
-                      </Typography>
-                    </Box>
-                  );
-                })}
+                {renderLegendItems(leftLegend)}
               </Box>
               {/* 도넛 그래프 */}
               <Box sx={{ width: 180, height: 180, flexShrink: 0 }}>
-                <Doughnut
-                  ref={doughnutRef}
-                  data={{
-                    labels: labelsForDisplay,
-                    datasets: [
-                      {
-                        data: categoryExpenses.data.map(amount => Math.abs(amount)),
-                        backgroundColor: categoryExpenses.labels.map(id => getCategoryColorById(id)),
-                      },
-                    ],
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    layout: { padding: 0 },
-                    animation: { duration: 0 },
-                    hover: {
-                      mode: 'nearest',
-                      intersect: false
-                    },
-                    plugins: {
-                      legend: { display: false },
-                      tooltip: {
-                        enabled: true,
-                        position: 'nearest',
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        titleColor: 'white',
-                        bodyColor: 'white',
-                        borderColor: 'rgba(255, 255, 255, 0.2)',
-                        borderWidth: 1,
-                        cornerRadius: 8,
-                        displayColors: false,
-                        callbacks: {
-                          title: function(context) {
-                            const idx = context[0].dataIndex;
-                            const label = labelsForDisplay[idx] || '';
-                            const percentage = categoryPercentages[label]?.toFixed(1) || '0.0';
-                            return `${label} (${percentage}%)`;
-                          },
-                          label: function(context) {
-                            const idx = context.dataIndex;
-                            const originalValue = categoryExpenses.data[idx];
-                            const absValue = Math.abs(originalValue);
-                            const sign = originalValue < 0 ? '-' : '+';
-                            return `  ${sign}${formatCurrency(absValue)}`;
-                          }
-                        }
-                      }
-                    }
-                  }}
-                />
+                <Doughnut ref={doughnutRef} data={donutChartData} options={donutChartOptions} />
               </Box>
               {/* 오른쪽 범례 */}
               <Box sx={{ minWidth: 100, maxWidth: 120 }}>
-                {rightLegend.map((id) => {
-                  const label = labelsForDisplay[categoryExpenses.labels.indexOf(id)];
-                  return (
-                    <Box 
-                      key={id} 
-                      sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        mb: 0.5, 
-                        cursor: 'pointer',
-                        p: 0.5,
-                        borderRadius: 1,
-                        transition: 'all 0.2s ease',
-                        '&:hover': {
-                          backgroundColor: 'rgba(0, 0, 0, 0.05)',
-                          transform: 'scale(1.02)'
-                        }
-                      }}
-                      onMouseEnter={() => handleLegendHover(label)}
-                      onMouseLeave={handleLegendLeave}
-                    >
-                      <Box sx={{ width: 10, height: 10, bgcolor: getCategoryColorById(id), mr: 1, borderRadius: '2px', flexShrink: 0 }} />
-                      <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}>
-                        {label}
-                      </Typography>
-                    </Box>
-                  );
-                })}
+                {renderLegendItems(rightLegend)}
               </Box>
             </Box>
           </Paper>
