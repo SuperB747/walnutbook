@@ -1,5 +1,5 @@
 import { BaseImporter, ColumnMapping } from './BaseImporter';
-import { Transaction } from '../../db';
+import { Transaction, TransactionType } from '../../db';
 
 export class PasteImporter extends BaseImporter {
   name = 'Paste';
@@ -75,8 +75,8 @@ export class PasteImporter extends BaseImporter {
   }
 
   // Parse multi-line transaction data
-  parseMultiLineData(content: string): Transaction[] {
-    const transactions: Transaction[] = [];
+  parseMultiLineData(content: string): Partial<Transaction>[] {
+    const transactions: Partial<Transaction>[] = [];
     const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     
     let currentDate: string | null = null;
@@ -88,7 +88,10 @@ export class PasteImporter extends BaseImporter {
       
       if (this.isDateLine(line)) {
         if (currentDate && currentPayee && currentAmount !== null) {
-          transactions.push(this.createTransaction(currentDate, currentPayee, currentAmount));
+          const transaction = this.createTransaction(currentDate, currentPayee, currentAmount);
+          if (transaction) {
+            transactions.push(transaction);
+          }
         }
         currentDate = this.parseDate(line);
         currentPayee = null;
@@ -101,16 +104,61 @@ export class PasteImporter extends BaseImporter {
     }
 
     if (currentDate && currentPayee && currentAmount !== null) {
-      transactions.push(this.createTransaction(currentDate, currentPayee, currentAmount));
+      const transaction = this.createTransaction(currentDate, currentPayee, currentAmount);
+      if (transaction) {
+        transactions.push(transaction);
+      }
     }
 
     return transactions;
   }
 
-  private createTransaction(dateStr: string, payeeStr: string, amountStr: string | number): Transaction {
+  private isDateLine(line: string): boolean {
+    const datePatterns = [
+      /\d{1,2}\/\d{1,2}\/\d{4}/, // MM/DD/YYYY
+      /\d{4}-\d{1,2}-\d{1,2}/, // YYYY-MM-DD
+      /\d{1,2}\/\d{1,2}\/\d{2}/, // MM/DD/YY
+      /\d{1,2}-\d{1,2}-\d{4}/, // MM-DD-YYYY
+    ];
+    return datePatterns.some(pattern => pattern.test(line));
+  }
+
+  private isAmountLine(line: string): boolean {
+    const amountPattern = /\$?\d+,?\d*\.?\d*/;
+    return amountPattern.test(line);
+  }
+
+  private isPayeeLine(line: string): boolean {
+    // A line is considered a payee line if it's not a date or amount line
+    // and contains at least 2 characters
+    return !this.isDateLine(line) && !this.isAmountLine(line) && line.trim().length >= 2;
+  }
+
+  private parsePayee(line: string): string {
+    return line.trim()
+      .replace(/^"|"$/g, '') // Remove surrounding quotes
+      .replace(/\s+$/, '') // Remove trailing spaces
+      .replace(/^\s+/, '') // Remove leading spaces
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .replace(/\s+#\d+$/, '') // Remove #1, #2, etc.
+      .replace(/\s+\d{4}$/, '') // Remove trailing 4-digit numbers
+      .replace(/\s+[A-Z]{2,}\s+\d{4}$/, '') // Remove card type and last 4 digits
+      .replace(/\*[A-Z0-9]+/, '') // Remove transaction IDs
+      .replace(/\s+WWW\.AMAZON\.CAON$/, '') // Remove Amazon website suffix
+      .replace(/\s+AMAZON\.CA ON$/, ''); // Remove Amazon.ca ON suffix
+  }
+
+  private createTransaction(dateStr: string, payeeStr: string, amountStr: string | number): Partial<Transaction> | null {
     const amount = typeof amountStr === 'number' ? amountStr : this.parseAmount(amountStr);
+    const date = this.parseDate(dateStr);
+    
+    if (!date) {
+      console.warn(`Invalid date format: ${dateStr}`);
+      return null;
+    }
+    
     const payeeLower = payeeStr.toLowerCase();
-    let type = 'Expense';
+    let type: TransactionType = 'Expense';
 
     // Determine transaction type based on keywords and amount
     if (payeeLower.includes('payment') || payeeLower.includes('deposit')) {
@@ -124,13 +172,15 @@ export class PasteImporter extends BaseImporter {
       type = 'Income';
     }
 
-    return {
-      date: dateStr,
+    const transaction: Partial<Transaction> = {
+      date,
       payee: payeeStr,
       amount: Math.abs(amount),
       type,
       notes: '',
     };
+
+    return this.validateTransaction(transaction);
   }
 
   parseRow(row: string[], mapping: ColumnMapping, accountType?: string): Partial<Transaction> | null {

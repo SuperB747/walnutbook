@@ -14,6 +14,8 @@ import {
   Alert,
   Menu,
   MenuItem,
+  Switch,
+  FormControlLabel,
   LinearProgress,
 } from '@mui/material';
 import { Link, Route, Routes, useLocation } from 'react-router-dom';
@@ -32,303 +34,321 @@ import BackupRestoreDialog from './components/BackupRestoreDialog';
 import { Account, Transaction, Category } from './db';
 import logo from './logo.png';
 
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#234075',
-      light: '#4F6D9A',
-      dark: '#162447',
-      contrastText: '#fff',
-    },
-    secondary: {
-      main: '#1976d2',
-      light: '#63a4ff',
-      dark: '#004ba0',
-    },
-    background: {
-      default: '#fafbfc',
-      paper: '#ffffff',
-    },
-    text: {
-      primary: '#222831',
-      secondary: '#4F5B69',
-    },
-  },
-  shape: {
-    borderRadius: 14,
-  },
-  components: {
-    MuiAppBar: {
-      styleOverrides: {
-        root: {
-          background: 'linear-gradient(90deg, #234075 0%, #1976d2 100%)',
-          boxShadow: '0 2px 12px rgba(35, 64, 117, 0.08)',
-          borderBottom: 'none',
-        },
+// Create a theme based on light or dark mode
+const getTheme = (mode: 'light' | 'dark') =>
+  createTheme({
+    palette: {
+      mode,
+      primary: {
+        main: '#234075',
+        light: '#4F6D9A',
+        dark: '#162447',
+        contrastText: '#fff',
+      },
+      secondary: {
+        main: '#1976d2',
+        light: '#63a4ff',
+        dark: '#004ba0',
+      },
+      background: {
+        default: mode === 'light' ? '#fafbfc' : '#121212',
+        paper: mode === 'light' ? '#ffffff' : '#1e1e1e',
+      },
+      text: {
+        primary: mode === 'light' ? '#222831' : '#ffffff',
+        secondary: mode === 'light' ? '#4F5B69' : '#cccccc',
       },
     },
-    MuiToolbar: {
-      styleOverrides: {
-        root: {
-          minHeight: '64px',
-          padding: '8px 28px',
-        },
-      },
+    shape: {
+      borderRadius: 14,
     },
-    MuiTypography: {
-      styleOverrides: {
-        h6: {
-          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
-          fontWeight: 600,
-          letterSpacing: '0.3px',
-          textShadow: 'none',
-          fontSize: '1.25rem',
-        },
-        h5: {
-          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
-          fontWeight: 600,
-          letterSpacing: '0.2px',
-        },
-        h4: {
-          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
-          fontWeight: 600,
-          letterSpacing: '0.2px',
-        },
-        body1: {
-          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
-          fontWeight: 400,
-          letterSpacing: '0.1px',
-        },
-        body2: {
-          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
-          fontWeight: 400,
-          letterSpacing: '0.1px',
-        },
-      },
-    },
-    MuiTab: {
-      styleOverrides: {
-        root: {
-          color: '#234075',
-          backgroundColor: 'rgba(255,255,255,0.12)',
-          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
-          fontWeight: 700,
-          fontSize: '1rem',
-          letterSpacing: '0.15px',
-          textTransform: 'none',
-          minHeight: '48px',
-          padding: '12px 28px',
-          borderRadius: '12px 12px 0 0',
-          margin: '0 4px',
-          transition: 'background-color 0.2s, color 0.2s, box-shadow 0.2s',
-          '&:hover': {
-            backgroundColor: 'rgba(255,255,255,0.12)',
-            color: '#fff',
+    components: {
+      MuiAppBar: {
+        styleOverrides: {
+          root: {
+            background: 'linear-gradient(90deg, #234075 0%, #1976d2 100%)',
+            boxShadow: '0 2px 12px rgba(35, 64, 117, 0.08)',
+            borderBottom: 'none',
           },
+        },
+      },
+      MuiToolbar: {
+        styleOverrides: {
+          root: {
+            minHeight: '64px',
+            padding: '8px 28px',
+          },
+        },
+      },
+      MuiTypography: {
+        styleOverrides: {
+          h6: {
+            fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+            fontWeight: 600,
+            letterSpacing: '0.3px',
+            textShadow: 'none',
+            fontSize: '1.25rem',
+          },
+          h5: {
+            fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+            fontWeight: 600,
+            letterSpacing: '0.2px',
+          },
+          h4: {
+            fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+            fontWeight: 600,
+            letterSpacing: '0.2px',
+          },
+          body1: {
+            fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+            fontWeight: 400,
+            letterSpacing: '0.1px',
+          },
+          body2: {
+            fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+            fontWeight: 400,
+            letterSpacing: '0.1px',
+          },
+        },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            color: '#234075',
+            backgroundColor: 'rgba(255,255,255,0.12)',
+            fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+            fontWeight: 700,
+            fontSize: '1rem',
+            letterSpacing: '0.15px',
+            textTransform: 'none',
+            minHeight: '48px',
+            padding: '12px 28px',
+            borderRadius: '12px 12px 0 0',
+            margin: '0 4px',
+            transition: 'background-color 0.2s, color 0.2s, box-shadow 0.2s',
+            '&:hover': {
+              backgroundColor: 'rgba(255,255,255,0.12)',
+              color: '#fff',
+            },
                       '&.Mui-selected': {
               color: '#234075',
               backgroundColor: '#f4f5f7',
               boxShadow: '0 2px 12px rgba(35, 64, 117, 0.10)',
               zIndex: 1,
             },
+          },
         },
       },
-    },
-    MuiTabs: {
-      styleOverrides: {
-        indicator: {
-          display: 'none',
-        },
-        root: {
-          minHeight: '48px',
+      MuiTabs: {
+        styleOverrides: {
+          indicator: {
+            display: 'none',
+          },
+          root: {
+            minHeight: '48px',
+          },
         },
       },
-    },
-    MuiIconButton: {
-      styleOverrides: {
-        root: {
-          color: '#234075',
-          backgroundColor: 'rgba(35, 64, 117, 0.06)',
-          borderRadius: '16px',
-          padding: '10px',
-          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
-          transition: 'background-color 0.2s, color 0.2s',
-          '&:hover': {
+      MuiIconButton: {
+        styleOverrides: {
+          root: {
+            color: '#234075',
             backgroundColor: 'rgba(35, 64, 117, 0.06)',
-            color: '#fff',
+            borderRadius: '16px',
+            padding: '10px',
+            fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+            transition: 'background-color 0.2s, color 0.2s',
+            '&:hover': {
+              backgroundColor: 'rgba(35, 64, 117, 0.06)',
+              color: '#fff',
+            },
           },
         },
       },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          backgroundColor: '#fff',
-          borderRadius: 16,
-          boxShadow: '0 4px 20px rgba(35, 64, 117, 0.12)',
-        },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          backgroundColor: '#fff',
-          borderRadius: 16,
-          boxShadow: '0 4px 20px rgba(35, 64, 117, 0.12)',
-          border: 'none',
-        },
-      },
-    },
-    MuiTableCell: {
-      styleOverrides: {
-        root: {
-          backgroundColor: '#fff',
-          borderColor: 'rgba(35, 64, 117, 0.1)',
-        },
-      },
-    },
-    MuiChip: {
-      styleOverrides: {
-        root: {
-          fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
-          fontWeight: 500,
-          letterSpacing: '0.1px',
-          borderRadius: 8,
-        },
-      },
-    },
-    MuiCssBaseline: {
-      styleOverrides: {
-        // 스크롤바 완전히 숨기기
-        '*': {
-          '&::-webkit-scrollbar': {
-            display: 'none',
-          },
-          '&::-webkit-scrollbar-track': {
-            display: 'none',
-          },
-          '&::-webkit-scrollbar-thumb': {
-            display: 'none',
-          },
-          '&::-webkit-scrollbar-corner': {
-            display: 'none',
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            backgroundColor: mode === 'light' ? '#fff' : '#1e1e1e',
+            borderRadius: 16,
+            boxShadow: mode === 'light'
+              ? '0 4px 20px rgba(35, 64, 117, 0.12)'
+              : '0 4px 20px rgba(0, 0, 0, 0.5)',
           },
         },
-        // HTML5 validation 메시지를 영어로 설정
-        'input, textarea, select': {
-          '&:invalid': {
-            '&::-webkit-validation-bubble-message': {
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            backgroundColor: mode === 'light' ? '#fff' : '#1e1e1e',
+            borderRadius: 16,
+            boxShadow: mode === 'light'
+              ? '0 4px 20px rgba(35, 64, 117, 0.12)'
+              : '0 4px 20px rgba(0, 0, 0, 0.5)',
+            border: 'none',
+          },
+        },
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          root: {
+            backgroundColor: mode === 'light' ? '#fff' : '#1e1e1e',
+            borderColor: 'rgba(35, 64, 117, 0.1)',
+          },
+        },
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: {
+            fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+            fontWeight: 500,
+            letterSpacing: '0.1px',
+            borderRadius: 8,
+          },
+        },
+      },
+      MuiCssBaseline: {
+        styleOverrides: {
+          // 스크롤바 완전히 숨기기
+          '*': {
+            '&::-webkit-scrollbar': {
+              display: 'none',
+            },
+            '&::-webkit-scrollbar-track': {
+              display: 'none',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              display: 'none',
+            },
+            '&::-webkit-scrollbar-corner': {
               display: 'none',
             },
           },
-        },
-      },
-    },
-    MuiTextField: {
-      styleOverrides: {
-        root: {
-          '& .MuiInputLabel-root': {
-            transition: 'all 200ms cubic-bezier(0.4, 0, 0.2, 1)',
-            transformOrigin: 'left top',
-            background: 'none',
-            '&::before': {
-              content: '""',
-              display: 'block',
-              position: 'absolute',
-              top: -3,
-              left: -8,
-              right: -8,
-              bottom: -3,
-              backgroundColor: '#fff',
-              zIndex: -1,
-              transition: 'all 200ms cubic-bezier(0.4, 0, 0.2, 1)',
-              transform: 'scale(0)',
-              borderRadius: 4,
-            },
-            '&.Mui-focused, &.MuiInputLabel-shrink': {
-              transform: 'translate(14px, -9px) scale(0.75)',
-              padding: '0 8px',
-              marginLeft: '-8px',
-              '&::before': {
-                transform: 'scale(1)',
+          // HTML5 validation 메시지를 영어로 설정
+          'input, textarea, select': {
+            '&:invalid': {
+              '&::-webkit-validation-bubble-message': {
+                display: 'none',
               },
             },
-            '&:not(.MuiInputLabel-shrink)::before': {
-              opacity: 0,
-            },
           },
-          '& .MuiOutlinedInput-root': {
-            '& fieldset': {
-              borderColor: 'rgba(35, 64, 117, 0.23)',
-              transition: 'border-color 200ms cubic-bezier(0.4, 0, 0.2, 1)',
-              '& legend': {
-                marginLeft: '-4px',
-                '& > span': {
-                  padding: '0 8px',
+        },
+      },
+      MuiTextField: {
+        styleOverrides: {
+          root: {
+            '& .MuiInputLabel-root': {
+              transition: 'all 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+              transformOrigin: 'left top',
+              background: 'none',
+              '&::before': {
+                content: '""',
+                display: 'block',
+                position: 'absolute',
+                top: -3,
+                left: -8,
+                right: -8,
+                bottom: -3,
+                backgroundColor: '#fff',
+                zIndex: -1,
+                transition: 'all 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+                transform: 'scale(0)',
+                borderRadius: 4,
+              },
+              '&.Mui-focused, &.MuiInputLabel-shrink': {
+                transform: 'translate(14px, -9px) scale(0.75)',
+                padding: '0 8px',
+                marginLeft: '-8px',
+                '&::before': {
+                  transform: 'scale(1)',
                 },
               },
-            },
-            '&:hover fieldset': {
-              borderColor: 'rgba(35, 64, 117, 0.5)',
-            },
-            '&.Mui-focused fieldset': {
-              borderColor: '#234075',
-            },
-          },
-        },
-      },
-    },
-    MuiInputLabel: {
-      styleOverrides: {
-        root: {
-          '&.MuiInputLabel-outlined': {
-            zIndex: 1,
-            '&.MuiInputLabel-shrink': {
-              backgroundColor: 'transparent',
-              padding: '0 8px',
-              marginLeft: '-8px',
-            },
-            '&:not(.MuiInputLabel-shrink)': {
-              '&::before': {
+              '&:not(.MuiInputLabel-shrink)::before': {
                 opacity: 0,
               },
             },
-          },
-        },
-      },
-    },
-    MuiOutlinedInput: {
-      styleOverrides: {
-        root: {
-          '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: 'rgba(35, 64, 117, 0.23)',
-            transition: 'border-color 200ms cubic-bezier(0.4, 0, 0.2, 1)',
-          },
-          '&:hover .MuiOutlinedInput-notchedOutline': {
-            borderColor: 'rgba(35, 64, 117, 0.5)',
-          },
-          '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-            borderColor: '#234075',
-          },
-        },
-        notchedOutline: {
-          transition: 'border-width 200ms cubic-bezier(0.4, 0, 0.2, 1)',
-          '& legend': {
-            transition: 'width 200ms cubic-bezier(0.4, 0, 0.2, 1)',
-            marginLeft: '-4px',
-            '& > span': {
-              opacity: 0,
-              padding: '0 8px',
+            '& .MuiOutlinedInput-root': {
+              '& fieldset': {
+                borderColor: 'rgba(35, 64, 117, 0.23)',
+                transition: 'border-color 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+                '& legend': {
+                  marginLeft: '-4px',
+                  '& > span': {
+                    padding: '0 8px',
+                  },
+                },
+              },
+              '&:hover fieldset': {
+                borderColor: 'rgba(35, 64, 117, 0.5)',
+              },
+              '&.Mui-focused fieldset': {
+                borderColor: '#234075',
+              },
             },
           },
         },
       },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: {
+            '&.MuiInputLabel-outlined': {
+              zIndex: 1,
+              '&.MuiInputLabel-shrink': {
+                backgroundColor: 'transparent',
+                padding: '0 8px',
+                marginLeft: '-8px',
+              },
+              '&:not(.MuiInputLabel-shrink)': {
+                '&::before': {
+                  opacity: 0,
+                },
+              },
+            },
+          },
+        },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderColor: 'rgba(35, 64, 117, 0.23)',
+              transition: 'border-color 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+            },
+            '&:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: 'rgba(35, 64, 117, 0.5)',
+            },
+            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderColor: '#234075',
+            },
+          },
+          notchedOutline: {
+            transition: 'border-width 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+            '& legend': {
+              transition: 'width 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+              marginLeft: '-4px',
+              '& > span': {
+                opacity: 0,
+                padding: '0 8px',
+              },
+            },
+          },
+        },
+      },
+      // Ensure text-variant buttons use readable color in dark mode
+      MuiButton: {
+        styleOverrides: {
+          root: ({ ownerState, theme }) => ({
+            ...(ownerState.variant === 'text' && {
+              color: theme.palette.mode === 'dark'
+                ? theme.palette.text.primary
+                : theme.palette.primary.main,
+            }),
+          }),
+        },
+      },
     },
-  },
-});
+  });
 
-const App: React.FC = () => {
+export const App: React.FC = () => {
   const location = useLocation();
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -340,6 +360,11 @@ const App: React.FC = () => {
     severity: 'success',
   });
   const [toolsAnchorEl, setToolsAnchorEl] = useState<null | HTMLElement>(null);
+  // State for light/dark mode
+  const [mode, setMode] = useState<'light' | 'dark'>('light');
+  // Generate theme when mode changes
+  const theme = React.useMemo(() => getTheme(mode), [mode]);
+
   const openToolsMenu = (event: React.MouseEvent<HTMLElement>) => setToolsAnchorEl(event.currentTarget);
   const closeToolsMenu = () => setToolsAnchorEl(null);
 
@@ -441,7 +466,7 @@ const App: React.FC = () => {
   return (
     <ThemeProvider theme={theme}>
         <CssBaseline />
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default', backgroundColor: '#fafbfc !important' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
         <AppBar position="static">
           <Box sx={{ 
             position: 'relative',
@@ -476,7 +501,7 @@ const App: React.FC = () => {
             {/* 오른쪽 영역 - 툴 버튼들 */}
             <Box sx={{ 
               flexShrink: 0, 
-              width: 120, 
+              width: 'auto', 
               display: 'flex', 
               alignItems: 'flex-end',
               justifyContent: 'flex-end',
@@ -486,7 +511,12 @@ const App: React.FC = () => {
               ml: 'auto',
               position: 'static',
             }}>
-              <Box sx={{ display: 'flex', gap: 1, flexDirection: 'row' }}>
+              <Box sx={{ display: 'flex', gap: 1, flexDirection: 'row', alignItems: 'center' }}>
+                <FormControlLabel
+                  control={<Switch checked={mode === 'dark'} onChange={() => setMode(mode === 'light' ? 'dark' : 'light')} color="default" />} 
+                  label="Dark Mode" 
+                  sx={{ color: 'inherit', m: 0 }}
+                />
                 <IconButton
                   color="inherit"
                   onClick={openToolsMenu}
@@ -602,7 +632,7 @@ const App: React.FC = () => {
             closeToolsMenu();
             setBulkEditDialogOpen(true);
           }}>
-            Bulk Edit
+            Bulk Edit Transactions
           </MenuItem>
           <MenuItem onClick={() => {
             closeToolsMenu();

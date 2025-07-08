@@ -304,13 +304,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       <Typography noWrap sx={{ fontSize: '0.9rem' }}>
                         {getDisplayPayee(transaction)}
                         {getDisplayNotes(transaction) && (
-                          <span style={{ 
+                          <Typography component="span" sx={(theme) => ({
                             fontSize: '0.9rem',
-                            color: '#1e3a8a', // 진한 Navy 색상
+                            color: theme.palette.mode === 'light' ? '#0288d1' : '#FFA500',
                             fontWeight: 500
-                          }}>
+                          })}>
                             {' '}[{getDisplayNotes(transaction)}]
-                          </span>
+                          </Typography>
                         )}
                       </Typography>
                     )}

@@ -31,6 +31,12 @@ export interface TransactionFormProps {
   categories: Category[];
 }
 
+interface SnackbarState {
+  open: boolean;
+  message: string;
+  severity: 'success' | 'error' | 'info' | 'warning';
+}
+
 const TransactionForm: React.FC<TransactionFormProps> = ({
   open,
   onClose,
@@ -62,6 +68,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     type: 'Expense' as TransactionType,
     category_id: undefined,
     payee: '',
+  });
+
+  const [snackbar, setSnackbar] = useState<SnackbarState>({
+    open: false,
+    message: '',
+    severity: 'success'
   });
 
   // Load all categories with type when dialog opens

@@ -71,7 +71,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let notes = transaction.notes.clone();
 
     if transaction_type == "Transfer" {
-        let mut tx = conn.transaction().map_err(|e| e.to_string())?;
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
         
         // Generate transfer_id if not provided
         let transfer_id = match transaction.transfer_id {
@@ -94,14 +94,14 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 departure_amount,
                 transaction.date,
                 payee,
-                notes,
+                &notes,
                 transaction_type,
                 transfer_id
             ],
         ).map_err(|e| e.to_string())?;
 
         // Process notes to find target account
-        let to_id = if let Some(notes_str) = notes {
+        let to_id = if let Some(ref notes_str) = notes {
             // Try new format first: [TO_ACCOUNT_ID:123]
             if let Some(start) = notes_str.find("[TO_ACCOUNT_ID:") {
                 if let Some(end) = notes_str[start..].find(']') {
@@ -146,7 +146,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     arrival_amount,
                     transaction.date,
                     payee,
-                    notes,
+                    &notes,
                     transaction_type,
                     transfer_id
                 ],

@@ -67,8 +67,8 @@ const AccountsPage: React.FC = () => {
   };
 
   // Open confirmation dialog for account deletion
-  const handleDeleteAccount = (accountId: number) => {
-    setDeleteAccountId(accountId);
+  const handleDeleteAccount = (account: Account) => {
+    setDeleteAccountId(account.id);
     setDeleteDialogOpen(true);
   };
 
