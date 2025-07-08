@@ -25,6 +25,7 @@ import {
   TextField,
   Switch,
   FormGroup,
+  Chip,
 } from '@mui/material';
 import { useDropzone } from 'react-dropzone';
 import { Transaction, Account, Category, TransactionType } from '../db';
@@ -447,7 +448,24 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                     <ListItem key={index} divider>
                       <ListItemText
                         primary={tx.payee}
-                        secondary={`${tx.date} - ${tx.amount?.toFixed(2)} (${tx.type})`}
+                        secondary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" color="text.secondary">
+                              {tx.date} - {tx.amount?.toFixed(2)}
+                            </Typography>
+                            <Chip
+                              label={tx.type}
+                              size="small"
+                              sx={{
+                                backgroundColor: tx.type === 'Income' ? '#4caf50' : '#f44336',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                fontSize: '0.75rem',
+                                height: '20px'
+                              }}
+                            />
+                          </Box>
+                        }
                       />
                     </ListItem>
                   ))}

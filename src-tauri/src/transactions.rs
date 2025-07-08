@@ -583,9 +583,7 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
                 None::<i64>
             ],
         ).map_err(|e| e.to_string())?;
-        // After successful insert, add to sets to skip duplicates in same batch
-        existing_keys.insert((t.date.clone(), cents, t.payee.clone()));
-        transfer_keys.insert((t.date.clone(), cents));
+        // Don't add to sets to allow duplicates within the same import batch
         imported_count += 1;
         imported_ids.push(tx.last_insert_rowid());
     }
