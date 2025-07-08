@@ -342,11 +342,14 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                     <MenuItem value="">
                       <em>Auto-detect format</em>
                     </MenuItem>
-                    {availableImporters.map((importer) => (
-                      <MenuItem key={importer.name} value={importer.name}>
-                        {importer.name} - {importer.description}
-                      </MenuItem>
-                    ))}
+                    {availableImporters
+                      .filter(importer => importer.name !== 'Paste') // Remove Paste importer from dropdown
+                      .sort((a, b) => a.name.localeCompare(b.name)) // Sort alphabetically
+                      .map((importer) => (
+                        <MenuItem key={importer.name} value={importer.name}>
+                          {importer.name} - {importer.description}
+                        </MenuItem>
+                      ))}
                   </Select>
                 </FormControl>
 

@@ -4,6 +4,7 @@ import { BMMCImporter } from './BMMCImporter';
 import { PCMCImporter } from './PCMCImporter';
 import { CIMCImporter } from './CIMCImporter';
 import { PasteImporter } from './PasteImporter';
+import { AMMCImporter } from './AMMCImporter';
 import { Transaction } from '../../db';
 
 export class ImporterManager {
@@ -16,6 +17,7 @@ export class ImporterManager {
     this.registerImporter(new PCMCImporter());
     this.registerImporter(new CIMCImporter());
     this.registerImporter(new PasteImporter());
+    this.registerImporter(new AMMCImporter());
     // Add more importers here as needed
   }
   
@@ -104,8 +106,17 @@ export class ImporterManager {
         
         // Special check for CIMC format (no headers, date in first column)
         if (fields.length >= 3 && 
-            /^\d{4}-\d{2}-\d{2}$/.test(fields[0]) && // YYYY-MM-DD format
+            /^\d{4}-\d{1,2}-\d{1,2}$/.test(fields[0]) && // YYYY-MM-DD format
             !isNaN(parseFloat(fields[2]))) { // Third column is numeric
+          headerIndex = i;
+          break;
+        }
+        
+        // Special check for AMMC format
+        if (fields.length >= 4 && 
+            fields.some(field => field.toLowerCase().includes('posted date')) &&
+            fields.some(field => field.toLowerCase().includes('payee')) &&
+            fields.some(field => field.toLowerCase().includes('amount'))) {
           headerIndex = i;
           break;
         }
