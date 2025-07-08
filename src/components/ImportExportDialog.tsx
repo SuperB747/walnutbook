@@ -494,6 +494,61 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                     </Typography>
                   </Alert>
                 )}
+                
+                {/* Skipped Transactions */}
+                {skippedTransactions.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                      Skipped Transactions ({skippedTransactions.length})
+                    </Typography>
+                    <List dense sx={{ maxHeight: 150, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1, backgroundColor: 'grey.50' }}>
+                      {skippedTransactions.slice(0, 5).map((tx, index) => (
+                        <ListItem key={index} divider>
+                          <ListItemText
+                            primary={tx.payee}
+                            secondary={
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                  {tx.date} - {tx.amount?.toFixed(2)}
+                                </Typography>
+                                <Chip
+                                  label={tx.type}
+                                  size="small"
+                                  sx={{
+                                    backgroundColor: tx.type === 'Income' ? '#4caf50' : '#f44336',
+                                    color: 'white',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.75rem',
+                                    height: '20px'
+                                  }}
+                                />
+                                <Chip
+                                  label="Duplicate"
+                                  size="small"
+                                  sx={{
+                                    backgroundColor: '#ff9800',
+                                    color: 'white',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.75rem',
+                                    height: '20px'
+                                  }}
+                                />
+                              </Box>
+                            }
+                          />
+                        </ListItem>
+                      ))}
+                      {skippedTransactions.length > 5 && (
+                        <ListItem>
+                          <ListItemText
+                            primary={`... and ${skippedTransactions.length - 5} more skipped transactions`}
+                            sx={{ fontStyle: 'italic' }}
+                          />
+                        </ListItem>
+                      )}
+                    </List>
+                  </Box>
+                )}
               </Box>
             )}
 

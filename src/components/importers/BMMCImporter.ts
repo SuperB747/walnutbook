@@ -71,9 +71,19 @@ export class BMMCImporter extends BaseImporter {
         return null;
       }
       
-      // Determine transaction type (credit card transactions are typically expenses)
-      const type = 'Expense' as TransactionType;
-      const amount = this.normalizeAmount(rawAmount, type);
+      // Determine transaction type based on amount sign
+      // Positive amounts are expenses, negative amounts are income (transfers, refunds, etc.)
+      const type = rawAmount > 0 ? 'Expense' : 'Income' as TransactionType;
+      
+      // For BMMC (credit card), normalize amounts:
+      // - Positive amounts (expenses) should be negative
+      // - Negative amounts (income) should be positive
+      let amount: number;
+      if (type === 'Expense') {
+        amount = -Math.abs(rawAmount); // Expenses are negative
+      } else {
+        amount = Math.abs(rawAmount); // Income is positive
+      }
       
       // Clean payee name
       const payee = this.cleanPayeeName(payeeStr);

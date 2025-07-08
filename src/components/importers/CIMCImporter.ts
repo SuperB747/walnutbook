@@ -12,6 +12,7 @@ export class CIMCImporter extends BaseImporter {
     if (headers.length >= 3) {
       const firstField = headers[0];
       const thirdField = headers[2];
+      // Check if first field is a date and third field is numeric
       return /^\d{4}-\d{2}-\d{2}$/.test(firstField) && !isNaN(parseFloat(thirdField));
     }
     return false;
@@ -49,13 +50,14 @@ export class CIMCImporter extends BaseImporter {
     let transactionType: 'Income' | 'Expense' = 'Expense';
     let amount = 0;
 
+    // Check if this is an expense (third column has value)
     if (expenseStr && expenseStr !== '') {
       // This is an expense transaction
       amount = parseFloat(expenseStr.replace(/[^\d.-]/g, ''));
       if (isNaN(amount)) return null;
       transactionType = 'Expense';
     } else if (incomeStr && incomeStr !== '') {
-      // This is an income transaction
+      // This is an income transaction (fourth column has value)
       amount = parseFloat(incomeStr.replace(/[^\d.-]/g, ''));
       if (isNaN(amount)) return null;
       transactionType = 'Income';
@@ -77,20 +79,14 @@ export class CIMCImporter extends BaseImporter {
     }
 
     // 금액 처리 로직:
-    // Credit 계좌: 거래 금액을 그대로 사용 (부호 변환 없음)
-    // 다른 계좌들: Expense는 음수, Income은 양수로 변환
+    // CIMC는 신용카드 거래이므로 Credit 계좌로 처리
+    // Credit 계좌: Expense는 음수, Income은 양수로 변환
     let finalAmount = amount;
     
-    if (accountType === 'Credit') {
-      // Credit 계좌: 거래 금액을 그대로 사용
-      finalAmount = amount;
+    if (transactionType === 'Expense') {
+      finalAmount = -Math.abs(amount); // 지출은 음수로
     } else {
-      // 다른 계좌들: 부호 변환 적용
-      if (transactionType === 'Expense') {
-        finalAmount = -Math.abs(amount);
-      } else {
-        finalAmount = Math.abs(amount);
-      }
+      finalAmount = Math.abs(amount); // 수입은 양수로
     }
 
     return {

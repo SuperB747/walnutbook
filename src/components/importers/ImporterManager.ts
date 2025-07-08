@@ -153,8 +153,10 @@ export class ImporterManager {
     const errors: string[] = [];
     const warnings: string[] = [];
     
-    // Skip header row and process data rows
-    for (let i = headerIndex + 1; i < lines.length; i++) {
+    // For CIMC format (no headers), start from the first line
+    // For other formats, skip header row and process data rows
+    const startIndex = importer.name === 'CIMC' ? headerIndex : headerIndex + 1;
+    for (let i = startIndex; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
       
