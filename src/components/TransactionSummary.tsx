@@ -781,14 +781,14 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                   datasets: [
                     {
                       label: 'Income',
-                      data: monthlyTrends.income,
+                      data: monthlyTrends.income.map(value => Math.abs(value)),
                       backgroundColor: 'rgba(134, 239, 172, 0.6)',
                       borderColor: 'rgb(34, 197, 94)',
                       borderWidth: 1
                     },
                     {
                       label: 'Expense',
-                      data: monthlyTrends.expense,
+                      data: monthlyTrends.expense.map(value => Math.abs(value)),
                       backgroundColor: 'rgba(252, 165, 165, 0.6)',
                       borderColor: 'rgb(239, 68, 68)',
                       borderWidth: 1
