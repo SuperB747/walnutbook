@@ -131,47 +131,21 @@ const TransactionList: React.FC<TransactionListProps> = ({
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   const getDisplayPayee = (transaction: Transaction) => {
     if (transaction.type === 'Transfer') {
-      // Transfer 거래의 경우 payee 필드에 "[계좌명 → 계좌명]" 형태로 저장되어 있음
+      // Show only the transfer description; notes will be styled separately
       if (transaction.payee && transaction.payee.includes(' → ')) {
-        const description = transaction.payee;
-        const notes = transaction.notes || '';
-        
-        // Notes에서 임시 정보 제거
-        let cleanNotes = notes;
-        if (cleanNotes.includes('[TO_ACCOUNT_ID:')) {
-          const endIndex = cleanNotes.indexOf(']');
-          if (endIndex !== -1) {
-            cleanNotes = cleanNotes.substring(endIndex + 1).trim();
-          }
-        }
-        
-        // Description과 Notes 결합
-        if (cleanNotes) {
-          return `${description} [${cleanNotes}]`;
-        } else {
-          return description;
-        }
+        return transaction.payee;
       }
-      
-      // 기존 방식 (notes에서 계좌 정보 추출)
       const accountInfo = transaction.notes || '';
       const description = transaction.payee || '';
-      
-      if (accountInfo && accountInfo.includes('[To:') || accountInfo.includes('[From:')) {
-        const match = accountInfo.match(/\[(To|From):\s*([^\]]+)\]/);
-        if (match) {
-          const direction = match[1];
-          const accountName = match[2];
-          const displayText = direction === 'To' ? `To: ${accountName}` : `From: ${accountName}`;
-          if (description) return `${displayText} ${description}`;
-          return displayText;
-        }
+      // Legacy [To:] or [From:] tags
+      const tagMatch = accountInfo.match(/\[(To|From):\s*([^\]]+)\]/);
+      if (tagMatch) {
+        const direction = tagMatch[1];
+        const accountName = tagMatch[2];
+        const displayText = direction === 'To' ? `To: ${accountName}` : `From: ${accountName}`;
+        return description ? `${displayText} ${description}` : displayText;
       }
-      
-      if (accountInfo && description) return `${accountInfo} ${description}`;
-      if (accountInfo) return accountInfo;
-      if (description) return description;
-      return transaction.payee;
+      return description || accountInfo || transaction.payee;
     }
     
     // 일반 거래의 경우 Description만 반환 (Notes는 별도로 처리)
@@ -179,11 +153,20 @@ const TransactionList: React.FC<TransactionListProps> = ({
   };
 
   const getDisplayNotes = (transaction: Transaction) => {
-    if (transaction.type === 'Transfer') {
-      return null; // Transfer는 이미 getDisplayPayee에서 처리됨
+    if (!transaction.notes) {
+      return null;
     }
-    
-    return transaction.notes;
+    let notes = transaction.notes;
+    // Remove temp TO_ACCOUNT_ID metadata
+    if (notes.includes('[TO_ACCOUNT_ID:')) {
+      const endIdx = notes.indexOf(']');
+      if (endIdx !== -1) {
+        notes = notes.substring(endIdx + 1).trim();
+      }
+    }
+    // Remove [To:] or [From:] tags
+    notes = notes.replace(/\[(To|From):\s*[^\]]+\]/, '').trim();
+    return notes || null;
   };
   const isEditableTransfer = (transaction: Transaction) => {
     if (transaction.type !== 'Transfer') return true;
