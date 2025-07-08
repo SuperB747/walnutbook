@@ -75,176 +75,62 @@ export class PasteImporter extends BaseImporter {
   }
 
   // Parse multi-line transaction data
-  parseMultiLineTransactions(content: string): Partial<Transaction>[] {
-    const lines = content.split(/\r?\n/).filter(line => line.trim());
-    const transactions: Partial<Transaction>[] = [];
+  parseMultiLineData(content: string): Transaction[] {
+    const transactions: Transaction[] = [];
+    const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     
-    let currentDate = '';
-    let currentPayee = '';
-    let currentAmount = '';
-    
-    console.log('PasteImporter: Parsing multi-line data with', lines.length, 'lines');
-    console.log('Full content:', content);
-    console.log('All lines:', lines);
-    
+    let currentDate: string | null = null;
+    let currentPayee: string | null = null;
+    let currentAmount: number | null = null;
+
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
+      const line = lines[i];
       
-      console.log(`Line ${i}: "${line}"`);
-      
-      // Check if this line is a date
-      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(line)) {
-        console.log(`Found date: ${line}`);
-        // If we have a complete transaction, save it
-        if (currentDate && currentPayee && currentAmount) {
-          console.log(`Completing transaction: Date=${currentDate}, Payee=${currentPayee}, Amount=${currentAmount}`);
-          const transaction = this.parseTransactionFromParts(currentDate, currentPayee, currentAmount);
-          if (transaction) {
-            transactions.push(transaction);
-            console.log(`Added transaction:`, transaction);
-          }
+      if (this.isDateLine(line)) {
+        if (currentDate && currentPayee && currentAmount !== null) {
+          transactions.push(this.createTransaction(currentDate, currentPayee, currentAmount));
         }
-        
-        // Start new transaction
-        currentDate = line;
-        currentPayee = '';
-        currentAmount = '';
-      }
-      // Check if this line is an amount (starts with $, can be negative)
-      else if (/^\$[\d,.-]+$/.test(line)) {
-        console.log(`Found amount: ${line}`);
-        currentAmount = line;
-      }
-      // Check specifically for negative amounts that might not match the above pattern
-      else if (/^-\$[\d,]+\.\d{2}$/.test(line)) {
-        console.log(`Found negative amount: ${line}`);
-        currentAmount = line;
-      }
-      // Otherwise, this is likely a payee/description
-      else {
-        console.log(`Found payee: ${line}`);
-        currentPayee = line;
+        currentDate = this.parseDate(line);
+        currentPayee = null;
+        currentAmount = null;
+      } else if (this.isAmountLine(line)) {
+        currentAmount = this.parseAmount(line);
+      } else if (this.isPayeeLine(line)) {
+        currentPayee = this.parsePayee(line);
       }
     }
-    
-    // Don't forget the last transaction
-    if (currentDate && currentPayee && currentAmount) {
-      console.log(`Completing final transaction: Date=${currentDate}, Payee=${currentPayee}, Amount=${currentAmount}`);
-      const transaction = this.parseTransactionFromParts(currentDate, currentPayee, currentAmount);
-      if (transaction) {
-        transactions.push(transaction);
-        console.log(`Added final transaction:`, transaction);
-      }
+
+    if (currentDate && currentPayee && currentAmount !== null) {
+      transactions.push(this.createTransaction(currentDate, currentPayee, currentAmount));
     }
-    
-    console.log(`Total transactions parsed: ${transactions.length}`);
+
     return transactions;
   }
 
-  private parseTransactionFromParts(dateStr: string, payeeStr: string, amountStr: string): Partial<Transaction> | null {
-    try {
-      console.log(`Parsing transaction parts: Date="${dateStr}", Payee="${payeeStr}", Amount="${amountStr}"`);
-      
-      // Parse date
-      const date = this.parseDate(dateStr);
-      if (!date) {
-        console.warn(`Paste: Invalid date format: ${dateStr}`);
-        return null;
-      }
-      
-      // Parse amount - handle various formats including negative amounts
-      let amount = 0;
-      const cleanAmountStr = amountStr.replace(/[$,]/g, '').replace(/[^\d.-]/g, '');
-      amount = parseFloat(cleanAmountStr);
-      
-      if (isNaN(amount)) {
-        console.warn(`Paste: Invalid amount: ${amountStr}`);
-        return null;
-      }
-      
-      console.log(`Parsed amount: ${amount}`);
-      
-      // Determine transaction type based on amount sign and context
-      let transactionType: 'Income' | 'Expense' = 'Expense';
-      
-      // Check for keywords in payee that indicate income
-      const payeeLower = payeeStr.toLowerCase();
-      console.log(`Payee (lowercase): "${payeeLower}"`);
-      
-      if (payeeLower.includes('deposit') || 
-          payeeLower.includes('credit') || 
-          payeeLower.includes('refund') ||
-          payeeLower.includes('interest') ||
-          payeeLower.includes('transfer in') ||
-          payeeLower.includes('direct deposit') ||
-          (amount > 0 && !payeeLower.includes('payment'))) {
-        transactionType = 'Income';
-        console.log(`Determined as Income based on keywords or positive amount`);
-      }
-      
-      // Check for keywords that indicate expense
-      if (payeeLower.includes('withdrawal') ||
-          payeeLower.includes('debit') ||
-          payeeLower.includes('purchase') ||
-          payeeLower.includes('atm') ||
-          payeeLower.includes('fee') ||
-          amount < 0) {
-        transactionType = 'Expense';
-        console.log(`Determined as Expense based on keywords or negative amount`);
-      }
-      
-      // Special handling for PAYMENT transactions
-      if (payeeLower.includes('payment')) {
-        console.log(`Found PAYMENT transaction with amount: ${amount}`);
-        if (amount < 0) {
-          // Negative payment is typically a credit card payment (reducing debt)
-          transactionType = 'Income';
-          console.log(`PAYMENT with negative amount -> Income`);
-        } else {
-          // Positive payment is typically a payment to credit card (increasing debt)
-          transactionType = 'Expense';
-          console.log(`PAYMENT with positive amount -> Expense`);
-        }
-      }
-      
-      // Clean payee name
-      let payee = payeeStr
-        .replace(/^"|"$/g, '') // Remove surrounding quotes
-        .replace(/\s+$/, '') // Remove trailing spaces
-        .replace(/^\s+/, '') // Remove leading spaces
-        .replace(/\s+/g, ' ') // Normalize spaces
-        .replace(/\s+#\d+$/, '') // Remove #1, #2, etc.
-        .replace(/\s+\d{4}$/, '') // Remove trailing 4-digit numbers
-        .replace(/\s+[A-Z]{2,}\s+\d{4}$/, '') // Remove card type and last 4 digits
-        .replace(/\*[A-Z0-9]+/, '') // Remove transaction IDs like *N30XQ1P31
-        .replace(/\s+WWW\.AMAZON\.CAON$/, '') // Remove Amazon website suffix
-        .replace(/\s+AMAZON\.CA ON$/, ''); // Remove Amazon.ca ON suffix
-      
-      console.log(`Cleaned payee: "${payee}"`);
-      
-      // Handle amount based on account type
-      let finalAmount = amount;
-      
-      // For now, assume this is a credit card (since it's Amazon transactions)
-      // Credit 계좌: 거래 금액을 그대로 사용
-      finalAmount = amount;
-      
-      const result = {
-        date,
-        type: transactionType,
-        amount: finalAmount,
-        payee,
-        notes: undefined,
-      };
-      
-      console.log(`Final transaction:`, result);
-      return result;
-      
-    } catch (error) {
-      console.error('Paste: Error parsing transaction parts:', error, { dateStr, payeeStr, amountStr });
-      return null;
+  private createTransaction(dateStr: string, payeeStr: string, amountStr: string | number): Transaction {
+    const amount = typeof amountStr === 'number' ? amountStr : this.parseAmount(amountStr);
+    const payeeLower = payeeStr.toLowerCase();
+    let type = 'Expense';
+
+    // Determine transaction type based on keywords and amount
+    if (payeeLower.includes('payment') || payeeLower.includes('deposit')) {
+      type = amount < 0 ? 'Income' : 'Expense';
+    } else if (
+      payeeLower.includes('salary') ||
+      payeeLower.includes('income') ||
+      payeeLower.includes('interest') ||
+      amount > 0
+    ) {
+      type = 'Income';
     }
+
+    return {
+      date: dateStr,
+      payee: payeeStr,
+      amount: Math.abs(amount),
+      type,
+      notes: '',
+    };
   }
 
   parseRow(row: string[], mapping: ColumnMapping, accountType?: string): Partial<Transaction> | null {

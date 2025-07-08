@@ -22,29 +22,17 @@ import { Account } from '../db';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import CalculateIcon from '@mui/icons-material/Calculate';
+import { safeFormatCurrency } from '../utils';
 
 export interface AccountListProps {
   accounts: Account[];
   onEdit: (account: Account) => void;
-  onDelete: (id: number) => void;
+  onDelete: (account: Account) => void;
   isLoading?: boolean;
 }
 
 // Helper: format numbers as CAD currency with comma separators
 const formatCurrency = (amount: number): string => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(amount);
-
-// Safely format balance values, fallback to 0 on invalid input
-const safeFormatCurrency = (amount: number): string => {
-  if (typeof amount !== 'number' || isNaN(amount)) {
-    console.warn('Invalid account balance:', amount);
-    return formatCurrency(0);
-  }
-  // Treat near-zero values as exactly zero to avoid "-$0.00"
-  if (Math.abs(amount) < 0.005) {
-    return formatCurrency(0);
-  }
-  return formatCurrency(amount);
-};
 
 // Credit 계좌 잔액을 표시하는 함수 (부호 변환 없이 그대로)
 const formatCreditBalance = (account: Account): string => {
@@ -220,7 +208,7 @@ const AccountList: React.FC<AccountListProps> = ({
                 </IconButton>
                 <IconButton
                     size="small"
-                    onClick={() => onDelete(account.id)}
+                    onClick={() => onDelete(account)}
                     sx={{ 
                       backgroundColor: 'transparent',
                       color: '#6B7280',

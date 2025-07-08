@@ -1,12 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Chip, Typography, TextField, Box, FormControl, InputLabel, Select, MenuItem, Checkbox, ListItemText, OutlinedInput, Button, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
 import { Transaction, Account, Category } from '../db';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { parse } from 'date-fns';
+import { getCategoryName, formatCurrency } from '../utils';
 
 export interface TransactionListProps {
   transactions: Transaction[];
@@ -26,11 +28,6 @@ export interface TransactionListProps {
 const getAccountName = (accounts: Account[], accountId: number): string => {
   const account = accounts.find(a => a.id === accountId);
   return account ? account.name : 'Unknown Account';
-};
-const getCategoryName = (categories: Category[], categoryId: number | undefined): string => {
-  if (!categoryId) return 'Undefined';
-  const category = categories.find(cat => cat.id === categoryId);
-  return category?.name || 'Undefined';
 };
 
 const TransactionList: React.FC<TransactionListProps> = ({
@@ -58,13 +55,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
   });
   const [selectedIds, setSelectedIds] = useState<number[]>(initialSelectedIds);
   
-  // Auto-select imported transactions when they are first loaded
-  React.useEffect(() => {
-    console.log('TransactionList useEffect triggered with importedIds:', importedIds);
-    if (importedIds.length > 0) {
-      console.log('Auto-selecting imported transactions:', importedIds);
+  // Handle imported transactions
+  useEffect(() => {
+    if (importedIds && importedIds.length > 0) {
       setSelectedIds(importedIds);
-      console.log('Updated selectedIds:', importedIds);
     }
   }, [importedIds]);
   const [editDescriptionId, setEditDescriptionId] = useState<number | null>(null);
@@ -128,7 +122,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
   const handleClearFilters = () => setFilter({ searchTerm: '', types: [], categories: [], accounts: [], dateRange: { start: '', end: '' } });
 
   // 기타 유틸
-  const formatCurrency = (amount: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   const getDisplayPayee = (transaction: Transaction) => {
     if (transaction.type === 'Transfer') {
       // Show only the transfer description; notes will be styled separately

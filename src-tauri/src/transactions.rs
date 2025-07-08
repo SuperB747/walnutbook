@@ -64,193 +64,112 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let path = get_db_path(&app);
     let mut conn = Connection::open(&path).map_err(|e| e.to_string())?;
     
-    println!("[DEBUG] Creating transaction: type={}, account_id={}, amount={}, payee={}, notes={:?}", 
-             transaction.transaction_type, transaction.account_id, transaction.amount, transaction.payee, transaction.notes);
-    
-    // Transfer 거래 특별 처리
-    if transaction.transaction_type == "Transfer" {
-        println!("[DEBUG] Processing Transfer transaction");
-        let tx = conn.transaction().map_err(|e| {
-            println!("[DEBUG] Failed to start transaction: {}", e);
-            e.to_string()
-        })?;
+    // Create transaction
+    let transaction_type = transaction.transaction_type.to_string();
+    let amount = transaction.amount;
+    let payee = transaction.payee.to_string();
+    let notes = transaction.notes.clone();
+
+    if transaction_type == "Transfer" {
+        let mut tx = conn.transaction().map_err(|e| e.to_string())?;
         
-        // Transfer ID 생성
-        let transfer_id = tx.query_row(
-            "SELECT COALESCE(MAX(transfer_id), 0) + 1 FROM transactions",
-            [],
-            |r| r.get::<_, i64>(0)
-        ).map_err(|e| {
-            println!("[DEBUG] Failed to get transfer_id: {}", e);
-            e.to_string()
-        })?;
-        
-        println!("[DEBUG] Generated transfer_id: {}", transfer_id);
-        
-        // 출발 계좌 트랜잭션 (음수)
-        let departure_amount = -transaction.amount.abs();
-        println!("[DEBUG] Creating departure transaction: account_id={}, amount={}", transaction.account_id, departure_amount);
-        
+        // Generate transfer_id if not provided
+        let transfer_id = match transaction.transfer_id {
+            Some(id) => id,
+            None => {
+                let mut stmt = tx.prepare("SELECT COALESCE(MAX(transfer_id), 0) + 1 FROM transactions WHERE transfer_id IS NOT NULL")
+                    .map_err(|e| e.to_string())?;
+                stmt.query_row([], |row| row.get::<_, i64>(0))
+                    .map_err(|e| e.to_string())?
+            }
+        };
+
+        // Create departure transaction
+        let departure_amount = -amount.abs();
         tx.execute(
-            "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
-                transaction.date,
                 transaction.account_id,
-                transaction.transaction_type,
-                None::<i64>,
+                transaction.category_id,
                 departure_amount,
-                transaction.payee,
-                transaction.notes.clone().unwrap_or_default(),
+                transaction.date,
+                payee,
+                notes,
+                transaction_type,
                 transfer_id
             ],
-        ).map_err(|e| {
-            println!("[DEBUG] Failed to insert departure transaction: {}", e);
-            e.to_string()
-        })?;
-        
-        println!("[DEBUG] Departure transaction inserted successfully");
-        
-        // 도착 계좌 ID 추출 (notes에서)
-        let to_account_id = if let Some(notes) = &transaction.notes {
-            println!("[DEBUG] Processing notes: {}", notes);
-            
-            // 새로운 형식: [TO_ACCOUNT_ID:계좌ID] 패턴 확인
-            if notes.contains("[TO_ACCOUNT_ID:") {
-                if let Some(start) = notes.find("[TO_ACCOUNT_ID:") {
-                    if let Some(end) = notes[start..].find("]") {
-                        let account_id_str = &notes[start + 15..start + end];
-                        if let Ok(account_id) = account_id_str.parse::<i64>() {
-                            println!("[DEBUG] Found to_account_id from new format: {}", account_id);
-                            Some(account_id)
-                        } else {
-                            println!("[DEBUG] Failed to parse account_id from: {}", account_id_str);
-                            None
-                        }
+        ).map_err(|e| e.to_string())?;
+
+        // Process notes to find target account
+        let to_id = if let Some(notes_str) = notes {
+            // Try new format first: [TO_ACCOUNT_ID:123]
+            if let Some(start) = notes_str.find("[TO_ACCOUNT_ID:") {
+                if let Some(end) = notes_str[start..].find(']') {
+                    let account_id_str = &notes_str[start + 14..start + end];
+                    match account_id_str.parse::<i64>() {
+                        Ok(account_id) => Some(account_id),
+                        Err(_) => None
+                    }
+                } else {
+                    None
+                }
+            } 
+            // Try legacy format: [To: Account Name]
+            else if let Some(start) = notes_str.find("[To:") {
+                if let Some(end) = notes_str[start..].find(']') {
+                    let extracted = notes_str[start + 4..start + end].trim();
+                    if !extracted.is_empty() {
+                        let mut stmt = tx.prepare("SELECT id FROM accounts WHERE name = ?1 LIMIT 1")
+                            .map_err(|e| e.to_string())?;
+                        stmt.query_row([extracted], |row| row.get::<_, i64>(0)).ok()
                     } else {
-                        println!("[DEBUG] No closing bracket found in new format");
                         None
                     }
                 } else {
-                    println!("[DEBUG] No '[TO_ACCOUNT_ID:' pattern found");
-                    None
-                }
-            }
-            // 레거시 형식: [To: 계좌명] 패턴 확인
-            else if notes.contains("[To:") {
-                // [To: 계좌명] 패턴에서 계좌명만 추출
-                let account_name = if let Some(start) = notes.find("[To:") {
-                    if let Some(end) = notes[start..].find("]") {
-                        let extracted = &notes[start + 4..start + end].trim();
-                        println!("[DEBUG] Extracted account name: '{}'", extracted);
-                        extracted.to_string()
-                    } else {
-                        println!("[DEBUG] No closing bracket found");
-                        String::new()
-                    }
-                } else {
-                    println!("[DEBUG] No '[To:' pattern found");
-                    String::new()
-                };
-                
-                if !account_name.is_empty() {
-                    let to_account_id: Option<i64> = tx.query_row(
-                        "SELECT id FROM accounts WHERE name = ?1",
-                        params![account_name],
-                        |r| r.get(0)
-                    ).ok();
-                    
-                    println!("[DEBUG] Found to_account_id from legacy format: {:?}", to_account_id);
-                    to_account_id
-                } else {
-                    println!("[DEBUG] Empty account name extracted");
                     None
                 }
             } else {
-                println!("[DEBUG] No transfer pattern found in notes");
                 None
             }
         } else {
-            println!("[DEBUG] No notes provided");
             None
         };
-        
-        // 도착 계좌 트랜잭션 (양수)
-        if let Some(to_id) = to_account_id {
-            let arrival_amount = transaction.amount.abs();
-            println!("[DEBUG] Creating arrival transaction: account_id={}, amount={}", to_id, arrival_amount);
-            
-            // Notes에서 임시 정보 제거하고 사용자 입력만 유지
-            let clean_notes = if let Some(notes) = &transaction.notes {
-                if notes.contains("[TO_ACCOUNT_ID:") {
-                    if let Some(end) = notes.find("]") {
-                        let user_notes = &notes[end + 1..].trim();
-                        if user_notes.is_empty() {
-                            None
-                        } else {
-                            Some(user_notes.to_string())
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    Some(notes.clone())
-                }
-            } else {
-                None
-            };
-            
+
+        // Create arrival transaction if target account found
+        if let Some(to_id) = to_id {
+            let arrival_amount = amount.abs();
             tx.execute(
-                "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
-                    transaction.date,
                     to_id,
-                    transaction.transaction_type,
-                    None::<i64>, // Transfer 거래에서는 category_id를 NULL로 설정
+                    transaction.category_id,
                     arrival_amount,
-                    transaction.payee,
-                    clean_notes,
+                    transaction.date,
+                    payee,
+                    notes,
+                    transaction_type,
                     transfer_id
                 ],
-            ).map_err(|e| {
-                println!("[DEBUG] Failed to insert arrival transaction: {}", e);
-                e.to_string()
-            })?;
-            
-            println!("[DEBUG] Arrival transaction inserted successfully");
-        } else {
-            println!("[DEBUG] No to_account_id found, skipping arrival transaction");
+            ).map_err(|e| e.to_string())?;
         }
-        
-        tx.commit().map_err(|e| {
-            println!("[DEBUG] Failed to commit transaction: {}", e);
-            e.to_string()
-        })?;
-        
-        println!("[DEBUG] Transfer transaction committed successfully");
+
+        tx.commit().map_err(|e| e.to_string())?;
     } else {
-        println!("[DEBUG] Processing regular transaction");
-        // 일반 거래 처리
+        // Regular transaction
         conn.execute(
-            "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
-                transaction.date,
                 transaction.account_id,
-                transaction.transaction_type,
                 transaction.category_id,
-                transaction.amount,
-                transaction.payee,
-                transaction.notes.clone().unwrap_or_default(),
-                transaction.transfer_id
+                amount,
+                transaction.date,
+                payee,
+                notes,
+                transaction_type
             ],
-        ).map_err(|e| {
-            println!("[DEBUG] Failed to insert regular transaction: {}", e);
-            e.to_string()
-        })?;
-        
-        println!("[DEBUG] Regular transaction inserted successfully");
+        ).map_err(|e| e.to_string())?;
     }
-    
-    println!("[DEBUG] Getting updated transactions list");
+
     get_transactions(app)
 }
 

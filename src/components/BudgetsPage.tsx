@@ -22,6 +22,7 @@ import BudgetForm from './BudgetForm';
 import { Budget, Transaction, Category } from '../db';
 import { enCA } from 'date-fns/locale';
 import { invoke } from '@tauri-apps/api/core';
+import { formatCurrency } from '../utils';
 
 const MONTHS = [
   { value: '01', label: 'January' },
@@ -130,7 +131,7 @@ const BudgetsPage: React.FC = () => {
         });
       } else {
         updatedBudgets = await invoke<Budget[]>('add_budget', {
-          category_id: budgetData.category_id!,
+          categoryId: budgetData.category_id!,
           amount: budgetData.amount!,
           month: selectedMonth,
           notes: budgetData.notes,
@@ -152,7 +153,7 @@ const BudgetsPage: React.FC = () => {
         .filter(t => 
           t.type === 'Expense' && 
           t.date.startsWith(selectedMonth) &&
-          t.category_id !== undefined  // Only include transactions with categories
+          t.category_id !== undefined
         )
         .reduce((sum, t) => sum + t.amount, 0)
     ), 
@@ -160,8 +161,6 @@ const BudgetsPage: React.FC = () => {
   );
   const remainingBudget = totalBudget - totalSpent;
   const progress = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
-
-  const formatCurrency = (amount: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(amount);
 
   const handleAutoGenerateBudget = async () => {
     // Auto-generate is only allowed for the current month
@@ -188,8 +187,8 @@ const BudgetsPage: React.FC = () => {
         const existingCatIds = new Set(currentBudgets.map(b => b.category_id));
         for (const b of prevBudgets) {
           if (!existingCatIds.has(b.category_id)) {
-            console.log('add_budget params', { category_id: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
-            await invoke<Budget[]>('add_budget', { category_id: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
+            console.log('add_budget params', { categoryId: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
+            await invoke<Budget[]>('add_budget', { categoryId: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
           }
         }
       }
@@ -217,8 +216,8 @@ const BudgetsPage: React.FC = () => {
           skippedCount++;
         } else {
           const amt = spendingByCategory.get(c.id) || 0;
-          console.log('add_budget params', { category_id: c.id, amount: amt, month: selectedMonth, notes: '' });
-          await invoke<Budget[]>('add_budget', { category_id: c.id, amount: amt, month: selectedMonth, notes: '' });
+          console.log('add_budget params', { categoryId: c.id, amount: amt, month: selectedMonth, notes: '' });
+          await invoke<Budget[]>('add_budget', { categoryId: c.id, amount: amt, month: selectedMonth, notes: '' });
           createdCount++;
         }
       }

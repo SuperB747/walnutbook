@@ -240,86 +240,31 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('[DEBUG] handleSubmit called');
-    console.log('[DEBUG] formData:', formData);
-    console.log('[DEBUG] toAccountId:', toAccountId);
+    if (!validateForm()) {
+      return;
+    }
+
+    const finalTransaction = { ...formData };
     
-    if (validateForm()) {
-      let finalTransaction = {
-        ...formData,
-        payee: formData.payee ? formData.payee.trim() : '',
-        amount: fixAmountSign(formData.amount, formData.type, allCategories.find(cat => cat.id === formData.category_id)?.name)
-      };
-      
-      console.log('[DEBUG] finalTransaction before processing:', finalTransaction);
-      
-      // Transfer 거래 수정 시
-      if (transaction?.type === 'Transfer') {
-        console.log('[DEBUG] Editing existing Transfer transaction');
-        // To Account 정보는 payee에 이미 포함되어 있으므로 notes는 사용자 입력만 유지
-        // 기존 notes에서 자동 생성된 정보 제거
-        let cleanNotes = finalTransaction.notes;
-        if (cleanNotes) {
-          cleanNotes = cleanNotes.replace(/\[To: [^\]]+\]/, '').trim();
-          cleanNotes = cleanNotes.replace(/\[From: \d+\]/, '').trim();
-          if (cleanNotes === '') {
-            cleanNotes = undefined;
-          }
-        }
-        finalTransaction.notes = cleanNotes;
-        
-        // Transfer 거래에서는 Description을 자동으로 설정
+    if (finalTransaction.type === 'Transfer') {
+      if (transaction) {
+        // Editing existing Transfer transaction
         if (toAccountId) {
-          const fromAccount = accounts.find(acc => acc.id === formData.account_id);
-          const toAccount = accounts.find(acc => acc.id === toAccountId);
-          if (fromAccount && toAccount) {
-            finalTransaction.payee = `[${fromAccount.name} → ${toAccount.name}]`;
-          }
+          finalTransaction.notes = `[TO_ACCOUNT_ID:${toAccountId}]${finalTransaction.notes ? ' ' + finalTransaction.notes : ''}`;
         }
-        
-        // Transfer 거래에서는 category_id를 undefined로 설정
-        finalTransaction.category_id = undefined;
-      }
-      // 새로운 Transfer 거래 생성 시
-      else if (formData.type === 'Transfer' && toAccountId) {
-        console.log('[DEBUG] Creating new Transfer transaction');
-        const fromAccount = accounts.find(acc => acc.id === formData.account_id);
-        const toAccount = accounts.find(acc => acc.id === toAccountId);
-        if (fromAccount && toAccount) {
-          finalTransaction.payee = `[${fromAccount.name} → ${toAccount.name}]`;
-          // Notes에는 사용자가 입력한 내용만 저장하되, 백엔드에서 to_account_id를 찾을 수 있도록 임시 정보 포함
-          const userNotes = formData.notes || '';
-          finalTransaction.notes = userNotes ? `[TO_ACCOUNT_ID:${toAccountId}] ${userNotes}` : `[TO_ACCOUNT_ID:${toAccountId}]`;
-          // Transfer 거래에서는 category_id를 undefined로 설정
-          finalTransaction.category_id = undefined;
-          console.log('[DEBUG] Set payee and notes for new transfer:', finalTransaction.payee, finalTransaction.notes);
+      } else {
+        // Creating new Transfer transaction
+        if (toAccountId) {
+          finalTransaction.notes = `[TO_ACCOUNT_ID:${toAccountId}]${finalTransaction.notes ? ' ' + finalTransaction.notes : ''}`;
         }
       }
-      // Adjust 거래는 category를 그대로 저장 (백엔드에서 부호 결정에 사용)
-      // category는 이미 'Add' 또는 'Subtract'로 설정되어 있음
-      
-      console.log('[DEBUG] finalTransaction after processing:', finalTransaction);
-      
-      try {
-        await onSave(finalTransaction);
-        console.log('[DEBUG] onSave completed successfully');
-      } catch (error) {
-        console.error('[DEBUG] onSave failed:', error);
-        throw error;
-      }
-      
-      // In continuous mode, preserve current values for next transaction
-      if (!transaction) {
-        setPreservedValues({
-          date: formData.date,
-          type: formData.type,
-          payee: formData.payee,
-          account_id: formData.account_id,
-          category_id: formData.category_id,
-        });
-      }
-    } else {
-      console.log('[DEBUG] Form validation failed');
+    }
+
+    try {
+      await onSave(finalTransaction);
+      onClose();
+    } catch (error) {
+      setSnackbar({ open: true, message: `Failed to ${transaction ? 'update' : 'create'} transaction: ${error}`, severity: 'error' });
     }
   };
 
