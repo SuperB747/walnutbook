@@ -495,8 +495,11 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
   const handleLegendHover = (label: string) => {
     const chart = doughnutRef.current;
     if (!chart) return;
-    const idx = labelsForDisplay.indexOf(label);
+
+    // donutChartData의 labels 배열에서 해당 라벨의 인덱스를 찾습니다
+    const idx = donutChartData.labels.indexOf(label);
     if (idx === -1) return;
+
     // Chart.js v3+ API
     chart.setActiveElements([
       { datasetIndex: 0, index: idx }
