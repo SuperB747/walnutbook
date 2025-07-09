@@ -30,6 +30,7 @@ import CategoryManagementDialog from './components/CategoryManagementDialog';
 import BulkTransactionEdit from './components/BulkTransactionEdit';
 import ImportExportDialog from './components/ImportExportDialog';
 import BackupRestoreDialog from './components/BackupRestoreDialog';
+import ReportsPage from './components/ReportsPage';
 
 import { Account, Transaction, Category } from './db';
 import logo from './logo.png';
@@ -435,6 +436,8 @@ export const App: React.FC = () => {
         return 1;
       case '/budgets':
         return 2;
+      case '/reports':
+        return 3;
       default:
         return 0;
     }
@@ -597,6 +600,7 @@ export const App: React.FC = () => {
                 <Tab label="Accounts" component={Link} to="/" />
                 <Tab label="Transactions" component={Link} to="/transactions" />
                 <Tab label="Budgets" component={Link} to="/budgets" />
+                <Tab label="Reports" component={Link} to="/reports" />
               </Tabs>
             </Box>
 
@@ -607,6 +611,7 @@ export const App: React.FC = () => {
             <Route path="/" element={<AccountsPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/budgets" element={<BudgetsPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
           </Routes>
         </Box>
         <Menu

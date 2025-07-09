@@ -11,6 +11,7 @@ import {
   Stack,
   AlertColor,
   TextField,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -65,6 +66,7 @@ const TransactionsPage: React.FC = () => {
   const [importedIds, setImportedIds] = useState<number[]>([]);
   const [importedDuplicateCount, setImportedDuplicateCount] = useState<number>(0);
   const [backupOpen, setBackupOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [actionsAnchorEl, setActionsAnchorEl] = useState<null | HTMLElement>(null);
   const openActionsMenu = (event: React.MouseEvent<HTMLElement>) => setActionsAnchorEl(event.currentTarget);
   const closeActionsMenu = () => setActionsAnchorEl(null);
@@ -84,6 +86,8 @@ const TransactionsPage: React.FC = () => {
       setTransactions([]);
       setAccounts([]);
       setCategories([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -330,6 +334,13 @@ const TransactionsPage: React.FC = () => {
 
   const filteredByMonth = selectedMonth ? transactions.filter((t) => t.date && t.date.startsWith(selectedMonth)) : transactions;
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
   return (
     <Box sx={{ p: 3 }}>
       <Menu
