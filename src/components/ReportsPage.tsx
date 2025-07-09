@@ -161,60 +161,95 @@ const ReportsPage: React.FC = () => {
     [allTransactions, selectedMonth]
   );
 
-  const monthlyTotals = useMemo(() => {
-    const result = { income: 0, expense: 0 };
-    const reimbursementsByTarget: Record<number, number> = {};
-    // First, map reimbursement incomes to target categories (exclude from income)
-    monthlyTransactions.forEach(tx => {
-      if (tx.type === 'Income') {
-        const cat = categories.find(c => c.id === tx.category_id);
-        if (tx.category_id != null && cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
-          reimbursementsByTarget[cat.reimbursement_target_category_id] =
-            (reimbursementsByTarget[cat.reimbursement_target_category_id] || 0) + tx.amount;
+  // Compute summary (income and signed expense) for a list of transactions
+  function summarizeTxns(txns: Transaction[]) {
+    // Create category map for efficient lookups
+    const categoryMap = new Map<number, Category>();
+    categories.forEach(c => categoryMap.set(c.id, c));
+
+    let income = 0;
+    
+    // First calculate raw expenses by category
+    const expensesByCategory: Record<number, number> = {};
+    txns.forEach(tx => {
+      if (tx.type === 'Expense' && tx.category_id != null) {
+        expensesByCategory[tx.category_id] = (expensesByCategory[tx.category_id] || 0) + tx.amount;
+      }
+    });
+
+    // Calculate non-reimbursement income and apply reimbursements where possible
+    let appliedReimbursements = 0;
+    txns.forEach(tx => {
+      if (tx.type === 'Income' && tx.category_id != null) {
+        const cat = categoryMap.get(tx.category_id);
+        if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
+          const targetExpense = expensesByCategory[cat.reimbursement_target_category_id] || 0;
+          if (targetExpense < 0) { // Only if there are expenses to reimburse
+            // Calculate how much of the reimbursement can be applied
+            const applicableAmount = Math.min(tx.amount, Math.abs(targetExpense));
+            appliedReimbursements += applicableAmount;
+            // Update the remaining expense for this category
+            expensesByCategory[cat.reimbursement_target_category_id] += applicableAmount;
+          }
         } else {
-          result.income += tx.amount;
+          income += tx.amount; // Non-reimbursement income
         }
       }
     });
-    // Then, sum expenses with reimbursement offsets
-    monthlyTransactions.forEach(tx => {
-      if (tx.type === 'Expense') {
-        const reimbursement = tx.category_id != null ? reimbursementsByTarget[tx.category_id] : 0;
-        result.expense += tx.amount + reimbursement;
-      }
-    });
-    return result;
-  }, [monthlyTransactions, categories]);
+
+    // Calculate total raw expenses
+    const rawExpenses = Object.values(expensesByCategory).reduce((sum, amount) => sum + amount, 0);
+
+    // Net expense is raw expenses plus applied reimbursements
+    const expense = rawExpenses + appliedReimbursements;
+
+    return { income, expense };
+  }
+  const monthlySummary = useMemo(() => summarizeTxns(monthlyTransactions), [monthlyTransactions, categories]);
 
   // Monthly raw category expenses with reimbursements applied
   const monthlyCategoryRaw = useMemo<{ id: number; amount: number }[]>(() => {
-    const reimbursementsByTarget: Record<number, number> = {};
+    // Create category map for efficient lookups
+    const categoryMap = new Map<number, Category>();
+    categories.forEach(c => categoryMap.set(c.id, c));
+
+    // First calculate raw expenses by category
     const expensesByCategory: Record<number, number> = {};
-    // Map reimbursement income to target categories
-    monthlyTransactions.forEach(tx => {
-      if (tx.type === 'Income' && tx.category_id != null) {
-        const cat = categories.find(c => c.id === tx.category_id);
-        if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
-          reimbursementsByTarget[cat.reimbursement_target_category_id] =
-            (reimbursementsByTarget[cat.reimbursement_target_category_id] || 0) + tx.amount;
-        }
-      }
-    });
-    // Calculate net expense per category
     monthlyTransactions.forEach(tx => {
       if (tx.type === 'Expense') {
         const id = tx.category_id ?? -1;
-        const reimbursement = reimbursementsByTarget[id] || 0;
-        const net = tx.amount + reimbursement; // tx.amount is negative, reimbursement is positive
-        if (net < 0) {
-          expensesByCategory[id] = (expensesByCategory[id] || 0) + net;
+        expensesByCategory[id] = (expensesByCategory[id] || 0) + tx.amount;
+      }
+    });
+
+    // Then calculate reimbursements, but only apply what can be used
+    const originalExpenses = { ...expensesByCategory }; // Keep original expenses for reference
+    monthlyTransactions.forEach(tx => {
+      if (tx.type === 'Income' && tx.category_id != null) {
+        const cat = categoryMap.get(tx.category_id);
+        if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
+          const targetId = cat.reimbursement_target_category_id;
+          const targetExpense = expensesByCategory[targetId] || 0;
+          if (targetExpense < 0) { // Only if there are expenses to reimburse
+            // Calculate how much of the reimbursement can be applied
+            const applicableAmount = Math.min(tx.amount, Math.abs(targetExpense));
+            expensesByCategory[targetId] += applicableAmount;
+          }
         }
       }
     });
-    // Convert to array of positive amounts and sort desc
+
+    // Convert to array and sort by absolute amount descending
+    // Only include categories that have non-zero net expenses
     return Object.entries(expensesByCategory)
-      .map(([id, amount]) => ({ id: Number(id), amount: Math.abs(amount) }))
-      .sort((a, b) => b.amount - a.amount);
+      .filter(([, amount]) => amount !== 0)
+      .map(([id, amount]) => ({ 
+        id: Number(id), 
+        // If net amount is positive (reimbursement > expense), make it negative for total calculation
+        // If net amount is negative (expense > reimbursement), keep it positive for display
+        amount: amount > 0 ? -amount : Math.abs(amount)
+      }))
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
   }, [monthlyTransactions, categories]);
   // Filter out undefined (id === -1) for Category Breakdown
   const filteredMonthlyCategoryRaw = useMemo(
@@ -283,7 +318,7 @@ const ReportsPage: React.FC = () => {
     labels: ['Income', 'Expense'],
     datasets: [{
       label: 'Amount',
-      data: [monthlyTotals.income, Math.abs(monthlyTotals.expense)],
+      data: [monthlySummary.income, Math.abs(monthlySummary.expense)],
       backgroundColor: [theme.palette.primary.main, theme.palette.error.main]
     }]
   };
@@ -347,30 +382,7 @@ const ReportsPage: React.FC = () => {
     allTransactions.filter(tx => tx.date.startsWith(`${year}-`)),
     [allTransactions, year]
   );
-  const yearlyTotals = useMemo(() => {
-    const result = { income: 0, expense: 0 };
-    const reimbursementsByTarget: Record<number, number> = {};
-    // First, map reimbursement incomes to target categories (exclude from income)
-    yearlyTransactions.forEach(tx => {
-      if (tx.type === 'Income') {
-        const cat = categories.find(c => c.id === tx.category_id);
-        if (tx.category_id != null && cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
-          reimbursementsByTarget[cat.reimbursement_target_category_id] =
-            (reimbursementsByTarget[cat.reimbursement_target_category_id] || 0) + tx.amount;
-        } else {
-          result.income += tx.amount;
-        }
-      }
-    });
-    // Then, sum expenses with reimbursement offsets
-    yearlyTransactions.forEach(tx => {
-      if (tx.type === 'Expense') {
-        const reimbursement = tx.category_id != null ? reimbursementsByTarget[tx.category_id] : 0;
-        result.expense += tx.amount + reimbursement;
-      }
-    });
-    return result;
-  }, [yearlyTransactions, categories]);
+  const yearlySummary = useMemo(() => summarizeTxns(yearlyTransactions), [yearlyTransactions, categories]);
   const yearlyCategoryRaw = useMemo(() => {
     const reimbursements: Record<number, number> = {};
     const expenses: Record<number, number> = {};
@@ -525,13 +537,13 @@ const ReportsPage: React.FC = () => {
                   <Typography variant="h6" gutterBottom>Income vs Expense</Typography>
                   <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4, mb: 2 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem' }}>
-                      Income: {safeFormatCurrency(monthlyTotals.income)}
+                      Income: {safeFormatCurrency(monthlySummary.income)}
                     </Typography>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.error.main, fontSize: '1rem' }}>
-                      Expense: {safeFormatCurrency(monthlyBreakdownTotal)}
+                      Expense: {safeFormatCurrency(monthlySummary.expense)}
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (monthlyTotals.income - monthlyBreakdownTotal) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem' }}>
-                      Net: {safeFormatCurrency(monthlyTotals.income - monthlyBreakdownTotal)}
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (monthlySummary.income + monthlySummary.expense) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem' }}>
+                      Net: {safeFormatCurrency(monthlySummary.income + monthlySummary.expense)}
                     </Typography>
                   </Box>
                   <Box sx={{ flex: 1, minHeight: 0 }}>
@@ -539,7 +551,7 @@ const ReportsPage: React.FC = () => {
                       data={{
                         labels: ['Income', 'Expense'],
                         datasets: [{
-                          data: [monthlyTotals.income, monthlyBreakdownTotal],
+                          data: [monthlySummary.income, Math.abs(monthlySummary.expense)],
                           backgroundColor: [theme.palette.primary.main, theme.palette.error.main]
                         }]
                       }}
@@ -795,13 +807,13 @@ const ReportsPage: React.FC = () => {
                   <Typography variant="h6" gutterBottom>Income vs Expense</Typography>
                   <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4, mb: 2 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem' }}>
-                      Income: {safeFormatCurrency(yearlyTotals.income)}
+                      Income: {safeFormatCurrency(yearlySummary.income)}
                     </Typography>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.error.main, fontSize: '1rem' }}>
-                      Expense: {safeFormatCurrency(yearlyBreakdownTotal)}
+                      Expense: {safeFormatCurrency(yearlySummary.expense)}
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (yearlyTotals.income - yearlyBreakdownTotal) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem' }}>
-                      Net: {safeFormatCurrency(yearlyTotals.income - yearlyBreakdownTotal)}
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (yearlySummary.income + yearlySummary.expense) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem' }}>
+                      Net: {safeFormatCurrency(yearlySummary.income + yearlySummary.expense)}
                     </Typography>
                   </Box>
                   <Box sx={{ flex: 1, minHeight: 0 }}>
@@ -809,7 +821,7 @@ const ReportsPage: React.FC = () => {
                       data={{
                         labels: ['Income', 'Expense'],
                         datasets: [{
-                          data: [yearlyTotals.income, yearlyBreakdownTotal],
+                          data: [yearlySummary.income, Math.abs(yearlySummary.expense)],
                           backgroundColor: [theme.palette.primary.main, theme.palette.error.main]
                         }]
                       }}

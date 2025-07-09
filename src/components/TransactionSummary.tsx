@@ -130,18 +130,35 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
 
     return result;
   }, [transactionsToSummarize, categoryMap]);
-  // Total reimbursed (sum of reimbursement incomes)
+  // Total reimbursed (sum of reimbursement incomes that were actually applied)
   const totalReimbursed = useMemo(() => {
-    let sum = 0;
+    // First get raw expenses by category
+    const expensesByCategory: Record<number, number> = {};
+    transactionsToSummarize.forEach(tx => {
+      if (tx.type === 'Expense' && tx.category_id != null) {
+        expensesByCategory[tx.category_id] = (expensesByCategory[tx.category_id] || 0) + tx.amount;
+      }
+    });
+
+    // Then calculate reimbursements, but only count what can be applied
+    let appliedReimbursements = 0;
     transactionsToSummarize.forEach(tx => {
       if (tx.type === 'Income' && tx.category_id != null) {
         const cat = categoryMap.get(tx.category_id);
-        if (cat?.is_reimbursement) {
-          sum += tx.amount;
+        if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
+          const targetExpense = expensesByCategory[cat.reimbursement_target_category_id] || 0;
+          if (targetExpense < 0) { // Only if there are expenses to reimburse
+            // Calculate how much of the reimbursement can be applied
+            // targetExpense is negative, so we want to add up to 0
+            const applicableAmount = Math.min(tx.amount, Math.abs(targetExpense));
+            appliedReimbursements += applicableAmount;
+            // Update the remaining expense for this category
+            expensesByCategory[cat.reimbursement_target_category_id] += applicableAmount;
+          }
         }
       }
     });
-    return sum;
+    return appliedReimbursements;
   }, [transactionsToSummarize, categoryMap]);
 
   // Total raw expenses (before reimbursements), signed
