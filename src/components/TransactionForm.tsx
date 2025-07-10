@@ -203,7 +203,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
 
     if (name === 'type') {
-      updates.category_id = 0;
+      updates.category_id = undefined;  // 0 대신 undefined 사용
       if (value === 'Adjust') {
         const addCategory = allCategories.find(cat => cat.name === 'Add');
         if (addCategory) {
@@ -214,7 +214,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         if (transferCategory) {
           updates.category_id = transferCategory.id;
         }
-        // Transfer로 변경 시 toAccountId 초기화
         setToAccountId(undefined);
       }
     }

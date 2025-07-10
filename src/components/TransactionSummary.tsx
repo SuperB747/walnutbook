@@ -102,31 +102,41 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
   // 수입/지출 합계 계산
   const totals = useMemo(() => {
     const result = { income: 0, expense: 0 };
-    const reimbursementsByTarget: Record<number, number> = {};
+    const expensesByCategory: Record<number, number> = {};
 
-    // 먼저 reimbursement 수입을 계산하고 타겟 카테고리별로 매핑
+    // 먼저 지출을 계산
+    transactionsToSummarize.forEach(tx => {
+      if (tx.type === 'Expense' && tx.category_id != null) {
+        expensesByCategory[tx.category_id] = (expensesByCategory[tx.category_id] || 0) + tx.amount;
+      }
+    });
+
+    // 일반 수입과 환급 처리
     transactionsToSummarize.forEach(tx => {
       if (tx.type === 'Income') {
         const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
         if (cat?.is_reimbursement && cat.reimbursement_target_category_id) {
-          // Reimbursement 수입은 타겟 카테고리에 매핑 (총 수입에는 포함하지 않음)
-          reimbursementsByTarget[cat.reimbursement_target_category_id] = 
-            (reimbursementsByTarget[cat.reimbursement_target_category_id] || 0) + tx.amount;
-        } else if (cat) {
-          // 일반 수입은 그대로 추가 (undefined 카테고리는 제외)
+          const targetId = cat.reimbursement_target_category_id;
+          
+          // Add the full reimbursement amount to the target category
+          expensesByCategory[targetId] = (expensesByCategory[targetId] || 0) + tx.amount;
+          
+          // Add to total income only if it results in a positive category balance
+          const newCategoryBalance = expensesByCategory[targetId];
+          if (newCategoryBalance > 0) {
+            result.income += newCategoryBalance;
+          }
+        } else {
+          // 일반 수입
           result.income += tx.amount;
         }
       }
     });
 
-    // 지출 계산 (reimbursement 차감)
-    transactionsToSummarize.forEach(tx => {
-      if (tx.type === 'Expense') {
-        const reimbursement = tx.category_id ? reimbursementsByTarget[tx.category_id] || 0 : 0;
-        // 지출(음수)에서 reimbursement(양수)를 더함 (빚을 갚음)
-        result.expense += tx.amount + reimbursement;
-      }
-    });
+    // 지출 계산 (음수 잔액만 포함)
+    result.expense = Object.values(expensesByCategory)
+      .filter(amount => amount < 0)
+      .reduce((sum, amount) => sum + amount, 0);
 
     return result;
   }, [transactionsToSummarize, categoryMap]);
@@ -170,40 +180,33 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
   // 카테고리별 지출 계산 (리임버스먼트 적용)
   const categoryExpenses = useMemo(() => {
     const expensesByCategory: Record<number, number> = {};
-    const reimbursementsByTarget: Record<number, number> = {};
 
-    // reimbursement 수입을 타겟 카테고리별로 매핑
+    // 먼저 지출을 계산
+    transactionsToSummarize.forEach(tx => {
+      if (tx.type === 'Expense') {
+        const id = tx.category_id ?? -1;
+        expensesByCategory[id] = (expensesByCategory[id] || 0) + tx.amount;
+      }
+    });
+
+    // 환급 처리 - 전체 금액을 카테고리에 적용
     transactionsToSummarize.forEach(tx => {
       if (tx.type === 'Income') {
         const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
         if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
-          reimbursementsByTarget[cat.reimbursement_target_category_id] = 
-            (reimbursementsByTarget[cat.reimbursement_target_category_id] || 0) + tx.amount;
-        }
-      }
-    });
-
-    // 지출 계산 (reimbursement 차감)
-    transactionsToSummarize.forEach(tx => {
-      if (tx.type === 'Expense') {
-        const id = tx.category_id ?? -1; // -1은 Undefined
-        const reimbursement = reimbursementsByTarget[id] || 0;
-        // 지출(음수)에 reimbursement(양수)를 더해서 빚을 줄임
-        // 예: -100 + 50 = -50 (빚이 50 줄어듦)
-        const netExpense = tx.amount + reimbursement;
-        if (netExpense !== 0) {
-          expensesByCategory[id] = (expensesByCategory[id] || 0) + netExpense;
+          const targetId = cat.reimbursement_target_category_id;
+          expensesByCategory[targetId] = (expensesByCategory[targetId] || 0) + tx.amount;
         }
       }
     });
 
     // 0이 아닌 카테고리만 필터링하고 정렬 (절대값이 큰 순)
     const filteredAndSorted = Object.entries(expensesByCategory)
-      .filter(([, amount]) => amount < 0)
+      .filter(([, amount]) => amount !== 0)
       .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a));
 
     return {
-      labels: filteredAndSorted.map(([id]) => Number(id)), // id 배열
+      labels: filteredAndSorted.map(([id]) => Number(id)),
       data: filteredAndSorted.map(([, v]) => v)
     };
   }, [transactionsToSummarize, categoryMap]);

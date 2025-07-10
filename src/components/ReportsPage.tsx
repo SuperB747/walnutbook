@@ -176,29 +176,43 @@ const ReportsPage: React.FC = () => {
       if (tx.type === 'Expense') {
         const id = tx.category_id ?? -1;
         expensesByCategory[id] = (expensesByCategory[id] || 0) + tx.amount;
+      } else if (tx.type === 'Income') {
+        // Add all non-reimbursement income first
+        const cat = categoryMap.get(tx.category_id ?? -1);
+        if (!cat?.is_reimbursement) {
+          income += tx.amount;
+        }
       }
     });
 
-    // Apply reimbursements directly to categories (same as monthlyCategoryRaw)
+    // Apply reimbursements and handle excess amounts
     txns.forEach(tx => {
       if (tx.type === 'Income' && tx.category_id != null) {
         const cat = categoryMap.get(tx.category_id);
         if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
           const targetId = cat.reimbursement_target_category_id;
           const targetExpense = expensesByCategory[targetId] || 0;
-          if (targetExpense < 0) { // Only if there are expenses to reimburse
-            // Calculate how much of the reimbursement can be applied
-            const applicableAmount = Math.min(tx.amount, Math.abs(targetExpense));
-            expensesByCategory[targetId] += applicableAmount;
+          
+          // Add the full reimbursement amount to the target category
+          expensesByCategory[targetId] = (expensesByCategory[targetId] || 0) + tx.amount;
+          
+          // If there was no expense to reimburse, this will show as positive in the category
+          // If there was an expense, it will reduce the negative amount and potentially go positive
+          
+          // Add to total income only if it results in a positive category balance
+          const newCategoryBalance = expensesByCategory[targetId];
+          if (newCategoryBalance > 0) {
+            income += newCategoryBalance;
           }
-        } else {
-          income += tx.amount; // Non-reimbursement income
         }
       }
     });
 
     // Calculate total net expenses (after reimbursements applied)
-    const expense = Object.values(expensesByCategory).reduce((sum, amount) => sum + amount, 0);
+    // Only include negative category balances in total expenses
+    const expense = Object.values(expensesByCategory)
+      .filter(amount => amount < 0)
+      .reduce((sum, amount) => sum + amount, 0);
 
     return { income, expense };
   }
