@@ -169,27 +169,26 @@ const ReportsPage: React.FC = () => {
 
     let income = 0;
     
-    // First calculate raw expenses by category
+    // First calculate raw expenses by category (including undefined category as -1)
     const expensesByCategory: Record<number, number> = {};
     txns.forEach(tx => {
-      if (tx.type === 'Expense' && tx.category_id != null) {
-        expensesByCategory[tx.category_id] = (expensesByCategory[tx.category_id] || 0) + tx.amount;
+      if (tx.type === 'Expense') {
+        const id = tx.category_id ?? -1;
+        expensesByCategory[id] = (expensesByCategory[id] || 0) + tx.amount;
       }
     });
 
-    // Calculate non-reimbursement income and apply reimbursements where possible
-    let appliedReimbursements = 0;
+    // Apply reimbursements directly to categories (same as monthlyCategoryRaw)
     txns.forEach(tx => {
       if (tx.type === 'Income' && tx.category_id != null) {
         const cat = categoryMap.get(tx.category_id);
         if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
-          const targetExpense = expensesByCategory[cat.reimbursement_target_category_id] || 0;
+          const targetId = cat.reimbursement_target_category_id;
+          const targetExpense = expensesByCategory[targetId] || 0;
           if (targetExpense < 0) { // Only if there are expenses to reimburse
             // Calculate how much of the reimbursement can be applied
             const applicableAmount = Math.min(tx.amount, Math.abs(targetExpense));
-            appliedReimbursements += applicableAmount;
-            // Update the remaining expense for this category
-            expensesByCategory[cat.reimbursement_target_category_id] += applicableAmount;
+            expensesByCategory[targetId] += applicableAmount;
           }
         } else {
           income += tx.amount; // Non-reimbursement income
@@ -197,11 +196,8 @@ const ReportsPage: React.FC = () => {
       }
     });
 
-    // Calculate total raw expenses
-    const rawExpenses = Object.values(expensesByCategory).reduce((sum, amount) => sum + amount, 0);
-
-    // Net expense is raw expenses plus applied reimbursements
-    const expense = rawExpenses + appliedReimbursements;
+    // Calculate total net expenses (after reimbursements applied)
+    const expense = Object.values(expensesByCategory).reduce((sum, amount) => sum + amount, 0);
 
     return { income, expense };
   }
@@ -245,9 +241,9 @@ const ReportsPage: React.FC = () => {
       .filter(([, amount]) => amount !== 0)
       .map(([id, amount]) => ({ 
         id: Number(id), 
-        // If net amount is positive (reimbursement > expense), make it negative for total calculation
-        // If net amount is negative (expense > reimbursement), keep it positive for display
-        amount: amount > 0 ? -amount : Math.abs(amount)
+        // Keep the signed amount for consistency with Summary Report
+        // This will make the total match the Summary Report's expense calculation
+        amount: amount
       }))
       .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
   }, [monthlyTransactions, categories]);
@@ -348,18 +344,24 @@ const ReportsPage: React.FC = () => {
       .map(({ id, name, over }) => ({ id, name, over }));
   }, [monthlyCategoryRaw, budgets, categories]);
 
-  // Yearly data
+  // Yearly data - calculate monthly summaries using the same logic as summarizeTxns
   const monthlyAggregates = useMemo(() => {
     const arr = Array.from({ length: 12 }, () => ({ income: 0, expense: 0 }));
-    allTransactions.forEach(tx => {
-      const [txYear, txMonth] = tx.date.split('-').map(Number);
-      if (txYear === Number(year)) {
-        if (tx.type === 'Income') arr[txMonth - 1].income += tx.amount;
-        if (tx.type === 'Expense') arr[txMonth - 1].expense += tx.amount;
-      }
+    
+    // Group transactions by month
+    const monthlyTransactions = Array.from({ length: 12 }, (_, idx) => {
+      const monthKey = `${year}-${String(idx + 1).padStart(2, '0')}`;
+      return allTransactions.filter(tx => tx.date.startsWith(monthKey));
     });
+    
+    // Calculate summary for each month using summarizeTxns
+    monthlyTransactions.forEach((monthTxns, idx) => {
+      const summary = summarizeTxns(monthTxns);
+      arr[idx] = summary;
+    });
+    
     return arr;
-  }, [allTransactions, year]);
+  }, [allTransactions, year, categories]);
 
   const yearlyBarData = {
     labels: monthNames,
@@ -384,30 +386,55 @@ const ReportsPage: React.FC = () => {
   );
   const yearlySummary = useMemo(() => summarizeTxns(yearlyTransactions), [yearlyTransactions, categories]);
   const yearlyCategoryRaw = useMemo(() => {
-    const reimbursements: Record<number, number> = {};
-    const expenses: Record<number, number> = {};
-    yearlyTransactions.forEach(tx => {
-      if (tx.type === 'Income') {
-        const cat = categories.find(c => c.id === tx.category_id);
-        if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
-          reimbursements[cat.reimbursement_target_category_id] =
-            (reimbursements[cat.reimbursement_target_category_id] || 0) + tx.amount;
-        }
-      }
-    });
+    // Create category map for efficient lookups
+    const categoryMap = new Map<number, Category>();
+    categories.forEach(c => categoryMap.set(c.id, c));
+
+    // First calculate raw expenses by category (including undefined category as -1)
+    const expensesByCategory: Record<number, number> = {};
     yearlyTransactions.forEach(tx => {
       if (tx.type === 'Expense') {
         const id = tx.category_id ?? -1;
-        const net = tx.amount + (reimbursements[id] || 0);
-        if (net < 0) expenses[id] = (expenses[id] || 0) + net;
+        expensesByCategory[id] = (expensesByCategory[id] || 0) + tx.amount;
       }
     });
-    return Object.entries(expenses)
-      .map(([id, amt]) => ({ id: Number(id), amount: Math.abs(amt) }))
-      .sort((a, b) => b.amount - a.amount);
+
+    // Apply reimbursements directly to categories (same as monthlyCategoryRaw)
+    yearlyTransactions.forEach(tx => {
+      if (tx.type === 'Income' && tx.category_id != null) {
+        const cat = categoryMap.get(tx.category_id);
+        if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
+          const targetId = cat.reimbursement_target_category_id;
+          const targetExpense = expensesByCategory[targetId] || 0;
+          if (targetExpense < 0) { // Only if there are expenses to reimburse
+            // Calculate how much of the reimbursement can be applied
+            const applicableAmount = Math.min(tx.amount, Math.abs(targetExpense));
+            expensesByCategory[targetId] += applicableAmount;
+          }
+        }
+      }
+    });
+
+    // Convert to array and sort by absolute amount descending
+    // Only include categories that have non-zero net expenses
+    return Object.entries(expensesByCategory)
+      .filter(([, amount]) => amount !== 0)
+      .map(([id, amount]) => ({ 
+        id: Number(id), 
+        // Keep the signed amount for consistency with Summary Report
+        amount: amount
+      }))
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
   }, [yearlyTransactions, categories]);
-  const yearlyCategoryLabels = yearlyCategoryRaw.map(i => i.id === -1 ? 'Undefined' : categories.find(c => c.id === i.id)?.name || 'Undefined');
-  const yearlyCategoryData = yearlyCategoryRaw.map(i => i.amount);
+  // Filter out undefined (id === -1) for Category Breakdown
+  const filteredYearlyCategoryRaw = useMemo(
+    () => yearlyCategoryRaw.filter(item => item.id !== -1),
+    [yearlyCategoryRaw]
+  );
+  const yearlyCategoryLabels = filteredYearlyCategoryRaw.map(
+    item => categories.find(c => c.id === item.id)?.name || ''
+  );
+  const yearlyCategoryData = filteredYearlyCategoryRaw.map(item => item.amount);
   const yearlyCategoryColors = yearlyCategoryRaw.map(i => categoryIdToColor.get(i.id) || '#E0E0E0');
   const yearlyDoughnutRef = useRef<any>(null);
   // Prepare yearly doughnut data and legend
