@@ -83,6 +83,7 @@ const ReportsPage: React.FC = () => {
   // Tooltip state for Category Details
   const [tooltipAnchorEl, setTooltipAnchorEl] = useState<HTMLElement | null>(null);
   const [tooltipTxns, setTooltipTxns] = useState<Transaction[]>([]);
+  const [tooltipPlacement, setTooltipPlacement] = useState<'top-start' | 'top' | 'top-end' | 'right-start' | 'right' | 'right-end' | 'bottom-start' | 'bottom' | 'bottom-end' | 'left-start' | 'left' | 'left-end'>('right-start');
   // Helper to display notes same as TransactionList
   const getDisplayNotes = (notes?: string): string | null => {
     if (!notes) return null;
@@ -285,12 +286,86 @@ const ReportsPage: React.FC = () => {
   };
   // Category Details tooltip handlers (hover)
   const handleCategoryRowEnter = (event: React.MouseEvent<HTMLElement>, txns: Transaction[]) => {
+    const placement = getTooltipPlacement(event);
+    setTooltipPlacement(placement);
     setTooltipAnchorEl(event.currentTarget);
     setTooltipTxns(txns);
   };
   const handleTooltipClose = () => {
     setTooltipAnchorEl(null);
     setTooltipTxns([]);
+  };
+
+  // 툴팁 위치를 자동으로 계산하는 함수 - 8방향 모두 고려
+  const getTooltipPlacement = (event: React.MouseEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // 툴팁의 예상 크기
+    const tooltipWidth = 320;
+    const tooltipHeight = 250;
+    
+    // 각 방향의 사용 가능한 공간 계산
+    const spaces = {
+      'top-start': rect.top >= tooltipHeight && rect.left >= tooltipWidth * 0.5,
+      'top': rect.top >= tooltipHeight,
+      'top-end': rect.top >= tooltipHeight && (viewportWidth - rect.right) >= tooltipWidth * 0.5,
+      'right-start': (viewportWidth - rect.right) >= tooltipWidth && rect.top >= tooltipHeight * 0.5,
+      'right': (viewportWidth - rect.right) >= tooltipWidth,
+      'right-end': (viewportWidth - rect.right) >= tooltipWidth && (viewportHeight - rect.bottom) >= tooltipHeight * 0.5,
+      'bottom-start': (viewportHeight - rect.bottom) >= tooltipHeight && rect.left >= tooltipWidth * 0.5,
+      'bottom': (viewportHeight - rect.bottom) >= tooltipHeight,
+      'bottom-end': (viewportHeight - rect.bottom) >= tooltipHeight && (viewportWidth - rect.right) >= tooltipWidth * 0.5,
+      'left-start': rect.left >= tooltipWidth && rect.top >= tooltipHeight * 0.5,
+      'left': rect.left >= tooltipWidth,
+      'left-end': rect.left >= tooltipWidth && (viewportHeight - rect.bottom) >= tooltipHeight * 0.5
+    };
+    
+    // 각 방향의 공간 점수 계산 (더 많은 공간일수록 높은 점수)
+    const scores = {
+      'top-start': rect.top + rect.left,
+      'top': rect.top * 2,
+      'top-end': rect.top + (viewportWidth - rect.right),
+      'right-start': (viewportWidth - rect.right) + rect.top,
+      'right': (viewportWidth - rect.right) * 2,
+      'right-end': (viewportWidth - rect.right) + (viewportHeight - rect.bottom),
+      'bottom-start': (viewportHeight - rect.bottom) + rect.left,
+      'bottom': (viewportHeight - rect.bottom) * 2,
+      'bottom-end': (viewportHeight - rect.bottom) + (viewportWidth - rect.right),
+      'left-start': rect.left + rect.top,
+      'left': rect.left * 2,
+      'left-end': rect.left + (viewportHeight - rect.bottom)
+    };
+    
+    // 사용 가능한 방향 중 가장 높은 점수를 가진 방향 선택
+    let bestPlacement = 'right-start'; // 기본값
+    let bestScore = 0;
+    
+    Object.entries(spaces).forEach(([placement, available]) => {
+      if (available && scores[placement as keyof typeof scores] > bestScore) {
+        bestScore = scores[placement as keyof typeof scores];
+        bestPlacement = placement;
+      }
+    });
+    
+    // 사용 가능한 방향이 없으면 가장 많은 공간이 있는 방향 선택
+    if (bestScore === 0) {
+      const fallbackScores = {
+        'right': viewportWidth - rect.right,
+        'left': rect.left,
+        'bottom': viewportHeight - rect.bottom,
+        'top': rect.top
+      };
+      
+      const fallbackPlacement = Object.entries(fallbackScores).reduce((a, b) => 
+        a[1] > b[1] ? a : b
+      )[0];
+      
+      bestPlacement = fallbackPlacement;
+    }
+    
+    return bestPlacement as 'top-start' | 'top' | 'top-end' | 'right-start' | 'right' | 'right-end' | 'bottom-start' | 'bottom' | 'bottom-end' | 'left-start' | 'left' | 'left-end';
   };
   const doughnutOptions = {
     responsive: true,
@@ -765,7 +840,7 @@ const ReportsPage: React.FC = () => {
                         <TableCell sx={{ fontWeight: 'bold' }}>Category</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>Spent</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>Budget</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Diff</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Difference</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -782,7 +857,7 @@ const ReportsPage: React.FC = () => {
                           const label = id === -1 ? 'Undefined' : categories.find(c => c.id === id)?.name || 'Undefined';
                           const spent = monthlyCategoryRaw.find(i => i.id === id)?.amount || 0;
                           const budgetAmount = budgets.find(b => b.category_id === id)?.amount || 0;
-                          const diff = budgetAmount - spent;
+                          const diff = budgetAmount + spent; // Expense는 음수이므로 더하기
                           totalSpent += spent;
                           totalBudget += budgetAmount;
                           // Prepare detail list for tooltip: date, payee, amount
@@ -817,22 +892,28 @@ const ReportsPage: React.FC = () => {
                         <TableCell sx={{ fontWeight: 'bold' }}>Total</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{safeFormatCurrency(monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0))}</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{safeFormatCurrency(budgets.reduce((sum, b) => sum + b.amount, 0))}</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold', color: (budgets.reduce((sum, b) => sum + b.amount, 0) - monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0)) < 0 ? theme.palette.error.main : theme.palette.success.main }}>
-                          {safeFormatCurrency(budgets.reduce((sum, b) => sum + b.amount, 0) - monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0))}
+                        <TableCell align="right" sx={{ fontWeight: 'bold', color: (budgets.reduce((sum, b) => sum + b.amount, 0) + monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0)) < 0 ? theme.palette.error.main : theme.palette.success.main }}>
+                          {safeFormatCurrency(budgets.reduce((sum, b) => sum + b.amount, 0) + monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0))}
                         </TableCell>
                       </TableRow>
                     </TableFooter>
                   </Table>
                 </TableContainer>
-                <Popper open={Boolean(tooltipAnchorEl)} anchorEl={tooltipAnchorEl} placement="right-start">
-                   <Paper elevation={3} sx={{ p: 2, bgcolor: theme => theme.palette.mode === 'light' ? theme.palette.grey[50] : theme.palette.grey[800] }}>
-                      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>Transaction Details</Typography>
-                      <Table size="small" sx={{ minWidth: 200, tableLayout: 'auto' }}>
+                <Popper 
+                  open={Boolean(tooltipAnchorEl)} 
+                  anchorEl={tooltipAnchorEl} 
+                  placement={tooltipPlacement}
+                  modifiers={[{ name: 'flip', enabled: true }, { name: 'preventOverflow', enabled: true, options: { boundary: 'viewport' } }]}
+                  sx={{ zIndex: 3000 }}
+                >
+                   <Paper elevation={3} sx={{ p: 1.2, bgcolor: theme => theme.palette.mode === 'light' ? theme.palette.grey[50] : theme.palette.grey[800] }}>
+                      <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 'bold', fontSize: '0.8rem' }}>Transaction Details</Typography>
+                      <Table size="small" sx={{ minWidth: 140, tableLayout: 'auto' }}>
                         <TableHead>
                           <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.68rem', py: 0.3, px: 0.7 }}>Date</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.68rem', py: 0.3, px: 0.7 }}>Description</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.68rem', py: 0.3, px: 0.7 }}>Amount</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -840,13 +921,13 @@ const ReportsPage: React.FC = () => {
                             const displayNote = getDisplayNotes(tx.notes);
                             return (
                               <TableRow key={idx}>
-                                <TableCell>{format(new Date(tx.date), 'yyyy-MM-dd')}</TableCell>
-                                <TableCell>
-                                  <Typography noWrap sx={{ fontSize: '0.9rem' }}>
+                                <TableCell sx={{ fontSize: '0.68rem', py: 0.3, px: 0.7 }}>{format(new Date(tx.date), 'yyyy-MM-dd')}</TableCell>
+                                <TableCell sx={{ py: 0.3, px: 0.7 }}>
+                                  <Typography noWrap sx={{ fontSize: '0.68rem' }}>
                                     {tx.payee}
                                     {displayNote && (
                                       <Typography component="span" sx={(theme) => ({
-                                        fontSize: '0.9rem',
+                                        fontSize: '0.68rem',
                                         color: theme.palette.mode === 'light' ? '#0288d1' : '#FFA500',
                                         fontWeight: 500,
                                       })}>
@@ -855,7 +936,7 @@ const ReportsPage: React.FC = () => {
                                     )}
                                   </Typography>
                                 </TableCell>
-                                <TableCell align="right" sx={{ color: tx.type === 'Expense' ? theme.palette.error.main : theme.palette.success.main }}>
+                                <TableCell align="right" sx={{ color: tx.type === 'Expense' ? theme.palette.error.main : theme.palette.success.main, fontSize: '0.68rem', py: 0.3, px: 0.7 }}>
                                   {safeFormatCurrency(tx.amount)}
                                 </TableCell>
                               </TableRow>
@@ -1033,20 +1114,20 @@ const ReportsPage: React.FC = () => {
                     size="small"
                     sx={{
                       width: '100%',
-                      tableLayout: 'auto',
+                      tableLayout: 'fixed',
                       '& tbody tr:hover': { backgroundColor: theme.palette.action.hover },
                       '& .MuiTableCell-root': { backgroundColor: 'transparent' }
                     }}
                   >
                     <TableHead>
                       <TableRow sx={{ backgroundColor: theme.palette.action.hover }}>
-                        <TableCell sx={{ fontWeight: 'bold', minWidth: 120 }}>Category</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', width: '15%' }}>Category</TableCell>
                         {monthNames.map((monthName, index) => (
-                          <TableCell key={index} align="right" sx={{ fontWeight: 'bold', minWidth: 100 }}>
+                          <TableCell key={index} align="right" sx={{ fontWeight: 'bold', width: '6.5%', fontSize: '0.75rem', px: 0.5 }}>
                             {monthName}
                           </TableCell>
                         ))}
-                        <TableCell align="right" sx={{ fontWeight: 'bold', minWidth: 100 }}>Total</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold', width: '8%' }}>Total</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -1056,7 +1137,7 @@ const ReportsPage: React.FC = () => {
                           hover
                           sx={{ cursor: 'pointer' }}
                         >
-                          <TableCell sx={{ fontWeight: 'medium' }}>
+                          <TableCell sx={{ fontWeight: 'medium', width: '15%', fontSize: '0.8rem' }}>
                             {row.category.name}
                           </TableCell>
                           {row.monthlyAmounts.map((amount, monthIndex) => {
@@ -1075,7 +1156,10 @@ const ReportsPage: React.FC = () => {
                                 sx={{ 
                                   color: amount < 0 ? theme.palette.error.main : theme.palette.text.primary,
                                   fontWeight: amount !== 0 ? 'medium' : 'normal',
-                                  cursor: amount !== 0 ? 'pointer' : 'default'
+                                  cursor: amount !== 0 ? 'pointer' : 'default',
+                                  width: '6.5%',
+                                  fontSize: '0.7rem',
+                                  px: 0.5
                                 }}
                                 onMouseEnter={(e) => {
                                   if (amount !== 0) {
@@ -1090,7 +1174,9 @@ const ReportsPage: React.FC = () => {
                           })}
                           <TableCell align="right" sx={{ 
                             fontWeight: 'bold',
-                            color: row.total < 0 ? theme.palette.error.main : theme.palette.text.primary
+                            color: row.total < 0 ? theme.palette.error.main : theme.palette.text.primary,
+                            width: '8%',
+                            fontSize: '0.8rem'
                           }}>
                             {row.total !== 0 ? safeFormatCurrency(row.total) : '-'}
                           </TableCell>
@@ -1099,7 +1185,7 @@ const ReportsPage: React.FC = () => {
                     </TableBody>
                     <TableFooter>
                       <TableRow sx={{ backgroundColor: theme.palette.action.selected }}>
-                        <TableCell sx={{ fontWeight: 'bold' }}>Total</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', width: '15%', fontSize: '0.8rem' }}>Total</TableCell>
                         {Array.from({ length: 12 }, (_, monthIndex) => {
                           const monthTotal = yearlyCategoryMonthlyData.reduce((sum, row) => 
                             sum + row.monthlyAmounts[monthIndex], 0
@@ -1107,7 +1193,10 @@ const ReportsPage: React.FC = () => {
                           return (
                             <TableCell key={monthIndex} align="right" sx={{ 
                               fontWeight: 'bold',
-                              color: monthTotal < 0 ? theme.palette.error.main : theme.palette.text.primary
+                              color: monthTotal < 0 ? theme.palette.error.main : theme.palette.text.primary,
+                              width: '6.5%',
+                              fontSize: '0.7rem',
+                              px: 0.5
                             }}>
                               {monthTotal !== 0 ? safeFormatCurrency(monthTotal) : '-'}
                             </TableCell>
@@ -1115,7 +1204,9 @@ const ReportsPage: React.FC = () => {
                         })}
                         <TableCell align="right" sx={{ 
                           fontWeight: 'bold',
-                          color: yearlyBreakdownTotal < 0 ? theme.palette.error.main : theme.palette.text.primary
+                          color: yearlyBreakdownTotal < 0 ? theme.palette.error.main : theme.palette.text.primary,
+                          width: '8%',
+                          fontSize: '0.8rem'
                         }}>
                           {safeFormatCurrency(yearlyBreakdownTotal)}
                         </TableCell>
@@ -1123,15 +1214,21 @@ const ReportsPage: React.FC = () => {
                     </TableFooter>
                   </Table>
                 </TableContainer>
-                <Popper open={Boolean(tooltipAnchorEl)} anchorEl={tooltipAnchorEl} placement="right-start">
-                   <Paper elevation={3} sx={{ p: 2, bgcolor: theme => theme.palette.mode === 'light' ? theme.palette.grey[50] : theme.palette.grey[800] }}>
-                      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>Transaction Details</Typography>
-                      <Table size="small" sx={{ minWidth: 200, tableLayout: 'auto' }}>
+                <Popper 
+                  open={Boolean(tooltipAnchorEl)} 
+                  anchorEl={tooltipAnchorEl} 
+                  placement={tooltipPlacement}
+                  modifiers={[{ name: 'flip', enabled: true }, { name: 'preventOverflow', enabled: true, options: { boundary: 'viewport' } }]}
+                  sx={{ zIndex: 3000 }}
+                >
+                   <Paper elevation={3} sx={{ p: 1.2, bgcolor: theme => theme.palette.mode === 'light' ? theme.palette.grey[50] : theme.palette.grey[800] }}>
+                      <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 'bold', fontSize: '0.8rem' }}>Transaction Details</Typography>
+                      <Table size="small" sx={{ minWidth: 140, tableLayout: 'auto' }}>
                         <TableHead>
                           <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.68rem', py: 0.3, px: 0.7 }}>Date</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.68rem', py: 0.3, px: 0.7 }}>Description</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.68rem', py: 0.3, px: 0.7 }}>Amount</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -1139,13 +1236,13 @@ const ReportsPage: React.FC = () => {
                             const displayNote = getDisplayNotes(tx.notes);
                             return (
                               <TableRow key={idx}>
-                                <TableCell>{format(new Date(tx.date), 'yyyy-MM-dd')}</TableCell>
-                                <TableCell>
-                                  <Typography noWrap sx={{ fontSize: '0.9rem' }}>
+                                <TableCell sx={{ fontSize: '0.68rem', py: 0.3, px: 0.7 }}>{format(new Date(tx.date), 'yyyy-MM-dd')}</TableCell>
+                                <TableCell sx={{ py: 0.3, px: 0.7 }}>
+                                  <Typography noWrap sx={{ fontSize: '0.68rem' }}>
                                     {tx.payee}
                                     {displayNote && (
                                       <Typography component="span" sx={(theme) => ({
-                                        fontSize: '0.9rem',
+                                        fontSize: '0.68rem',
                                         color: theme.palette.mode === 'light' ? '#0288d1' : '#FFA500',
                                         fontWeight: 500,
                                       })}>
@@ -1154,7 +1251,7 @@ const ReportsPage: React.FC = () => {
                                     )}
                                   </Typography>
                                 </TableCell>
-                                <TableCell align="right" sx={{ color: tx.type === 'Expense' ? theme.palette.error.main : theme.palette.success.main }}>
+                                <TableCell align="right" sx={{ color: tx.type === 'Expense' ? theme.palette.error.main : theme.palette.success.main, fontSize: '0.68rem', py: 0.3, px: 0.7 }}>
                                   {safeFormatCurrency(tx.amount)}
                                 </TableCell>
                               </TableRow>

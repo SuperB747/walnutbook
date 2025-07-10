@@ -274,7 +274,31 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     try {
       await onSave(finalTransaction);
-      onClose();
+      
+      // If editing existing transaction, close the dialog
+      if (transaction) {
+        onClose();
+      } else {
+        // If creating new transaction, preserve values and reset form for next entry
+        setPreservedValues({
+          date: formData.date,
+          account_id: formData.account_id,
+          type: formData.type,
+          category_id: formData.category_id,
+          payee: formData.payee,
+        });
+        
+        // Reset form for next transaction
+        setFormData({
+          ...preservedValues,
+          amount: undefined,
+          notes: '',
+          category_id: undefined,
+        });
+        setAmountInputValue('');
+        setToAccountId(undefined);
+        setErrors({});
+      }
     } catch (error) {
       setSnackbar({ open: true, message: `Failed to ${transaction ? 'update' : 'create'} transaction: ${error}`, severity: 'error' });
     }
