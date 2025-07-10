@@ -498,6 +498,63 @@ const ReportsPage: React.FC = () => {
     [yearlyCategoryRaw]
   );
 
+  // Yearly category monthly breakdown table data
+  const yearlyCategoryMonthlyData = useMemo(() => {
+    // Create category map for efficient lookups
+    const categoryMap = new Map<number, Category>();
+    categories.forEach(c => categoryMap.set(c.id, c));
+
+    // Get all categories that have expenses in the year, sorted alphabetically
+    const categoryIds = new Set<number>();
+    yearlyTransactions.forEach(tx => {
+      if (tx.type === 'Expense' && tx.category_id != null) {
+        categoryIds.add(tx.category_id);
+      }
+    });
+
+    const sortedCategories = Array.from(categoryIds)
+      .map(id => categories.find(c => c.id === id))
+      .filter(cat => cat != null)
+      .sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
+
+    // Calculate monthly data for each category
+    const monthlyData = sortedCategories.map(category => {
+      const monthlyAmounts = Array.from({ length: 12 }, (_, monthIndex) => {
+        const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+        const monthTransactions = yearlyTransactions.filter(tx => tx.date.startsWith(monthKey));
+        
+        // Calculate raw expenses for this category in this month
+        const rawExpenses = monthTransactions
+          .filter(tx => tx.type === 'Expense' && tx.category_id === category?.id)
+          .reduce((sum, tx) => sum + tx.amount, 0);
+
+        // Calculate reimbursements for this category in this month
+        const reimbursements = monthTransactions
+          .filter(tx => tx.type === 'Income' && tx.category_id != null)
+          .reduce((sum, tx) => {
+            const cat = categoryMap.get(tx.category_id!);
+            if (cat?.is_reimbursement && cat.reimbursement_target_category_id === category?.id) {
+              return sum + tx.amount;
+            }
+            return sum;
+          }, 0);
+
+        // Apply reimbursements to expenses
+        return rawExpenses + reimbursements;
+      });
+
+      const total = monthlyAmounts.reduce((sum, amount) => sum + amount, 0);
+
+      return {
+        category: category!,
+        monthlyAmounts,
+        total
+      };
+    });
+
+    return monthlyData;
+  }, [yearlyTransactions, categories, year]);
+
   return (
     <Box p={3}>
       <Typography variant="h4" gutterBottom>Summary Report</Typography>
@@ -560,16 +617,16 @@ const ReportsPage: React.FC = () => {
         <Grid container spacing={2} alignItems="stretch">
             <Grid item xs={12}>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '0 0 20%', display: 'flex', flexDirection: 'column' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 25%', display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h6" gutterBottom>Income vs Expense</Typography>
-                  <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4, mb: 2 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem' }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 2 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
                       Income: {safeFormatCurrency(monthlySummary.income)}
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.error.main, fontSize: '1rem' }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
                       Expense: {safeFormatCurrency(monthlySummary.expense)}
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (monthlySummary.income + monthlySummary.expense) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem' }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (monthlySummary.income + monthlySummary.expense) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
                       Net: {safeFormatCurrency(monthlySummary.income + monthlySummary.expense)}
                     </Typography>
                   </Box>
@@ -597,7 +654,7 @@ const ReportsPage: React.FC = () => {
                     />
                   </Box>
                 </Paper>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '0 0 40%' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 37.5%' }}>
                   <Typography variant="h6" gutterBottom>Category Breakdown</Typography>
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'center' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mr: 2 }}>
@@ -635,7 +692,7 @@ const ReportsPage: React.FC = () => {
                     </Box>
                   </Box>
                 </Paper>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '0 0 40%', display: 'flex', flexDirection: 'column' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 37.5%', display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h6" gutterBottom>Yearly Summary</Typography>
                   <Box sx={{ flex: 1, minHeight: 0 }}>
                     <Bar
@@ -830,16 +887,16 @@ const ReportsPage: React.FC = () => {
             <Grid item xs={12}>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
                 {/* Income vs Expense */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '0 0 20%', display: 'flex', flexDirection: 'column' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 25%', display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h6" gutterBottom>Income vs Expense</Typography>
-                  <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4, mb: 2 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem' }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 2 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
                       Income: {safeFormatCurrency(yearlySummary.income)}
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.error.main, fontSize: '1rem' }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
                       Expense: {safeFormatCurrency(yearlySummary.expense)}
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (yearlySummary.income + yearlySummary.expense) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem' }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (yearlySummary.income + yearlySummary.expense) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
                       Net: {safeFormatCurrency(yearlySummary.income + yearlySummary.expense)}
                     </Typography>
                   </Box>
@@ -857,7 +914,7 @@ const ReportsPage: React.FC = () => {
                   </Box>
                 </Paper>
                 {/* Category Breakdown */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '0 0 40%' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 37.5%' }}>
                   <Typography variant="h6" gutterBottom>Category Breakdown</Typography>
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'center' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mr: 2 }}>
@@ -896,7 +953,7 @@ const ReportsPage: React.FC = () => {
                   </Box>
                 </Paper>
                 {/* Monthly Trends */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '0 0 40%', display: 'flex', flexDirection: 'column' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 37.5%', display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h6" gutterBottom>Monthly Trends</Typography>
                   <Box sx={{ flex: 1 }}>
                     <Bar
@@ -918,6 +975,148 @@ const ReportsPage: React.FC = () => {
                   </Box>
                 </Paper>
               </Box>
+            </Grid>
+            {/* Yearly Category Monthly Breakdown Table */}
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>Category Monthly Breakdown</Typography>
+                <TableContainer sx={{ maxHeight: 600, overflow: 'auto' }}>
+                  <Table
+                    size="small"
+                    sx={{
+                      width: '100%',
+                      tableLayout: 'auto',
+                      '& tbody tr:hover': { backgroundColor: theme.palette.action.hover },
+                      '& .MuiTableCell-root': { backgroundColor: 'transparent' }
+                    }}
+                  >
+                    <TableHead>
+                      <TableRow sx={{ backgroundColor: theme.palette.action.hover }}>
+                        <TableCell sx={{ fontWeight: 'bold', minWidth: 120 }}>Category</TableCell>
+                        {monthNames.map((monthName, index) => (
+                          <TableCell key={index} align="right" sx={{ fontWeight: 'bold', minWidth: 100 }}>
+                            {monthName}
+                          </TableCell>
+                        ))}
+                        <TableCell align="right" sx={{ fontWeight: 'bold', minWidth: 100 }}>Total</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {yearlyCategoryMonthlyData.map((row) => (
+                        <TableRow 
+                          key={row.category.id} 
+                          hover
+                          sx={{ cursor: 'pointer' }}
+                        >
+                          <TableCell sx={{ fontWeight: 'medium' }}>
+                            {row.category.name}
+                          </TableCell>
+                          {row.monthlyAmounts.map((amount, monthIndex) => {
+                            const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+                            const monthTransactions = yearlyTransactions.filter(tx => 
+                              tx.date.startsWith(monthKey) && 
+                              (tx.category_id === row.category.id || 
+                               (tx.type === 'Income' && tx.category_id != null && 
+                                categories.find(c => c.id === tx.category_id)?.reimbursement_target_category_id === row.category.id))
+                            );
+                            
+                            return (
+                              <TableCell 
+                                key={monthIndex} 
+                                align="right" 
+                                sx={{ 
+                                  color: amount < 0 ? theme.palette.error.main : theme.palette.text.primary,
+                                  fontWeight: amount !== 0 ? 'medium' : 'normal',
+                                  cursor: amount !== 0 ? 'pointer' : 'default'
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (amount !== 0) {
+                                    handleCategoryRowEnter(e, monthTransactions);
+                                  }
+                                }}
+                                onMouseLeave={handleTooltipClose}
+                              >
+                                {amount !== 0 ? safeFormatCurrency(amount) : '-'}
+                              </TableCell>
+                            );
+                          })}
+                          <TableCell align="right" sx={{ 
+                            fontWeight: 'bold',
+                            color: row.total < 0 ? theme.palette.error.main : theme.palette.text.primary
+                          }}>
+                            {row.total !== 0 ? safeFormatCurrency(row.total) : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow sx={{ backgroundColor: theme.palette.action.selected }}>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Total</TableCell>
+                        {Array.from({ length: 12 }, (_, monthIndex) => {
+                          const monthTotal = yearlyCategoryMonthlyData.reduce((sum, row) => 
+                            sum + row.monthlyAmounts[monthIndex], 0
+                          );
+                          return (
+                            <TableCell key={monthIndex} align="right" sx={{ 
+                              fontWeight: 'bold',
+                              color: monthTotal < 0 ? theme.palette.error.main : theme.palette.text.primary
+                            }}>
+                              {monthTotal !== 0 ? safeFormatCurrency(monthTotal) : '-'}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell align="right" sx={{ 
+                          fontWeight: 'bold',
+                          color: yearlyBreakdownTotal < 0 ? theme.palette.error.main : theme.palette.text.primary
+                        }}>
+                          {safeFormatCurrency(yearlyBreakdownTotal)}
+                        </TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </TableContainer>
+                <Popper open={Boolean(tooltipAnchorEl)} anchorEl={tooltipAnchorEl} placement="right-start">
+                   <Paper elevation={3} sx={{ p: 2, bgcolor: theme => theme.palette.mode === 'light' ? theme.palette.grey[50] : theme.palette.grey[800] }}>
+                      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>Transaction Details</Typography>
+                      <Table size="small" sx={{ minWidth: 200, tableLayout: 'auto' }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {tooltipTxns.map((tx, idx) => {
+                            const displayNote = getDisplayNotes(tx.notes);
+                            return (
+                              <TableRow key={idx}>
+                                <TableCell>{format(new Date(tx.date), 'yyyy-MM-dd')}</TableCell>
+                                <TableCell>
+                                  <Typography noWrap sx={{ fontSize: '0.9rem' }}>
+                                    {tx.payee}
+                                    {displayNote && (
+                                      <Typography component="span" sx={(theme) => ({
+                                        fontSize: '0.9rem',
+                                        color: theme.palette.mode === 'light' ? '#0288d1' : '#FFA500',
+                                        fontWeight: 500,
+                                      })}>
+                                        {' '}[{displayNote}]
+                                      </Typography>
+                                    )}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="right" sx={{ color: tx.type === 'Expense' ? theme.palette.error.main : theme.palette.success.main }}>
+                                  {safeFormatCurrency(tx.amount)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                 </Paper>
+                 </Popper>
+              </Paper>
             </Grid>
           </Grid>
         </>
