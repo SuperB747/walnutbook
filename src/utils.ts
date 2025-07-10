@@ -44,7 +44,8 @@ export const fixAmountSign = (amount: number, type: string, categoryName?: strin
     case 'Transfer':
       return amount; // Keep original sign for transfers
     case 'Adjust':
-      return categoryName === 'Add' ? absAmount : -absAmount;
+      // Adjust는 Add는 양수, Subtract는 음수로 일관되게 처리
+      return categoryName === 'Subtract' ? -absAmount : absAmount;
     default:
       return amount;
   }

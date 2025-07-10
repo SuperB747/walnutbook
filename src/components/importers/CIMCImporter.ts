@@ -1,100 +1,94 @@
 import { BaseImporter, ColumnMapping } from './BaseImporter';
-import { Transaction } from '../../db';
+import { Transaction, TransactionType } from '../../db';
 
 export class CIMCImporter extends BaseImporter {
   name = 'CIMC';
-  description = 'CSV format';
+  description = 'CIMC Credit Card CSV format';
   supportedFormats = ['CIMC Credit Card CSV'];
 
   detectFormat(headers: string[]): boolean {
-    // CIMC format doesn't have headers, so we detect by content pattern
-    // First line should be a date in YYYY-MM-DD format
-    if (headers.length >= 3) {
-      const firstField = headers[0];
-      const thirdField = headers[2];
-      // Check if first field is a date and third field is numeric
-      return /^\d{4}-\d{2}-\d{2}$/.test(firstField) && !isNaN(parseFloat(thirdField));
-    }
-    return false;
+    // CIMC format doesn't have headers, just check if we have enough columns
+    return headers.length >= 4;
   }
 
   mapColumns(headers: string[]): ColumnMapping {
-    // CIMC format: Date,Description,Expense,Income,CardNumber
+    // CIMC format: Date, Payee, Expense, Income, [Ignored]
     return {
       date: 0,
       payee: 1,
-      amount: 2, // Will be determined dynamically
+      amount: 2, // We'll handle both expense and income columns in parseRow
       type: undefined,
       notes: undefined,
     };
   }
 
   parseRow(row: string[], mapping: ColumnMapping, accountType?: string): Partial<Transaction> | null {
-    const dateStr = row[0]?.trim();
-    const description = row[1]?.trim();
-    const expenseStr = row[2]?.trim();
-    const incomeStr = row[3]?.trim();
+    try {
+      // Extract values from the row
+      const dateStr = row[0]?.trim() || '';
+      const payeeStr = row[1]?.trim() || '';
+      const expenseStr = row[2]?.trim() || '';
+      const incomeStr = row[3]?.trim() || '';
 
-    console.log('CIMC parsing row:', { dateStr, description, expenseStr, incomeStr, row, accountType });
+      // Debug log the extracted values
+      console.log('CIMC Raw Row:', row);
+      console.log('CIMC Extracted Values:', { dateStr, payeeStr, expenseStr, incomeStr });
 
-    if (!dateStr || !description) {
-      console.log('CIMC: Missing date or description');
+      // Check for required fields
+      if (!dateStr || !payeeStr) {
+        console.warn('CIMC: Missing date or payee:', { dateStr, payeeStr, expenseStr, incomeStr });
+        return null;
+      }
+
+      // Parse date (supports both YYYY-MM-DD and M/D/YYYY formats)
+      let parsedDate = dateStr;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        // If not YYYY-MM-DD, assume M/D/YYYY and convert
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          const month = parts[0].padStart(2, '0');
+          const day = parts[1].padStart(2, '0');
+          const year = parts[2];
+          parsedDate = `${year}-${month}-${day}`;
+        }
+      }
+
+      console.log('CIMC Parsed Date:', parsedDate);
+
+      // Parse amount and determine transaction type
+      let amount: number | undefined;
+      let type: TransactionType | undefined;
+
+      if (expenseStr) {
+        const parsedAmount = this.parseAmount(expenseStr);
+        amount = this.normalizeAmount(parsedAmount, 'Expense', accountType);
+        type = 'Expense';
+      } else if (incomeStr) {
+        const parsedAmount = this.parseAmount(incomeStr);
+        amount = this.normalizeAmount(parsedAmount, 'Income', accountType);
+        type = 'Income';
+      }
+
+      // If neither expense nor income is present, skip the transaction
+      if (amount === undefined || type === undefined) {
+        console.warn('CIMC: Missing amount:', { dateStr, payeeStr, expenseStr, incomeStr });
+        return null;
+      }
+
+      const transaction: Partial<Transaction> = {
+        date: parsedDate,
+        payee: payeeStr,
+        amount: amount,
+        type: type,
+      };
+
+      console.log('CIMC Final Transaction:', transaction);
+      return transaction;
+
+    } catch (error) {
+      console.error('CIMC: Error parsing row:', error);
       return null;
     }
-
-    // Parse date (YYYY-MM-DD format)
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return null;
-
-    // Determine transaction type and amount
-    let transactionType: 'Income' | 'Expense' = 'Expense';
-    let amount = 0;
-
-    // Check if this is an expense (third column has value)
-    if (expenseStr && expenseStr !== '') {
-      // This is an expense transaction
-      amount = parseFloat(expenseStr.replace(/[^\d.-]/g, ''));
-      if (isNaN(amount)) return null;
-      transactionType = 'Expense';
-    } else if (incomeStr && incomeStr !== '') {
-      // This is an income transaction (fourth column has value)
-      amount = parseFloat(incomeStr.replace(/[^\d.-]/g, ''));
-      if (isNaN(amount)) return null;
-      transactionType = 'Income';
-    } else {
-      console.log('CIMC: No valid amount found');
-      return null;
-    }
-
-    // Clean payee name
-    let payee = description;
-    if (description.toUpperCase().includes('PAYMENT')) {
-      payee = 'Payment - Credit Card';
-    } else {
-      // Remove quotes and clean up
-      payee = payee
-        .replace(/^"|"$/g, '') // Remove surrounding quotes
-        .replace(/\s+$/, '') // Remove trailing spaces
-        .replace(/^\s+/, ''); // Remove leading spaces
-    }
-
-    // 금액 처리 로직:
-    // CIMC는 신용카드 거래이므로 Credit 계좌로 처리
-    // Credit 계좌: Expense는 음수, Income은 양수로 변환
-    let finalAmount = amount;
-    
-    if (transactionType === 'Expense') {
-      finalAmount = -Math.abs(amount); // 지출은 음수로
-    } else {
-      finalAmount = Math.abs(amount); // 수입은 양수로
-    }
-
-    return {
-      date: date.toISOString().split('T')[0],
-      payee: payee,
-      amount: finalAmount,
-      type: transactionType,
-    };
   }
 
   validateTransaction(transaction: Partial<Transaction>): Partial<Transaction> | null {

@@ -52,12 +52,9 @@ export class PCMCImporter extends BaseImporter {
       transactionType = 'Income';
     }
 
-    // For PCMC: Expense transactions should be negative, Income should be positive
-    let finalAmount = Math.abs(amount);
-    if (transactionType === 'Expense') {
-      finalAmount = -finalAmount;
-    }
-
+    // For PCMC: Use base importer's credit card amount normalization
+    const finalAmount = this.normalizeAmount(amount, transactionType, 'Credit');
+    
     // Clean payee name
     let payee = description;
     if (type === 'PAYMENT') {
@@ -72,9 +69,11 @@ export class PCMCImporter extends BaseImporter {
 
     return {
       date: date.toISOString().split('T')[0],
-      payee: payee,
+      payee,
       amount: finalAmount,
       type: transactionType,
+      category_id: undefined, // Let the system assign default category
+      notes: '', // Default empty notes
     };
   }
 

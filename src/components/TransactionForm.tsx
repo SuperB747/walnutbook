@@ -169,14 +169,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const fixAmountSign = (amount: number | undefined, type: string | undefined, category: string | undefined) => {
     if (amount === undefined) return amount;
+
     if (type === 'Expense') return -Math.abs(amount);
     if (type === 'Income') return Math.abs(amount);
     if (type === 'Transfer') {
       // Transfer는 항상 양수로 처리 (백엔드에서 출발/도착 계좌에 따라 부호 결정)
       return Math.abs(amount);
     }
-    // Adjust는 category에 따라 부호 결정
+    // Adjust는 계좌 타입과 관계없이 동일하게 처리
     if (type === 'Adjust') {
+      // Add는 양수(잔액 증가), Subtract는 음수(잔액 감소)
       if (category === 'Subtract') {
         return -Math.abs(amount);
       } else {
@@ -258,6 +260,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     const finalTransaction = { ...formData };
     
+    // Fix amount sign before saving based on transaction type and category
+    if (finalTransaction.amount !== undefined) {
+      const category = allCategories.find(cat => cat.id === finalTransaction.category_id)?.name;
+      finalTransaction.amount = fixAmountSign(finalTransaction.amount, finalTransaction.type, category);
+    }
+    
     if (finalTransaction.type === 'Transfer') {
       if (transaction) {
         // Editing existing Transfer transaction
@@ -333,7 +341,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       return;
     }
     
-    // 숫자와 소수점만 허용
+    // 숫자와 소수점만 허용 (음수 기호 제외)
     const cleanValue = value.replace(/[^\d.]/g, '');
     
     // 소수점이 여러 개 있으면 첫 번째만 유지
@@ -353,7 +361,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     // 입력값 상태 업데이트
     setAmountInputValue(result);
     
-    // formData 업데이트
+    // formData 업데이트 - 항상 양수로 저장
     const amount = result === '' ? undefined : Math.abs(parseFloat(result) || 0);
     setFormData(prev => ({ ...prev, amount }));
   };

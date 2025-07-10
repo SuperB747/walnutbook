@@ -54,8 +54,8 @@ pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
                     CASE
                         WHEN t.type = 'Expense' THEN amount
                         WHEN t.type = 'Income' THEN amount
-                        WHEN t.type = 'Adjust' AND c.name = 'Add' THEN amount
-                        WHEN t.type = 'Adjust' AND c.name = 'Subtract' THEN amount
+                        WHEN t.type = 'Adjust' AND c.name = 'Add' THEN ABS(amount)
+                        WHEN t.type = 'Adjust' AND c.name = 'Subtract' THEN -ABS(amount)
                         WHEN t.type = 'Transfer' THEN amount
                         ELSE 0
                     END

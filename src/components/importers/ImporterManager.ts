@@ -106,8 +106,11 @@ export class ImporterManager {
         
         // Special check for CIMC format (no headers, date in first column)
         if (fields.length >= 3 && 
-            /^\d{4}-\d{1,2}-\d{1,2}$/.test(fields[0]) && // YYYY-MM-DD format
-            !isNaN(parseFloat(fields[2]))) { // Third column is numeric
+            (
+              /^\d{4}-\d{1,2}-\d{1,2}$/.test(fields[0]) || // YYYY-MM-DD format
+              /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fields[0])  // M/D/YYYY format
+            )
+        ) {
           headerIndex = i;
           break;
         }

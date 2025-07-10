@@ -253,8 +253,14 @@ export class PasteImporter extends BaseImporter {
       let finalAmount = amount;
       
       if (accountType === 'Credit') {
-        // Credit 계좌: 거래 금액을 그대로 사용
-        finalAmount = amount;
+        // Credit 계좌: BMMC와 동일한 로직 적용
+        // - Positive amounts (expenses) should be negative
+        // - Negative amounts (income) should be positive
+        if (transactionType === 'Expense') {
+          finalAmount = -Math.abs(amount); // Expenses are negative
+        } else {
+          finalAmount = Math.abs(amount); // Income is positive
+        }
       } else {
         // 다른 계좌들: 부호 변환 적용
         if (transactionType === 'Expense') {

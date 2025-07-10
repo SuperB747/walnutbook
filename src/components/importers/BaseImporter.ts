@@ -31,6 +31,54 @@ export abstract class BaseImporter {
     const cleanAmount = amountStr.replace(/[$,¥€£]/g, '').replace(/,/g, '');
     return parseFloat(cleanAmount) || 0;
   }
+
+  // Credit card specific amount handling
+  protected normalizeAmountForCreditAccount(amount: number, type: TransactionType): number {
+    // Credit 계좌의 금액 처리 규칙:
+    // 1. Expense (지출) → 음수 금액 (-amount)
+    // 2. Income (수입) → 양수 금액 (+amount)
+    // 3. Adjust Add → 양수 금액 (+amount)
+    // 4. Adjust Subtract → 음수 금액 (-amount)
+    if (type === 'Expense') {
+      return -Math.abs(amount);
+    } else if (type === 'Income') {
+      return Math.abs(amount);
+    } else if (type === 'Adjust') {
+      // Adjust는 계좌 타입과 관계없이 동일하게 처리
+      // Add는 양수(잔액 증가), Subtract는 음수(잔액 감소)
+      const isAdd = amount >= 0;
+      return isAdd ? Math.abs(amount) : -Math.abs(amount);
+    }
+    return amount; // For Transfer type, use as-is
+  }
+  
+  // Regular account amount handling
+  protected normalizeAmountForRegularAccount(amount: number, type: TransactionType): number {
+    // 일반 계좌의 금액 처리 규칙:
+    // 1. Expense (지출) → 음수 금액 (-amount)
+    // 2. Income (수입) → 양수 금액 (+amount)
+    // 3. Adjust Add → 양수 금액 (+amount)
+    // 4. Adjust Subtract → 음수 금액 (-amount)
+    if (type === 'Expense') {
+      return -Math.abs(amount);
+    } else if (type === 'Income') {
+      return Math.abs(amount);
+    } else if (type === 'Adjust') {
+      // Adjust는 계좌 타입과 관계없이 동일하게 처리
+      // Add는 양수(잔액 증가), Subtract는 음수(잔액 감소)
+      const isAdd = amount >= 0;
+      return isAdd ? Math.abs(amount) : -Math.abs(amount);
+    }
+    return amount; // For Transfer type, use as-is
+  }
+
+  // Unified amount normalization
+  protected normalizeAmount(amount: number, type: TransactionType, accountType?: string): number {
+    if (accountType === 'Credit') {
+      return this.normalizeAmountForCreditAccount(amount, type);
+    }
+    return this.normalizeAmountForRegularAccount(amount, type);
+  }
   
   protected parseDate(dateStr: string): string | null {
     if (!dateStr) return null;
@@ -99,13 +147,5 @@ export abstract class BaseImporter {
     }
     
     return amount >= 0 ? 'Income' : 'Expense';
-  }
-  
-  protected normalizeAmount(amount: number, type: TransactionType): number {
-    if (type === 'Income') {
-      return Math.abs(amount);
-    } else {
-      return -Math.abs(amount);
-    }
   }
 } 
