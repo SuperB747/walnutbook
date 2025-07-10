@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -21,6 +21,7 @@ interface BudgetFormProps {
   budget?: Budget;
   month: string;
   categories: Category[];
+  existingBudgetCategoryIds: number[];
 }
 
 const BudgetForm: React.FC<BudgetFormProps> = ({
@@ -30,6 +31,7 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
   budget,
   month,
   categories,
+  existingBudgetCategoryIds,
 }) => {
   const [formData, setFormData] = useState<Partial<Budget>>({
     category_id: 0,
@@ -40,6 +42,19 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
   
   // 금액 입력을 위한 별도 상태 (문자열로 관리)
   const [amountInput, setAmountInput] = useState<string>('0');
+
+  // Filter out categories that already have budgets, except for the current budget being edited
+  const availableCategories = useMemo(() => {
+    const existingIds = new Set(existingBudgetCategoryIds);
+    return categories.filter(category => 
+      category.type === 'Expense' && 
+      !category.is_reimbursement && 
+      category.name !== 'Transfer' && 
+      category.name !== 'Adjust' && 
+      category.name !== 'Undefined' && 
+      (!existingIds.has(category.id) || (budget && category.id === budget.category_id))
+    );
+  }, [categories, existingBudgetCategoryIds, budget]);
 
   useEffect(() => {
     if (budget) {
@@ -115,11 +130,17 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
             <Select
               value={formData.category_id || ''}
               onChange={handleChange('category_id')}
-            label="Category"
+              label="Category"
             >
-              {categories.map(category => (
-                <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
-              ))}
+              {availableCategories.length > 0 ? (
+                availableCategories.map(category => (
+                  <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
+                ))
+              ) : (
+                <MenuItem disabled value="">
+                  <em>No available categories for budget</em>
+                </MenuItem>
+              )}
             </Select>
           </FormControl>
           <TextField
@@ -159,7 +180,12 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="contained" color="primary">
+          <Button 
+            type="submit" 
+            variant="contained" 
+            color="primary"
+            disabled={availableCategories.length === 0}
+          >
             Save
           </Button>
         </DialogActions>

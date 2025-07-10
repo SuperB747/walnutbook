@@ -147,18 +147,22 @@ const BudgetsPage: React.FC = () => {
   };
 
   const totalBudget = useMemo(() => budgets.reduce((sum, budget) => sum + budget.amount, 0), [budgets]);
-  const totalSpent = useMemo(() => 
-    Math.abs(
+  const totalSpent = useMemo(() => {
+    // Get the set of category IDs that have budgets
+    const budgetCategoryIds = new Set(budgets.map(b => b.category_id));
+    
+    // Only sum expenses from categories that have budgets
+    return Math.abs(
       transactions
         .filter(t => 
           t.type === 'Expense' && 
           t.date.startsWith(selectedMonth) &&
-          t.category_id !== undefined
+          t.category_id !== undefined &&
+          budgetCategoryIds.has(t.category_id)
         )
         .reduce((sum, t) => sum + t.amount, 0)
-    ), 
-    [transactions, selectedMonth]
-  );
+    );
+  }, [transactions, selectedMonth, budgets]);
   const remainingBudget = totalBudget - totalSpent;
   const progress = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
@@ -206,7 +210,14 @@ const BudgetsPage: React.FC = () => {
 
       const allCategories = await invoke<Category[]>('get_categories_full');
       const eligible = allCategories
-        .filter(c => c.type === 'Expense' && !c.is_reimbursement && c.name !== 'Transfer' && c.name !== 'Adjust');
+        .filter(c => 
+          c.type === 'Expense' && 
+          !c.is_reimbursement && 
+          c.name !== 'Transfer' && 
+          c.name !== 'Adjust' && 
+          c.name !== 'Undefined' && 
+          c.name !== undefined
+        );
 
       let createdCount = 0;
       let skippedCount = 0;
@@ -365,6 +376,7 @@ const BudgetsPage: React.FC = () => {
           budget={selectedBudget}
           month={selectedMonth}
           categories={categories}
+          existingBudgetCategoryIds={budgets.map(b => b.category_id)}
         />
 
         <Snackbar
