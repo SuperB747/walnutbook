@@ -506,20 +506,26 @@ export const App: React.FC = () => {
               flexShrink: 0, 
               width: 'auto', 
               display: 'flex', 
+              flexDirection: 'column',
               alignItems: 'flex-end',
-              justifyContent: 'flex-end',
+              justifyContent: 'space-between',
               px: 2,
               pb: 1,
               minHeight: 112,
               ml: 'auto',
               position: 'static',
             }}>
-              <Box sx={{ display: 'flex', gap: 1, flexDirection: 'row', alignItems: 'center' }}>
+              {/* Dark Mode 토글 - 위쪽 */}
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <FormControlLabel
                   control={<Switch checked={mode === 'dark'} onChange={() => setMode(mode === 'light' ? 'dark' : 'light')} color="default" />} 
                   label="Dark Mode" 
                   sx={{ color: 'inherit', m: 0 }}
                 />
+              </Box>
+              
+              {/* Tool 버튼들 - 아래쪽 */}
+              <Box sx={{ display: 'flex', gap: 1, flexDirection: 'row', alignItems: 'center' }}>
                 <IconButton
                   color="inherit"
                   onClick={openToolsMenu}

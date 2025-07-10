@@ -112,8 +112,8 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
           // Reimbursement 수입은 타겟 카테고리에 매핑 (총 수입에는 포함하지 않음)
           reimbursementsByTarget[cat.reimbursement_target_category_id] = 
             (reimbursementsByTarget[cat.reimbursement_target_category_id] || 0) + tx.amount;
-        } else {
-          // 일반 수입은 그대로 추가
+        } else if (cat) {
+          // 일반 수입은 그대로 추가 (undefined 카테고리는 제외)
           result.income += tx.amount;
         }
       }

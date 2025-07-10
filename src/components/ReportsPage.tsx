@@ -666,7 +666,19 @@ const ReportsPage: React.FC = () => {
                           onMouseLeave={handleLegendLeave}
                         >
                           <Box sx={{ width: 10, height: 10, bgcolor: leftColors[i], mr: 1, borderRadius: '2px' }} />
-                          <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>{label}</Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontSize: '0.75rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: '120px'
+                            }}
+                            title={label}
+                          >
+                            {label}
+                          </Typography>
                         </Box>
                       ))}
                     </Box>
@@ -686,7 +698,19 @@ const ReportsPage: React.FC = () => {
                           onMouseLeave={handleLegendLeave}
                         >
                           <Box sx={{ width: 10, height: 10, bgcolor: rightColors[i], mr: 1, borderRadius: '2px' }} />
-                          <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>{label}</Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontSize: '0.75rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: '120px'
+                            }}
+                            title={label}
+                          >
+                            {label}
+                          </Typography>
                         </Box>
                       ))}
                     </Box>
@@ -926,7 +950,19 @@ const ReportsPage: React.FC = () => {
                           onMouseLeave={handleYearlyLegendLeave}
                         >
                           <Box sx={{ width: 10, height: 10, bgcolor: yearlyLeftColors[i], mr: 1, borderRadius: '2px' }} />
-                          <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>{label}</Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontSize: '0.75rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: '120px'
+                            }}
+                            title={label}
+                          >
+                            {label}
+                          </Typography>
                         </Box>
                       ))}
                     </Box>
@@ -946,7 +982,19 @@ const ReportsPage: React.FC = () => {
                           onMouseLeave={handleYearlyLegendLeave}
                         >
                           <Box sx={{ width: 10, height: 10, bgcolor: yearlyRightColors[i], mr: 1, borderRadius: '2px' }} />
-                          <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>{label}</Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontSize: '0.75rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: '120px'
+                            }}
+                            title={label}
+                          >
+                            {label}
+                          </Typography>
                         </Box>
                       ))}
                     </Box>
