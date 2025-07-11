@@ -243,7 +243,17 @@ const TransactionList: React.FC<TransactionListProps> = ({
         {onAddTransaction && (<Button variant="contained" color="secondary" onClick={onAddTransaction} startIcon={<AddIcon />} disabled={isDeleting}>Add Transaction</Button>)}
       </Box>
       <TableContainer component={Paper} elevation={2} sx={{ width: '100%' }}>
-        <Table size="small" sx={{ tableLayout: 'fixed', width: '100%', minWidth: '800px' }}>
+        <Table size="small" sx={{ 
+          tableLayout: 'fixed', 
+          width: '100%', 
+          minWidth: '800px',
+          '& .MuiTableRow-root:hover': {
+            backgroundColor: 'rgba(25, 118, 210, 0.04) !important',
+            '& .MuiTableCell-root': {
+              backgroundColor: 'rgba(25, 118, 210, 0.04) !important'
+            }
+          }
+        }}>
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox" sx={{ width: 50, minWidth: 50 }}>
@@ -267,7 +277,19 @@ const TransactionList: React.FC<TransactionListProps> = ({
               </TableRow>
             ) : (
               filteredTransactions.map(transaction => (
-                <TableRow key={transaction.id}>
+                <TableRow 
+                  key={transaction.id}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: 'rgba(25, 118, 210, 0.04) !important',
+                      cursor: 'pointer',
+                      '& .MuiTableCell-root': {
+                        backgroundColor: 'rgba(25, 118, 210, 0.04) !important'
+                      }
+                    },
+                    transition: 'all 0.15s ease-in-out'
+                  }}
+                >
                   <TableCell padding="checkbox" sx={{ width: 50, minWidth: 50 }}>
                     <Checkbox 
                       checked={selectedIds.includes(transaction.id)} 
