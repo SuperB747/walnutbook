@@ -5,6 +5,7 @@ import { PCMCImporter } from './PCMCImporter';
 import { CIMCImporter } from './CIMCImporter';
 import { PasteImporter } from './PasteImporter';
 import { AMMCImporter } from './AMMCImporter';
+import { RGMCImporter } from './RGMCImporter';
 import { Transaction } from '../../db';
 
 export class ImporterManager {
@@ -18,6 +19,7 @@ export class ImporterManager {
     this.registerImporter(new CIMCImporter());
     this.registerImporter(new PasteImporter());
     this.registerImporter(new AMMCImporter());
+    this.registerImporter(new RGMCImporter());
     // Add more importers here as needed
   }
   
@@ -119,6 +121,15 @@ export class ImporterManager {
         if (fields.length >= 4 && 
             fields.some(field => field.toLowerCase().includes('posted date')) &&
             fields.some(field => field.toLowerCase().includes('payee')) &&
+            fields.some(field => field.toLowerCase().includes('amount'))) {
+          headerIndex = i;
+          break;
+        }
+        
+        // Special check for RGMC format
+        if (fields.length >= 13 && 
+            fields.some(field => field.toLowerCase().includes('posted date')) &&
+            fields.some(field => field.toLowerCase().includes('merchant name')) &&
             fields.some(field => field.toLowerCase().includes('amount'))) {
           headerIndex = i;
           break;

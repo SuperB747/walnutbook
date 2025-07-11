@@ -3,8 +3,8 @@ import { Transaction, TransactionType } from '../../db';
 
 export class CIMCImporter extends BaseImporter {
   name = 'CIMC';
-  description = 'CIMC Credit Card CSV format';
-  supportedFormats = ['CIMC Credit Card CSV'];
+  description = 'CSV format';
+  supportedFormats = ['CIMC CSV'];
 
   detectFormat(headers: string[]): boolean {
     // CIMC format doesn't have headers, just check if we have enough columns
