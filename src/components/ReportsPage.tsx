@@ -719,7 +719,7 @@ const ReportsPage: React.FC = () => {
                       Net: {safeFormatCurrency(monthlySummary.income + monthlySummary.expense)}
                     </Typography>
                   </Box>
-                  <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
                     <Bar
                       data={{
                         labels: ['Income', 'Expense'],
@@ -807,7 +807,7 @@ const ReportsPage: React.FC = () => {
                 </Paper>
                 <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 37.5%', display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h6" gutterBottom>Yearly Summary</Typography>
-                  <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
                     <Bar
                       data={yearlyBarData}
                       options={{
@@ -1019,7 +1019,7 @@ const ReportsPage: React.FC = () => {
                       Net: {safeFormatCurrency(yearlySummary.income + yearlySummary.expense)}
                     </Typography>
                   </Box>
-                  <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
                     <Bar
                       data={{
                         labels: ['Income', 'Expense'],
@@ -1098,7 +1098,7 @@ const ReportsPage: React.FC = () => {
                 {/* Monthly Trends */}
                 <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 37.5%', display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h6" gutterBottom>Monthly Trends</Typography>
-                  <Box sx={{ flex: 1 }}>
+                  <Box sx={{ flex: 1, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
                     <Bar
                       data={yearlyBarData}
                       options={{
@@ -1123,7 +1123,7 @@ const ReportsPage: React.FC = () => {
             <Grid item xs={12}>
               <Paper sx={{ p: 2 }}>
                 <Typography variant="h6" gutterBottom>Category Monthly Breakdown</Typography>
-                <TableContainer sx={{ maxHeight: 600, overflow: 'auto' }}>
+                <TableContainer>
                   <Table
                     size="small"
                     sx={{
