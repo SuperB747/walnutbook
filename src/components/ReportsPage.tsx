@@ -1218,11 +1218,11 @@ const ReportsPage: React.FC = () => {
                         })}
                         <TableCell align="right" sx={{ 
                           fontWeight: 'bold',
-                          color: yearlyBreakdownTotal < 0 ? theme.palette.error.main : theme.palette.text.primary,
+                          color: yearlyCategoryMonthlyData.reduce((sum, row) => sum + row.total, 0) < 0 ? theme.palette.error.main : theme.palette.text.primary,
                           width: '8%',
                           fontSize: '0.8rem'
                         }}>
-                          {safeFormatCurrency(yearlyBreakdownTotal)}
+                          {safeFormatCurrency(yearlyCategoryMonthlyData.reduce((sum, row) => sum + row.total, 0))}
                         </TableCell>
                       </TableRow>
                     </TableFooter>
