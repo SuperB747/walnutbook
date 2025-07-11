@@ -9,6 +9,7 @@ export interface ImportServiceResult {
   skipped: Partial<Transaction>[];
   errors: string[];
   warnings: string[];
+  detectedImporter?: string; // Add detected importer name
 }
 
 export class ImportService {
@@ -39,7 +40,8 @@ export class ImportService {
           duplicate_count: 0,
           skipped: [],
           errors: parseResult.errors,
-          warnings: parseResult.warnings
+          warnings: parseResult.warnings,
+          detectedImporter: parseResult.detectedImporter
         };
       }
       
@@ -55,7 +57,8 @@ export class ImportService {
         duplicate_count: duplicateCount,
         skipped: skippedTransactions,
         errors: parseResult.errors,
-        warnings: [...parseResult.warnings, ...(duplicateCount > 0 ? [`${duplicateCount} duplicate(s) found and skipped`] : [])]
+        warnings: [...parseResult.warnings, ...(duplicateCount > 0 ? [`${duplicateCount} duplicate(s) found and skipped`] : [])],
+        detectedImporter: parseResult.detectedImporter
       };
       
     } catch (error) {

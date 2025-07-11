@@ -4,6 +4,7 @@ export interface ImportResult {
   transactions: Partial<Transaction>[];
   errors: string[];
   warnings: string[];
+  detectedImporter?: string; // Add detected importer name
 }
 
 export interface ColumnMapping {

@@ -192,9 +192,20 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       setImportWarnings(result.warnings);
       setShowPreview(true);
       
+      // Create status message with detected format info
+      let statusMessage = `Found ${result.imported_count} transactions to import`;
+      if (result.duplicate_count > 0) {
+        statusMessage += ` (${result.duplicate_count} duplicates will be skipped)`;
+      }
+      
+      // Add detected format information if auto-detected
+      if (!selectedImporter && result.detectedImporter) {
+        statusMessage += ` - Detected format: ${result.detectedImporter}`;
+      }
+      
       setImportStatus({
         status: 'success',
-        message: `Found ${result.imported_count} transactions to import${result.duplicate_count > 0 ? ` (${result.duplicate_count} duplicates will be skipped)` : ''}`,
+        message: statusMessage,
       });
       
     } catch (error) {

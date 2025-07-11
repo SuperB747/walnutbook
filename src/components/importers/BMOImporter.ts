@@ -7,13 +7,34 @@ export class BMOImporter extends BaseImporter {
   supportedFormats = ['BMO CSV'];
   
   detectFormat(headers: string[]): boolean {
-    // BMO CSV has headers like: First Bank Card, Transaction Type, Date Posted, Transaction Amount, Description
-    const headerText = headers.join(' ').toLowerCase();
-    return headerText.includes('first bank card') && 
-           headerText.includes('transaction type') &&
-           headerText.includes('date posted') &&
-           headerText.includes('transaction amount') &&
-           headerText.includes('description');
+    // BMO CSV has headers: First Bank Card,Transaction Type,Date Posted, Transaction Amount,Description
+    if (headers.length < 5) return false;
+    
+    // Clean headers by removing quotes and extra spaces
+    const cleanHeaders = headers.map(h => h.replace(/['"]/g, '').trim().toLowerCase());
+    
+    console.log('BMO format detection - clean headers:', cleanHeaders);
+    
+    // Check for specific BMO headers
+    const hasFirstBankCard = cleanHeaders.some(h => h === 'first bank card');
+    const hasTransactionType = cleanHeaders.some(h => h === 'transaction type');
+    const hasDatePosted = cleanHeaders.some(h => h === 'date posted');
+    const hasTransactionAmount = cleanHeaders.some(h => h === 'transaction amount');
+    const hasDescription = cleanHeaders.some(h => h === 'description');
+    
+    console.log('BMO format detection:', {
+      originalHeaders: headers,
+      cleanHeaders: cleanHeaders,
+      hasFirstBankCard,
+      hasTransactionType,
+      hasDatePosted,
+      hasTransactionAmount,
+      hasDescription,
+      totalHeaders: headers.length
+    });
+
+    // Must have all required headers for BMO format
+    return hasFirstBankCard && hasTransactionType && hasDatePosted && hasTransactionAmount && hasDescription;
   }
   
   mapColumns(headers: string[]): ColumnMapping {

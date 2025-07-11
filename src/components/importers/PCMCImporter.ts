@@ -7,8 +7,36 @@ export class PCMCImporter extends BaseImporter {
   supportedFormats = ['PCMC Credit Card CSV'];
 
   detectFormat(headers: string[]): boolean {
-    const requiredHeaders = ['Description', 'Type', 'Card Holder Name', 'Date', 'Time', 'Amount'];
-    return requiredHeaders.every(header => headers.includes(header));
+    // PCMC CSV has headers: "Description","Type","Card Holder Name","Date","Time","Amount"
+    if (headers.length < 6) return false;
+    
+    // Clean headers by removing quotes and extra spaces
+    const cleanHeaders = headers.map(h => h.replace(/['"]/g, '').trim().toLowerCase());
+    
+    console.log('PCMC format detection - clean headers:', cleanHeaders);
+    
+    // Check for specific PCMC headers
+    const hasDescription = cleanHeaders.some(h => h === 'description');
+    const hasType = cleanHeaders.some(h => h === 'type');
+    const hasCardHolderName = cleanHeaders.some(h => h === 'card holder name');
+    const hasDate = cleanHeaders.some(h => h === 'date');
+    const hasTime = cleanHeaders.some(h => h === 'time');
+    const hasAmount = cleanHeaders.some(h => h === 'amount');
+    
+    console.log('PCMC format detection:', {
+      originalHeaders: headers,
+      cleanHeaders: cleanHeaders,
+      hasDescription,
+      hasType,
+      hasCardHolderName,
+      hasDate,
+      hasTime,
+      hasAmount,
+      totalHeaders: headers.length
+    });
+
+    // Must have all required headers for PCMC format
+    return hasDescription && hasType && hasCardHolderName && hasDate && hasTime && hasAmount;
   }
 
   mapColumns(headers: string[]): ColumnMapping {

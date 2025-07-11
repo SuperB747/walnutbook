@@ -7,8 +7,32 @@ export class AMMCImporter extends BaseImporter {
   supportedFormats = ['AMMC CSV'];
 
   detectFormat(headers: string[]): boolean {
-    // AMMC CSV has headers like: Posted Date,Payee,Address,Amount
-    return headers.length >= 4;
+    // AMMC CSV has headers: Posted Date,Payee,Address,Amount
+    if (headers.length < 4) return false;
+    
+    // Clean headers by removing quotes and extra spaces
+    const cleanHeaders = headers.map(h => h.replace(/['"]/g, '').trim().toLowerCase());
+    
+    console.log('AMMC format detection - clean headers:', cleanHeaders);
+    
+    // Check for specific AMMC headers
+    const hasPostedDate = cleanHeaders.some(h => h === 'posted date');
+    const hasPayee = cleanHeaders.some(h => h === 'payee');
+    const hasAddress = cleanHeaders.some(h => h === 'address');
+    const hasAmount = cleanHeaders.some(h => h === 'amount');
+    
+    console.log('AMMC format detection:', {
+      originalHeaders: headers,
+      cleanHeaders: cleanHeaders,
+      hasPostedDate,
+      hasPayee,
+      hasAddress,
+      hasAmount,
+      totalHeaders: headers.length
+    });
+
+    // Must have all required headers for AMMC format
+    return hasPostedDate && hasPayee && hasAddress && hasAmount;
   }
 
   mapColumns(headers: string[]): ColumnMapping {

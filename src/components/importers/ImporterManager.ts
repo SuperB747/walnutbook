@@ -1,5 +1,6 @@
 import { BaseImporter, ImportResult } from './BaseImporter';
 import { BMOImporter } from './BMOImporter';
+import { BMOSavingsImporter } from './BMOSavingsImporter';
 import { BMMCImporter } from './BMMCImporter';
 import { PCMCImporter } from './PCMCImporter';
 import { CIMCImporter } from './CIMCImporter';
@@ -14,6 +15,7 @@ export class ImporterManager {
   constructor() {
     // Register all available importers
     this.registerImporter(new BMOImporter());
+    this.registerImporter(new BMOSavingsImporter());
     this.registerImporter(new BMMCImporter());
     this.registerImporter(new PCMCImporter());
     this.registerImporter(new CIMCImporter());
@@ -82,55 +84,77 @@ export class ImporterManager {
       }
       
               // Special check for BMO format
-        if (fields.length > 2 && 
-            fields.some(field => field.toLowerCase().includes('first bank card')) &&
-            fields.some(field => field.toLowerCase().includes('transaction type'))) {
+        if (fields.length >= 5 && 
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'first bank card') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'transaction type') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'date posted') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'transaction amount') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'description')) {
+          headerIndex = i;
+          break;
+        }
+        
+        // Special check for BMO Savings format (same as BMO but with different importer)
+        if (fields.length >= 5 && 
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'first bank card') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'transaction type') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'date posted') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'transaction amount') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'description')) {
           headerIndex = i;
           break;
         }
         
         // Special check for BMMC format
-        if (fields.length > 2 && 
-            fields.some(field => field.toLowerCase().includes('item #')) &&
-            fields.some(field => field.toLowerCase().includes('card #'))) {
+        if (fields.length >= 6 && 
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'item #') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'card #') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'transaction date') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'posting date') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'transaction amount') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'description')) {
           headerIndex = i;
           break;
         }
         
         // Special check for PCMC format
-        if (fields.length > 2 && 
-            fields.some(field => field.toLowerCase().includes('description')) &&
-            fields.some(field => field.toLowerCase().includes('type')) &&
-            fields.some(field => field.toLowerCase().includes('card holder name'))) {
+        if (fields.length >= 6 && 
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'description') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'type') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'card holder name') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'date') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'time') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'amount')) {
           headerIndex = i;
           break;
         }
         
-        // Special check for CIMC format (no headers, date in first column)
-        if (fields.length >= 3 && 
-            (
-              /^\d{4}-\d{1,2}-\d{1,2}$/.test(fields[0]) || // YYYY-MM-DD format
-              /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fields[0])  // M/D/YYYY format
-            )
-        ) {
+        // Special check for CIMC format (no headers, date in first column, payee in second, amount in third)
+        if (fields.length >= 4 && 
+            /^\d{4}-\d{1,2}-\d{1,2}$/.test(fields[0]) && // YYYY-MM-DD format
+            fields[1] && fields[1].length > 0 && // Payee in second column
+            /^\d+\.?\d*$/.test(fields[2]) && // Amount in third column
+            fields[3] && fields[3].includes('*')) { // Card number with asterisks in fourth column
           headerIndex = i;
           break;
         }
         
         // Special check for AMMC format
         if (fields.length >= 4 && 
-            fields.some(field => field.toLowerCase().includes('posted date')) &&
-            fields.some(field => field.toLowerCase().includes('payee')) &&
-            fields.some(field => field.toLowerCase().includes('amount'))) {
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'posted date') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'payee') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'address') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'amount')) {
           headerIndex = i;
           break;
         }
         
         // Special check for RGMC format
         if (fields.length >= 13 && 
-            fields.some(field => field.toLowerCase().includes('posted date')) &&
-            fields.some(field => field.toLowerCase().includes('merchant name')) &&
-            fields.some(field => field.toLowerCase().includes('amount'))) {
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'posted date') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'merchant name') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'amount') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'reference number')) {
           headerIndex = i;
           break;
         }
@@ -144,7 +168,8 @@ export class ImporterManager {
       return {
         transactions: [],
         errors: ['Could not detect CSV format. Please select a specific importer.'],
-        warnings: []
+        warnings: [],
+        detectedImporter: undefined
       };
     }
     
@@ -158,7 +183,8 @@ export class ImporterManager {
       return {
         transactions: [],
         errors: [`${importer.name}: Could not map required columns (date, amount, payee)`],
-        warnings: []
+        warnings: [],
+        detectedImporter: importer.name
       };
     }
     
@@ -200,7 +226,8 @@ export class ImporterManager {
     return {
       transactions,
       errors,
-      warnings
+      warnings,
+      detectedImporter: importer.name
     };
   }
   
