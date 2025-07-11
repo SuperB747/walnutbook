@@ -4,6 +4,7 @@ import { BMOSavingsImporter } from './BMOSavingsImporter';
 import { BMMCImporter } from './BMMCImporter';
 import { PCMCImporter } from './PCMCImporter';
 import { CIMCImporter } from './CIMCImporter';
+import { CTMCImporter } from './CTMCImporter';
 import { PasteImporter } from './PasteImporter';
 import { AMMCImporter } from './AMMCImporter';
 import { RGMCImporter } from './RGMCImporter';
@@ -19,6 +20,7 @@ export class ImporterManager {
     this.registerImporter(new BMMCImporter());
     this.registerImporter(new PCMCImporter());
     this.registerImporter(new CIMCImporter());
+    this.registerImporter(new CTMCImporter());
     this.registerImporter(new PasteImporter());
     this.registerImporter(new AMMCImporter());
     this.registerImporter(new RGMCImporter());
@@ -129,12 +131,13 @@ export class ImporterManager {
           break;
         }
         
-        // Special check for CIMC format (no headers, date in first column, payee in second, amount in third)
-        if (fields.length >= 4 && 
+        // Special check for CIMC format (no headers, date in first column, payee in second, expense in third, income in fourth, card number in fifth)
+        if (fields.length >= 5 && 
             /^\d{4}-\d{1,2}-\d{1,2}$/.test(fields[0]) && // YYYY-MM-DD format
             fields[1] && fields[1].length > 0 && // Payee in second column
-            /^\d+\.?\d*$/.test(fields[2]) && // Amount in third column
-            fields[3] && fields[3].includes('*')) { // Card number with asterisks in fourth column
+            /^\d+\.?\d*$/.test(fields[2]) && // Expense in third column
+            /^\d+\.?\d*$/.test(fields[3]) && // Income in fourth column
+            fields[4] && fields[4].includes('*')) { // Card number with asterisks in fifth column
           headerIndex = i;
           break;
         }
@@ -158,6 +161,19 @@ export class ImporterManager {
           headerIndex = i;
           break;
         }
+        
+        // Special check for CTMC format
+        if (fields.length >= 7 && 
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'ref') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'transaction date') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'posted date') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'type') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'description') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'category') &&
+            fields.some(field => field.replace(/['"]/g, '').trim().toLowerCase() === 'amount')) {
+          headerIndex = i;
+          break;
+        }
     }
     
     const headers = this.parseCSVLine(lines[headerIndex]);
@@ -178,8 +194,10 @@ export class ImporterManager {
     // Map columns
     const mapping = importer.mapColumns(headers);
     
-    // Validate mapping
-    if (mapping.date === -1 || mapping.amount === -1 || mapping.payee === -1) {
+    // Validate mapping - special handling for CIMC which has no headers
+    if (importer.name === 'CIMC') {
+      // For CIMC, we don't validate the mapping since we handle columns manually in parseRow
+    } else if (mapping.date === -1 || mapping.amount === -1 || mapping.payee === -1) {
       return {
         transactions: [],
         errors: [`${importer.name}: Could not map required columns (date, amount, payee)`],
