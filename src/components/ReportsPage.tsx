@@ -1170,19 +1170,19 @@ const ReportsPage: React.FC = () => {
                                 sx={{ 
                                   color: amount < 0 ? theme.palette.error.main : theme.palette.text.primary,
                                   fontWeight: amount !== 0 ? 'medium' : 'normal',
-                                  cursor: amount !== 0 ? 'pointer' : 'default',
+                                  cursor: monthTransactions.length > 0 ? 'pointer' : 'default',
                                   width: '6.5%',
                                   fontSize: '0.7rem',
                                   px: 0.5
                                 }}
                                 onMouseEnter={(e) => {
-                                  if (amount !== 0) {
+                                  if (monthTransactions.length > 0) {
                                     handleCategoryRowEnter(e, monthTransactions);
                                   }
                                 }}
                                 onMouseLeave={handleTooltipClose}
                               >
-                                {amount !== 0 ? safeFormatCurrency(amount) : '-'}
+                                {monthTransactions.length > 0 ? safeFormatCurrency(amount) : '-'}
                               </TableCell>
                             );
                           })}
