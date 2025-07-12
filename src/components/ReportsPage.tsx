@@ -20,7 +20,7 @@ import {
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useTheme } from '@mui/material/styles';
-import { Bar, Doughnut } from 'react-chartjs-2';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -29,15 +29,17 @@ import {
   Title,
   Tooltip as ChartTooltip,
   Legend,
-  ArcElement
+  ArcElement,
+  PointElement,
+  LineElement
 } from 'chart.js';
-import { Transaction, Category, Budget } from '../db';
+import { Transaction, Category, Budget, Account } from '../db';
 import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
 import { safeFormatCurrency } from '../utils';
 
 // Register Chart.js core components
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, ChartTooltip, Legend, ArcElement);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, ChartTooltip, Legend, ArcElement, PointElement, LineElement);
 
 // Add Ghibli palette
 const ghibliColors = [
@@ -60,6 +62,7 @@ const ReportsPage: React.FC = () => {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const now = new Date();
   const currentYear = now.getFullYear();
   const years = Array.from({ length: 20 }, (_, i) => 2020 + i);
@@ -84,6 +87,16 @@ const ReportsPage: React.FC = () => {
   const [tooltipAnchorEl, setTooltipAnchorEl] = useState<HTMLElement | null>(null);
   const [tooltipTxns, setTooltipTxns] = useState<Transaction[]>([]);
   const [tooltipPlacement, setTooltipPlacement] = useState<'top-start' | 'top' | 'top-end' | 'right-start' | 'right' | 'right-end' | 'bottom-start' | 'bottom' | 'bottom-end' | 'left-start' | 'left' | 'left-end'>('right-start');
+  
+  // Tooltip state for Category Total Progress
+  const [progressTooltipAnchorEl, setProgressTooltipAnchorEl] = useState<HTMLElement | null>(null);
+  const [progressTooltipData, setProgressTooltipData] = useState<{
+    categoryName: string;
+    monthlyAmounts: number[];
+    cumulativeAmounts: number[];
+    total: number;
+  } | null>(null);
+  const [progressTooltipPlacement, setProgressTooltipPlacement] = useState<'top-start' | 'top' | 'top-end' | 'right-start' | 'right' | 'right-end' | 'bottom-start' | 'bottom' | 'bottom-end' | 'left-start' | 'left' | 'left-end'>('top');
   // Helper to display notes same as TransactionList
   const getDisplayNotes = (notes?: string): string | null => {
     if (!notes) return null;
@@ -143,12 +156,14 @@ const ReportsPage: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [txns, cats] = await Promise.all([
+        const [txns, cats, accts] = await Promise.all([
           invoke<Transaction[]>('get_transactions'),
-          invoke<Category[]>('get_categories_full')
+          invoke<Category[]>('get_categories_full'),
+          invoke<Account[]>('get_accounts')
         ]);
         setAllTransactions(txns || []);
         setCategories(cats || []);
+        setAccounts(accts || []);
       } catch (error) {
         console.error('Failed to load report data:', error);
       }
@@ -310,6 +325,11 @@ const ReportsPage: React.FC = () => {
     setTooltipTxns([]);
   };
 
+  const handleProgressTooltipClose = () => {
+    setProgressTooltipAnchorEl(null);
+    setProgressTooltipData(null);
+  };
+
   // 툴팁 위치를 자동으로 계산하는 함수 - 8방향 모두 고려
   const getTooltipPlacement = (event: React.MouseEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -380,6 +400,13 @@ const ReportsPage: React.FC = () => {
     }
     
     return bestPlacement as 'top-start' | 'top' | 'top-end' | 'right-start' | 'right' | 'right-end' | 'bottom-start' | 'bottom' | 'bottom-end' | 'left-start' | 'left' | 'left-end';
+  };
+
+  const getProgressTooltipPlacement = (event: React.MouseEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    
+    return rect.top < viewportHeight / 2 ? 'bottom' : 'top';
   };
   const doughnutOptions = {
     responsive: true,
@@ -576,17 +603,6 @@ const ReportsPage: React.FC = () => {
     });
   }, [yearlyTransactions, categories, year]);
 
-  // Total breakdown expense for Monthly summary
-  const monthlyBreakdownTotal = useMemo(
-    () => monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0),
-    [monthlyCategoryRaw]
-  );
-  // Total breakdown expense for Yearly summary
-  const yearlyBreakdownTotal = useMemo(
-    () => yearlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0),
-    [yearlyCategoryRaw]
-  );
-
   // Yearly category monthly breakdown table data
   const yearlyCategoryMonthlyData = useMemo(() => {
     // Create category map for efficient lookups
@@ -643,6 +659,178 @@ const ReportsPage: React.FC = () => {
 
     return monthlyData;
   }, [yearlyTransactions, categories, year]);
+
+  // Calculate yearly progress for each category (cumulative monthly amounts)
+  const yearlyCategoryProgress = useMemo(() => {
+    return yearlyCategoryMonthlyData.map(row => {
+      const cumulativeAmounts = row.monthlyAmounts.reduce((acc, amount, index) => {
+        const prevTotal = index > 0 ? acc[index - 1] : 0;
+        acc.push(prevTotal + Math.abs(amount));
+        return acc;
+      }, [] as number[]);
+      
+      return {
+        categoryId: row.category.id,
+        categoryName: row.category.name,
+        monthlyAmounts: row.monthlyAmounts,
+        cumulativeAmounts,
+        total: row.total
+      };
+    });
+  }, [yearlyCategoryMonthlyData]);
+
+  // Calculate monthly account balances (as of 1st of each month) for the selected year
+  const monthlyAccountBalances = useMemo(() => {
+    const checkingAccounts = accounts.filter(acc => acc.type === 'Checking');
+    const savingsAccounts = accounts.filter(acc => acc.type === 'Savings');
+    
+    // Get current date
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-based month
+    
+    // Calculate cumulative balances for each month
+    const monthlyData = Array.from({ length: 12 }, (_, monthIndex) => {
+      const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+      const monthNumber = monthIndex + 1;
+      
+      // Check if this month is in the future
+      const isFutureMonth = parseInt(year) > currentYear || 
+                           (parseInt(year) === currentYear && monthNumber > currentMonth);
+      
+      if (isFutureMonth) {
+        return {
+          month: monthNumber,
+          monthName: monthNames[monthIndex],
+          checking: null,
+          savings: null,
+          total: null,
+          isFuture: true
+        };
+      }
+      
+      // Get all transactions up to the end of this month
+      const transactionsUpToMonth = yearlyTransactions.filter(tx => {
+        const txDate = tx.date;
+        const txYear = txDate.substring(0, 4);
+        const txMonth = txDate.substring(5, 7);
+        const currentYear = parseInt(year);
+        const currentMonth = monthNumber;
+        
+        return parseInt(txYear) < currentYear || 
+               (parseInt(txYear) === currentYear && parseInt(txMonth) <= currentMonth);
+      });
+      
+      // Calculate checking account balance
+      const checkingBalance = checkingAccounts.reduce((total, account) => {
+        const accountTransactions = transactionsUpToMonth.filter(tx => tx.account_id === account.id);
+        const balance = accountTransactions.reduce((sum, tx) => {
+          if (tx.type === 'Expense') return sum + tx.amount;
+          if (tx.type === 'Income') return sum + tx.amount;
+          if (tx.type === 'Transfer') return sum + tx.amount;
+          if (tx.type === 'Adjust') {
+            const category = categories.find(c => c.id === tx.category_id);
+            if (category?.name === 'Add') return sum + Math.abs(tx.amount);
+            if (category?.name === 'Subtract') return sum - Math.abs(tx.amount);
+            return sum + tx.amount;
+          }
+          return sum;
+        }, 0);
+        return total + balance;
+      }, 0);
+      
+      // Calculate savings account balance
+      const savingsBalance = savingsAccounts.reduce((total, account) => {
+        const accountTransactions = transactionsUpToMonth.filter(tx => tx.account_id === account.id);
+        const balance = accountTransactions.reduce((sum, tx) => {
+          if (tx.type === 'Expense') return sum + tx.amount;
+          if (tx.type === 'Income') return sum + tx.amount;
+          if (tx.type === 'Transfer') return sum + tx.amount;
+          if (tx.type === 'Adjust') {
+            const category = categories.find(c => c.id === tx.category_id);
+            if (category?.name === 'Add') return sum + Math.abs(tx.amount);
+            if (category?.name === 'Subtract') return sum - Math.abs(tx.amount);
+            return sum + tx.amount;
+          }
+          return sum;
+        }, 0);
+        return total + balance;
+      }, 0);
+      
+      return {
+        month: monthNumber,
+        monthName: monthNames[monthIndex],
+        checking: checkingBalance,
+        savings: savingsBalance,
+        total: checkingBalance + savingsBalance,
+        isFuture: false
+      };
+    });
+    
+    return monthlyData;
+  }, [yearlyTransactions, accounts, categories, year]);
+
+  // Account balance chart data
+  const accountBalanceChartData = useMemo(() => {
+    // Filter out future months for chart
+    const availableData = monthlyAccountBalances.filter(m => !m.isFuture);
+    
+    return {
+      labels: availableData.map(m => m.monthName),
+      datasets: [
+        {
+          label: 'Checking',
+          data: availableData.map(m => m.checking),
+          borderColor: theme.palette.primary.main,
+          backgroundColor: theme.palette.primary.main,
+          borderWidth: 2,
+          fill: false,
+          tension: 0.1,
+          pointBackgroundColor: theme.palette.primary.main,
+          pointBorderColor: theme.palette.primary.main,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        },
+        {
+          label: 'Savings',
+          data: availableData.map(m => m.savings),
+          borderColor: theme.palette.success.main,
+          backgroundColor: theme.palette.success.main,
+          borderWidth: 2,
+          fill: false,
+          tension: 0.1,
+          pointBackgroundColor: theme.palette.success.main,
+          pointBorderColor: theme.palette.success.main,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        },
+        {
+          label: 'Total Assets',
+          data: availableData.map(m => m.total),
+          borderColor: theme.palette.info.main,
+          backgroundColor: theme.palette.info.main,
+          borderWidth: 3,
+          fill: false,
+          tension: 0.1,
+          pointBackgroundColor: theme.palette.info.main,
+          pointBorderColor: theme.palette.info.main,
+          pointRadius: 5,
+          pointHoverRadius: 7
+        }
+      ]
+    };
+  }, [monthlyAccountBalances, theme.palette]);
+
+  // Total breakdown expense for Monthly summary
+  const monthlyBreakdownTotal = useMemo(
+    () => monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0),
+    [monthlyCategoryRaw]
+  );
+  // Total breakdown expense for Yearly summary
+  const yearlyBreakdownTotal = useMemo(
+    () => yearlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0),
+    [yearlyCategoryRaw]
+  );
 
   return (
     <Box p={3}>
@@ -1186,12 +1374,30 @@ const ReportsPage: React.FC = () => {
                               </TableCell>
                             );
                           })}
-                          <TableCell align="right" sx={{ 
-                            fontWeight: 'bold',
-                            color: row.total < 0 ? theme.palette.error.main : theme.palette.text.primary,
-                            width: '8%',
-                            fontSize: '0.8rem'
-                          }}>
+                          <TableCell 
+                            align="right" 
+                            sx={{ 
+                              fontWeight: 'bold',
+                              color: row.total < 0 ? theme.palette.error.main : theme.palette.text.primary,
+                              width: '8%',
+                              fontSize: '0.8rem',
+                              cursor: 'pointer'
+                            }}
+                            onMouseEnter={(e) => {
+                              const progressData = yearlyCategoryProgress.find(p => p.categoryId === row.category.id);
+                              if (progressData && Math.abs(row.total) > 0) {
+                                setProgressTooltipAnchorEl(e.currentTarget);
+                                setProgressTooltipData({
+                                  categoryName: progressData.categoryName,
+                                  monthlyAmounts: progressData.monthlyAmounts,
+                                  cumulativeAmounts: progressData.cumulativeAmounts,
+                                  total: progressData.total
+                                });
+                                setProgressTooltipPlacement(getProgressTooltipPlacement(e));
+                              }
+                            }}
+                            onMouseLeave={handleProgressTooltipClose}
+                          >
                             {row.total !== 0 ? safeFormatCurrency(row.total) : '-'}
                           </TableCell>
                         </TableRow>
@@ -1275,6 +1481,229 @@ const ReportsPage: React.FC = () => {
                       </Table>
                  </Paper>
                  </Popper>
+                 
+                 {/* Progress Tooltip */}
+                 <Popper 
+                   open={Boolean(progressTooltipAnchorEl)} 
+                   anchorEl={progressTooltipAnchorEl} 
+                   placement={progressTooltipPlacement}
+                   modifiers={[{ name: 'flip', enabled: true }, { name: 'preventOverflow', enabled: true, options: { boundary: 'viewport' } }]}
+                   sx={{ zIndex: 3000 }}
+                 >
+                   <Paper elevation={3} sx={{ p: 1.5, bgcolor: theme => theme.palette.mode === 'light' ? theme.palette.grey[50] : theme.palette.grey[800], minWidth: 300 }}>
+                     {progressTooltipData && (
+                       <>
+                         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold', fontSize: '0.9rem' }}>
+                           {progressTooltipData.categoryName} - Monthly Expenses
+                         </Typography>
+                         <Box sx={{ height: 150, width: '100%' }}>
+                           <Line
+                             data={{
+                               labels: monthNames,
+                               datasets: [
+                                 {
+                                   label: 'Monthly Expense',
+                                   data: progressTooltipData.monthlyAmounts,
+                                   borderColor: theme.palette.error.main,
+                                   backgroundColor: theme.palette.error.main,
+                                   borderWidth: 2,
+                                   fill: false,
+                                   tension: 0.1,
+                                   pointBackgroundColor: theme.palette.error.main,
+                                   pointBorderColor: theme.palette.error.main,
+                                   pointRadius: 4,
+                                   pointHoverRadius: 6
+                                 }
+                               ]
+                             }}
+                             options={{
+                               responsive: true,
+                               maintainAspectRatio: false,
+                               scales: { 
+                                 y: { 
+                                   beginAtZero: true,
+                                   reverse: true,
+                                   ticks: {
+                                     callback: function(value) {
+                                       return safeFormatCurrency(Number(value));
+                                     }
+                                   }
+                                 } 
+                               },
+                               plugins: {
+                                 legend: {
+                                   display: false
+                                 },
+                                 tooltip: {
+                                   callbacks: {
+                                     label: function(context) {
+                                       const value = context.parsed.y;
+                                       return `${safeFormatCurrency(value)}`;
+                                     }
+                                   }
+                                 }
+                               }
+                             }}
+                           />
+                         </Box>
+                         <Typography variant="body2" sx={{ mt: 1, textAlign: 'center', fontWeight: 'medium', color: theme.palette.error.main }}>
+                           Total: {safeFormatCurrency(progressTooltipData.total)}
+                         </Typography>
+                       </>
+                     )}
+                   </Paper>
+                 </Popper>
+              </Paper>
+            </Grid>
+            
+            {/* Account Balance Changes */}
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>Account Balances (as of 1st of each month)</Typography>
+                <Box sx={{ height: 300, width: '100%', mb: 2 }}>
+                  <Line
+                    data={accountBalanceChartData}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      scales: { 
+                        y: { 
+                          beginAtZero: false,
+                          ticks: {
+                            callback: function(value) {
+                              return safeFormatCurrency(Number(value));
+                            }
+                          }
+                        } 
+                      },
+                      plugins: {
+                        legend: {
+                          display: true,
+                          position: 'top' as const,
+                          labels: {
+                            boxWidth: 12,
+                            padding: 8,
+                            font: { size: 10 }
+                          }
+                        },
+                        tooltip: {
+                          callbacks: {
+                            label: function(context) {
+                              const label = context.dataset.label || '';
+                              const value = context.parsed.y;
+                              return `${label}: ${safeFormatCurrency(value)}`;
+                            }
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </Box>
+                
+                {/* Account Balance Table */}
+                <TableContainer>
+                  <Table
+                    size="small"
+                    sx={{
+                      width: '100%',
+                      tableLayout: 'fixed',
+                      '& tbody tr:hover': { backgroundColor: theme.palette.action.hover },
+                      '& .MuiTableCell-root': { backgroundColor: 'transparent' }
+                    }}
+                  >
+                                         <TableHead>
+                       <TableRow sx={{ backgroundColor: theme.palette.action.hover }}>
+                         <TableCell sx={{ fontWeight: 'bold', width: '15%' }}>Month</TableCell>
+                         <TableCell align="right" sx={{ fontWeight: 'bold', width: '20%' }}>Checking Balance</TableCell>
+                         <TableCell align="right" sx={{ fontWeight: 'bold', width: '20%' }}>Savings Balance</TableCell>
+                         <TableCell align="right" sx={{ fontWeight: 'bold', width: '20%' }}>Total Assets</TableCell>
+                       </TableRow>
+                     </TableHead>
+                    <TableBody>
+                      {monthlyAccountBalances.map((row) => (
+                        <TableRow 
+                          key={row.month} 
+                          hover
+                        >
+                          <TableCell sx={{ fontWeight: 'medium', width: '15%', fontSize: '0.8rem' }}>
+                            {row.monthName}
+                          </TableCell>
+                                                   <TableCell align="right" sx={{ 
+                           fontWeight: 'medium',
+                           color: row.isFuture ? theme.palette.text.secondary : (row.checking && row.checking >= 0 ? theme.palette.success.main : theme.palette.error.main),
+                           width: '20%',
+                           fontSize: '0.8rem'
+                         }}>
+                           {row.isFuture ? '-' : (row.checking ? safeFormatCurrency(row.checking) : '-')}
+                         </TableCell>
+                         <TableCell align="right" sx={{ 
+                           fontWeight: 'medium',
+                           color: row.isFuture ? theme.palette.text.secondary : (row.savings && row.savings >= 0 ? theme.palette.success.main : theme.palette.error.main),
+                           width: '20%',
+                           fontSize: '0.8rem'
+                         }}>
+                           {row.isFuture ? '-' : (row.savings ? safeFormatCurrency(row.savings) : '-')}
+                         </TableCell>
+                         <TableCell align="right" sx={{ 
+                           fontWeight: 'bold',
+                           color: row.isFuture ? theme.palette.text.secondary : (row.total && row.total >= 0 ? theme.palette.info.main : theme.palette.error.main),
+                           width: '20%',
+                           fontSize: '0.8rem'
+                         }}>
+                           {row.isFuture ? '-' : (row.total ? safeFormatCurrency(row.total) : '-')}
+                         </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                                         <TableFooter>
+                       <TableRow sx={{ backgroundColor: theme.palette.action.selected }}>
+                         <TableCell sx={{ fontWeight: 'bold', width: '15%', fontSize: '0.8rem' }}>Latest Balance</TableCell>
+                         <TableCell align="right" sx={{ 
+                           fontWeight: 'bold',
+                           color: (() => {
+                             const lastValidData = monthlyAccountBalances.filter(m => !m.isFuture).pop();
+                             return lastValidData?.checking && lastValidData.checking >= 0 ? theme.palette.success.main : theme.palette.error.main;
+                           })(),
+                           width: '20%',
+                           fontSize: '0.8rem'
+                         }}>
+                           {(() => {
+                             const lastValidData = monthlyAccountBalances.filter(m => !m.isFuture).pop();
+                             return lastValidData && lastValidData.checking ? safeFormatCurrency(lastValidData.checking) : '-';
+                           })()}
+                         </TableCell>
+                         <TableCell align="right" sx={{ 
+                           fontWeight: 'bold',
+                           color: (() => {
+                             const lastValidData = monthlyAccountBalances.filter(m => !m.isFuture).pop();
+                             return lastValidData?.savings && lastValidData.savings >= 0 ? theme.palette.success.main : theme.palette.error.main;
+                           })(),
+                           width: '20%',
+                           fontSize: '0.8rem'
+                         }}>
+                           {(() => {
+                             const lastValidData = monthlyAccountBalances.filter(m => !m.isFuture).pop();
+                             return lastValidData && lastValidData.savings ? safeFormatCurrency(lastValidData.savings) : '-';
+                           })()}
+                         </TableCell>
+                         <TableCell align="right" sx={{ 
+                           fontWeight: 'bold',
+                           color: (() => {
+                             const lastValidData = monthlyAccountBalances.filter(m => !m.isFuture).pop();
+                             return lastValidData?.total && lastValidData.total >= 0 ? theme.palette.info.main : theme.palette.error.main;
+                           })(),
+                           width: '20%',
+                           fontSize: '0.8rem'
+                         }}>
+                           {(() => {
+                             const lastValidData = monthlyAccountBalances.filter(m => !m.isFuture).pop();
+                             return lastValidData && lastValidData.total ? safeFormatCurrency(lastValidData.total) : '-';
+                           })()}
+                         </TableCell>
+                       </TableRow>
+                     </TableFooter>
+                  </Table>
+                </TableContainer>
               </Paper>
             </Grid>
           </Grid>
