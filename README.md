@@ -1,59 +1,178 @@
-# WalnutBook
+# WalnutBook - Personal Budget Management Application
 
-개인 재무 관리를 위한 데스크톱 애플리케이션입니다. Tauri와 React를 사용하여 개발되었습니다.
+A comprehensive personal budget management application built with Tauri, React, and TypeScript.
 
-## 기능
+## Features
 
-- 계좌 관리
-- 거래 내역 관리
-- 예산 설정 및 관리
-- 정기 거래 설정
-- 지출 분석 및 보고서
+### 📊 Financial Management
+- **Transaction Tracking**: Record income, expenses, transfers, and adjustments
+- **Account Management**: Support for Checking, Savings, and Credit accounts
+- **Category Management**: Customizable expense and income categories
+- **Budget Planning**: Set monthly budgets by category with overage alerts
 
-## 개발 환경 설정
+### 📈 Advanced Reporting
+- **Monthly Reports**: Income vs expense analysis with category breakdowns
+- **Yearly Reports**: Comprehensive yearly analysis with monthly trends
+- **Account Balance Tracking**: Real-time balance monitoring with historical data
+- **Category Monthly Breakdown**: Detailed category-wise monthly analysis
+- **Account Balance Changes**: Visual tracking of Checking and Savings account balances
 
-### 요구사항
+### 🔄 Import/Export
+- **CSV Import**: Import transactions from various bank formats
+- **Multiple Bank Support**: Pre-configured importers for major banks
+- **Data Export**: Export transactions and reports
 
-- Node.js v18.17.1 이상
-- npm 또는 yarn
+### 💾 Backup & Restore System
+- **OneDrive Integration**: Automatic backup to OneDrive
+- **Backup History**: Track and manage backup versions
+- **Auto Backup**: Scheduled automatic backups with cleanup
+- **Manual Backup**: On-demand backup creation
+- **Safe Restore**: Verified database restoration with rollback protection
 
-### 설치
+## Installation & Development
 
-1. 저장소 클론:
+### Prerequisites
+- Node.js (v16 or higher)
+- Rust (latest stable)
+- Tauri CLI
+
+### Development Setup
 ```bash
-git clone https://github.com/[your-username]/walnutbook.git
+# Clone the repository
+git clone <repository-url>
 cd walnutbook
-```
 
-2. 의존성 설치:
-```bash
+# Install dependencies
 npm install
-```
 
-3. 개발 모드로 실행:
-```bash
+# Start development server
 npm run dev
 ```
 
-4. 빌드:
+### Building for Production
+
+#### Development Build
 ```bash
-npm run build
+npm run tauri:dev
 ```
 
-5. 패키지 생성:
+#### Production Build
 ```bash
-npm run make
+# Build for current platform
+npm run package
+
+# Build for specific platform
+npm run tauri:build
 ```
 
-## 기술 스택
+## Data Storage & Backup
 
-- Tauri
-- React
-- TypeScript
-- Material-UI
-- SQLite (Rusqlite)
-- webpack
+### Local Database
+- **Location**: OS standard data directory
+  - Windows: `%APPDATA%/WalnutBook/walnutbook.db`
+  - macOS: `~/Library/Application Support/WalnutBook/walnutbook.db`
+  - Linux: `~/.local/share/WalnutBook/walnutbook.db`
 
-## 라이선스
+### OneDrive Backup System
+- **Automatic Backups**: Stored in `OneDrive/WalnutBook_Backups/`
+- **Backup Retention**: Keeps last 10 automatic backups
+- **File Naming**: `walnutbook_auto_backup_YYYYMMDD_HHMMSS.db`
+- **Backup History**: View and manage backup versions in the app
 
-ISC
+### Backup Features
+- **Data Integrity Verification**: Ensures database integrity before backup
+- **Safe Restore**: Automatic rollback if restore fails
+- **Version Tracking**: Backup metadata with timestamps and file sizes
+- **Cross-Platform**: Works on Windows, macOS, and Linux
+
+## Application Architecture
+
+### Frontend (React + TypeScript)
+- **UI Framework**: Material-UI (MUI)
+- **Charts**: Chart.js with React wrapper
+- **Routing**: React Router DOM
+- **State Management**: React hooks and context
+
+### Backend (Rust + Tauri)
+- **Database**: SQLite with Rusqlite
+- **File System**: Cross-platform file operations
+- **Security**: Tauri's built-in security model
+
+### Key Components
+- **AccountsPage**: Account management and balance tracking
+- **TransactionsPage**: Transaction entry and management
+- **BudgetsPage**: Budget planning and monitoring
+- **ReportsPage**: Comprehensive financial reporting
+- **BackupRestoreDialog**: Advanced backup and restore functionality
+
+## Database Schema
+
+### Core Tables
+- **accounts**: Account information and balances
+- **transactions**: All financial transactions
+- **categories**: Expense and income categories
+- **budgets**: Monthly budget allocations
+- **account_import_settings**: CSV import configurations
+
+### Data Relationships
+- Transactions link to accounts and categories
+- Budgets link to categories and months
+- Import settings link to accounts
+
+## Security & Data Protection
+
+### Local Data Security
+- **Encrypted Storage**: Database stored in secure OS directories
+- **Access Control**: OS-level file permissions
+- **Data Integrity**: SQLite integrity checks
+
+### Backup Security
+- **OneDrive Encryption**: Leverages OneDrive's built-in encryption
+- **Backup Verification**: Integrity checks before and after restore
+- **Safe Rollback**: Automatic restoration of previous state on failure
+
+## Deployment & Distribution
+
+### Packaging
+The app is packaged using Tauri, which creates native executables:
+- **Windows**: `.exe` installer
+- **macOS**: `.dmg` or `.app`
+- **Linux**: `.AppImage` or `.deb`
+
+### Distribution
+- **Self-contained**: No external dependencies required
+- **Cross-platform**: Single codebase for all platforms
+- **Auto-updates**: Built-in update mechanism (configurable)
+
+## Troubleshooting
+
+### Common Issues
+
+#### Backup Issues
+- **OneDrive Not Found**: App falls back to Desktop directory
+- **Permission Errors**: Ensure OneDrive folder is accessible
+- **Backup Failures**: Check available disk space
+
+#### Database Issues
+- **Corruption**: Use restore from backup
+- **Missing Tables**: Run database reset from app menu
+- **Performance**: Large databases may slow down (consider archiving old data)
+
+### Support
+For issues and feature requests, please check the project documentation or create an issue in the repository.
+
+## License
+
+This project is licensed under the ISC License.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+---
+
+**WalnutBook** - Your personal financial companion for better money management.

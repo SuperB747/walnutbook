@@ -31,7 +31,10 @@ pub use categories::{
 pub use budgets::{get_budgets, add_budget, update_budget, delete_budget};
 
 // Re-export backup functions
-pub use backup::{backup_database, restore_database, export_database, import_database, create_backup_folder};
+pub use backup::{
+    backup_database, restore_database, export_database, import_database, create_backup_folder,
+    auto_backup_to_onedrive, get_backup_history, BackupInfo
+};
 
 // Re-export settings functions
 pub use accounts::{
@@ -81,6 +84,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             export_database,
             import_database,
             create_backup_folder,
+            auto_backup_to_onedrive,
+            get_backup_history,
             get_spending_by_category,
             get_income_vs_expenses,
             get_net_worth_history,

@@ -189,20 +189,29 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       }
     });
 
-    // 환급 처리 - 전체 금액을 카테고리에 적용
+    // 환급 처리 - expense를 초과하는 경우 0으로 설정
     transactionsToSummarize.forEach(tx => {
       if (tx.type === 'Income') {
         const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
         if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
           const targetId = cat.reimbursement_target_category_id;
-          expensesByCategory[targetId] = (expensesByCategory[targetId] || 0) + tx.amount;
+          const targetExpense = expensesByCategory[targetId] || 0;
+          if (targetExpense < 0) {
+            // If reimbursement exceeds or equals expense, set to 0
+            if (tx.amount >= Math.abs(targetExpense)) {
+              expensesByCategory[targetId] = 0;
+            } else {
+              // Otherwise, reduce the expense by the reimbursement amount
+              expensesByCategory[targetId] += tx.amount;
+            }
+          }
         }
       }
     });
 
-    // 0이 아닌 카테고리만 필터링하고 정렬 (절대값이 큰 순)
+    // 음수인 카테고리만 필터링하고 정렬 (절대값이 큰 순)
     const filteredAndSorted = Object.entries(expensesByCategory)
-      .filter(([, amount]) => amount !== 0)
+      .filter(([, amount]) => amount < 0)
       .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a));
 
     return {
