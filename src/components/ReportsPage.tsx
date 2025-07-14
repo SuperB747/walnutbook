@@ -690,22 +690,25 @@ const ReportsPage: React.FC = () => {
       const monthlyAmounts = Array.from({ length: 12 }, (_, monthIndex) => {
         const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
         const monthTransactions = yearlyTransactions.filter(tx => tx.date.startsWith(monthKey));
-        // Calculate raw expenses for this category in this month
+        
+        // First calculate raw expenses for this category in this month
         const rawExpenses = monthTransactions
           .filter(tx => tx.type === 'Expense' && tx.category_id === category?.id)
           .reduce((sum, tx) => sum + tx.amount, 0);
-        // Calculate reimbursements for this category in this month
-        const reimbursements = monthTransactions
+        
+        // Then apply reimbursements using the same logic as other calculations
+        let netExpense = rawExpenses;
+        monthTransactions
           .filter(tx => tx.type === 'Income' && tx.category_id != null)
-          .reduce((sum, tx) => {
+          .forEach(tx => {
             const cat = categoryMap.get(tx.category_id!);
             if (cat?.is_reimbursement && cat.reimbursement_target_category_id === category?.id) {
-              return sum + tx.amount;
+              // Apply reimbursement directly (same as TransactionSummary and Monthly Income vs Expense)
+              netExpense += tx.amount;
             }
-            return sum;
-          }, 0);
-        // Apply reimbursements to expenses
-        return rawExpenses + reimbursements;
+          });
+        
+        return netExpense;
       });
       const total = monthlyAmounts.reduce((sum, amount) => sum + amount, 0);
       // Only include if total is negative (actual expense)
@@ -883,16 +886,44 @@ const ReportsPage: React.FC = () => {
     };
   }, [monthlyAccountBalances, theme.palette]);
 
-  // Total breakdown expense for Monthly summary
-  const monthlyBreakdownTotal = useMemo(
-    () => monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0),
-    [monthlyCategoryRaw]
-  );
-  // Total breakdown expense for Yearly summary
-  const yearlyBreakdownTotal = useMemo(
-    () => yearlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0),
-    [yearlyCategoryRaw]
-  );
+  // Total breakdown expense for Monthly summary - should match Income vs Expense calculation
+  const monthlyBreakdownTotal = useMemo(() => {
+    // Calculate using the same logic as summarizeTxns for consistency
+    const rawExpenses = monthlyTransactions
+      .filter(tx => tx.type === 'Expense')
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    
+    const totalReimbursed = monthlyTransactions
+      .filter(tx => tx.type === 'Income' && tx.category_id != null)
+      .reduce((sum, tx) => {
+        const cat = categories.find(c => c.id === tx.category_id);
+        if (cat?.is_reimbursement) {
+          return sum + tx.amount;
+        }
+        return sum;
+      }, 0);
+
+    return -(rawExpenses - totalReimbursed);
+  }, [monthlyTransactions, categories]);
+  // Total breakdown expense for Yearly summary - should match Income vs Expense calculation
+  const yearlyBreakdownTotal = useMemo(() => {
+    // Calculate using the same logic as summarizeTxns for consistency
+    const rawExpenses = yearlyTransactions
+      .filter(tx => tx.type === 'Expense')
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    
+    const totalReimbursed = yearlyTransactions
+      .filter(tx => tx.type === 'Income' && tx.category_id != null)
+      .reduce((sum, tx) => {
+        const cat = categories.find(c => c.id === tx.category_id);
+        if (cat?.is_reimbursement) {
+          return sum + tx.amount;
+        }
+        return sum;
+      }, 0);
+
+    return -(rawExpenses - totalReimbursed);
+  }, [yearlyTransactions, categories]);
 
   return (
     <Box p={3}>
@@ -1534,9 +1565,26 @@ const ReportsPage: React.FC = () => {
                       <TableRow sx={{ backgroundColor: theme.palette.action.selected }}>
                         <TableCell sx={{ fontWeight: 'bold', width: '15%', fontSize: '0.8rem' }}>Total</TableCell>
                         {Array.from({ length: 12 }, (_, monthIndex) => {
-                          const monthTotal = yearlyCategoryMonthlyData.reduce((sum, row) => 
-                            sum + row.monthlyAmounts[monthIndex], 0
-                          );
+                          // Calculate month total using the same logic as summarizeTxns for consistency
+                          const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+                          const monthTransactions = yearlyTransactions.filter(tx => tx.date.startsWith(monthKey));
+                          
+                          // Use the same calculation as summarizeTxns
+                          const rawExpenses = monthTransactions
+                            .filter(tx => tx.type === 'Expense')
+                            .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+                          
+                          const totalReimbursed = monthTransactions
+                            .filter(tx => tx.type === 'Income' && tx.category_id != null)
+                            .reduce((sum, tx) => {
+                              const cat = categories.find(c => c.id === tx.category_id);
+                              if (cat?.is_reimbursement) {
+                                return sum + tx.amount;
+                              }
+                              return sum;
+                            }, 0);
+                          
+                          const monthTotal = -(rawExpenses - totalReimbursed);
                           
                           // Calculate previous month's total for comparison
                           const prevMonthIndex = monthIndex - 1;
@@ -1549,45 +1597,43 @@ const ReportsPage: React.FC = () => {
                             const monthKey = `${prevYear}-12`;
                             const monthTransactions = prevYearTransactions.filter(tx => tx.date.startsWith(monthKey));
                             
-                            // Calculate total expenses for all categories in this month
+                            // Calculate total expenses for all categories in this month using summarizeTxns logic
                             const rawExpenses = monthTransactions
                               .filter(tx => tx.type === 'Expense')
-                              .reduce((sum, tx) => sum + tx.amount, 0);
+                              .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
                             
-                            // Calculate total reimbursements for all categories in this month
-                            const reimbursements = monthTransactions
+                            const totalReimbursed = monthTransactions
                               .filter(tx => tx.type === 'Income' && tx.category_id != null)
                               .reduce((sum, tx) => {
-                                const category = categories.find(c => c.id === tx.category_id);
-                                if (category?.is_reimbursement) {
+                                const cat = categories.find(c => c.id === tx.category_id);
+                                if (cat?.is_reimbursement) {
                                   return sum + tx.amount;
                                 }
                                 return sum;
                               }, 0);
                             
-                            prevMonthTotal = rawExpenses + reimbursements;
+                            prevMonthTotal = -(rawExpenses - totalReimbursed);
                           } else {
                             // 같은 해의 이전 월
                             const monthKey = `${year}-${String(prevMonthIndex + 1).padStart(2, '0')}`;
                             const monthTransactions = yearlyTransactions.filter(tx => tx.date.startsWith(monthKey));
                             
-                            // Calculate total expenses for all categories in this month
+                            // Calculate total expenses for all categories in this month using summarizeTxns logic
                             const rawExpenses = monthTransactions
                               .filter(tx => tx.type === 'Expense')
-                              .reduce((sum, tx) => sum + tx.amount, 0);
+                              .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
                             
-                            // Calculate total reimbursements for all categories in this month
-                            const reimbursements = monthTransactions
+                            const totalReimbursed = monthTransactions
                               .filter(tx => tx.type === 'Income' && tx.category_id != null)
                               .reduce((sum, tx) => {
-                                const category = categories.find(c => c.id === tx.category_id);
-                                if (category?.is_reimbursement) {
+                                const cat = categories.find(c => c.id === tx.category_id);
+                                if (cat?.is_reimbursement) {
                                   return sum + tx.amount;
                                 }
                                 return sum;
                               }, 0);
                             
-                            prevMonthTotal = rawExpenses + reimbursements;
+                            prevMonthTotal = -(rawExpenses - totalReimbursed);
                           }
                           
                           // Determine if total expense increased or decreased
@@ -1655,11 +1701,11 @@ const ReportsPage: React.FC = () => {
                         })}
                         <TableCell align="right" sx={{ 
                           fontWeight: 'bold',
-                          color: yearlyCategoryMonthlyData.reduce((sum, row) => sum + row.total, 0) < 0 ? theme.palette.error.main : theme.palette.text.primary,
+                          color: yearlySummary.expense < 0 ? theme.palette.error.main : theme.palette.text.primary,
                           width: '8%',
                           fontSize: '0.8rem'
                         }}>
-                          {safeFormatCurrency(yearlyCategoryMonthlyData.reduce((sum, row) => sum + row.total, 0))}
+                          {safeFormatCurrency(yearlySummary.expense)}
                         </TableCell>
                       </TableRow>
                     </TableFooter>
