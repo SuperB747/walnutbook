@@ -395,7 +395,7 @@ export const App: React.FC = () => {
         return backupFolder;
       }
     } catch (error) {
-      console.log('OneDrive path not found, falling back to desktop:', error);
+
     }
 
     // Fallback to desktop if OneDrive not found

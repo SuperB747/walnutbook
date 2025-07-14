@@ -191,7 +191,7 @@ const BudgetsPage: React.FC = () => {
         const existingCatIds = new Set(currentBudgets.map(b => b.category_id));
         for (const b of prevBudgets) {
           if (!existingCatIds.has(b.category_id)) {
-            console.log('add_budget params', { categoryId: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
+      
             await invoke<Budget[]>('add_budget', { categoryId: b.category_id, amount: b.amount, month: selectedMonth, notes: b.notes });
           }
         }
@@ -227,7 +227,7 @@ const BudgetsPage: React.FC = () => {
           skippedCount++;
         } else {
           const amt = spendingByCategory.get(c.id) || 0;
-          console.log('add_budget params', { categoryId: c.id, amount: amt, month: selectedMonth, notes: '' });
+    
           await invoke<Budget[]>('add_budget', { categoryId: c.id, amount: amt, month: selectedMonth, notes: '' });
           createdCount++;
         }

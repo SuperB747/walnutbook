@@ -214,6 +214,8 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       .filter(([, amount]) => amount < 0)
       .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a));
 
+
+
     return {
       labels: filteredAndSorted.map(([id]) => Number(id)),
       data: filteredAndSorted.map(([, v]) => v)
@@ -538,6 +540,9 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       label: labelsForDisplay[idx],
       value: Math.abs(categoryExpenses.data[idx]),
     })).filter(item => item.id !== -1);
+    
+
+    
     return {
       labels: items.map(item => item.label),
       datasets: [
@@ -680,30 +685,44 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
             <Typography variant="h6" gutterBottom>
               Expenses by Category
             </Typography>
-            <Box sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexWrap: 'wrap',
-              gap: 1,
-              '& canvas': {
-                touchAction: 'none !important',
-                userSelect: 'none'
-              }
-            }}>
-              {/* 왼쪽 범례 */}
-              <Box sx={{ minWidth: 100, maxWidth: 120 }}>
-                {renderLegendItems(leftLegend)}
+            {donutChartData.labels.length > 0 ? (
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+                gap: 1,
+                '& canvas': {
+                  touchAction: 'none !important',
+                  userSelect: 'none'
+                }
+              }}>
+                {/* 왼쪽 범례 */}
+                <Box sx={{ minWidth: 100, maxWidth: 120 }}>
+                  {renderLegendItems(leftLegend)}
+                </Box>
+                {/* 도넛 그래프 */}
+                <Box sx={{ width: 180, height: 180, flexShrink: 0 }}>
+                  <Doughnut ref={doughnutRef} data={donutChartData} options={donutChartOptions} />
+                </Box>
+                {/* 오른쪽 범례 */}
+                <Box sx={{ minWidth: 100, maxWidth: 120 }}>
+                  {renderLegendItems(rightLegend)}
+                </Box>
               </Box>
-              {/* 도넛 그래프 */}
-              <Box sx={{ width: 180, height: 180, flexShrink: 0 }}>
-                <Doughnut ref={doughnutRef} data={donutChartData} options={donutChartOptions} />
+            ) : (
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                height: 180,
+                color: 'text.secondary'
+              }}>
+                <Typography variant="body2">
+                  No expense data available for this month
+                </Typography>
               </Box>
-              {/* 오른쪽 범례 */}
-              <Box sx={{ minWidth: 100, maxWidth: 120 }}>
-                {renderLegendItems(rightLegend)}
-              </Box>
-            </Box>
+            )}
           </Paper>
         </Grid>
 

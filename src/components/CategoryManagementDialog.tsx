@@ -88,13 +88,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
   const handleUpdate = async () => {
     if (editId == null || !editName.trim()) return;
     
-    console.log('Updating category:', {
-      id: editId,
-      name: editName.trim(),
-      categoryType: currentTab === 0 ? 'Income' : 'Expense',
-      isReimbursement: editIsReimbursement,
-      reimbursementTargetCategoryId: editIsReimbursement ? editReimbursementTargetCategoryId : null,
-    });
+
     
     try {
       const categoryType = currentTab === 0 ? 'Income' : 'Expense';
@@ -106,7 +100,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
         reimbursementTargetCategoryId: editIsReimbursement ? editReimbursementTargetCategoryId : null,
       });
       
-      console.log('Update successful, result:', result);
+
       
       setEditId(null);
       setEditName('');
@@ -116,7 +110,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
       onChange();
     } catch (error) {
       console.error('Failed to update category:', error);
-      alert(`카테고리 업데이트 실패: ${error}`);
+
     }
   };
 

@@ -44,7 +44,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
   importedIds = [],
   onAddTransaction,
 }) => {
-  console.log('TransactionList received importedIds:', importedIds);
   // 통합 필터 상태
   const [filter, setFilter] = useState({
     searchTerm: '',

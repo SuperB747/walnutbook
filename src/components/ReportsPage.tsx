@@ -19,6 +19,9 @@ import {
   Popper
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import RemoveIcon from '@mui/icons-material/Remove';
 import { useTheme } from '@mui/material/styles';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
@@ -242,26 +245,6 @@ const ReportsPage: React.FC = () => {
     // Find Reimbursable category ID
     const reimbursableCategory = categories.find(c => c.name === 'Reimbursable');
     const reimbursableId = reimbursableCategory?.id;
-    
-    // Simple test alert to see if this code is running
-    alert(`Debug Test:\nSelected Month: ${selectedMonth}\nReimbursable ID: ${reimbursableId}\nTransactions Count: ${monthlyTransactions.length}`);
-    
-    // Debug: Show July transactions
-    const julyExpenses = monthlyTransactions.filter(tx => tx.type === 'Expense');
-    const julyIncomes = monthlyTransactions.filter(tx => tx.type === 'Income');
-    
-    console.log('July transactions:', {
-      expenses: julyExpenses.map(tx => ({ 
-        category: categories.find(c => c.id === tx.category_id)?.name, 
-        amount: tx.amount 
-      })),
-      incomes: julyIncomes.map(tx => ({ 
-        category: categories.find(c => c.id === tx.category_id)?.name, 
-        amount: tx.amount,
-        isReimbursement: categories.find(c => c.id === tx.category_id)?.is_reimbursement,
-        targetCategory: categories.find(c => c.id === tx.category_id)?.reimbursement_target_category_id
-      }))
-    });
 
     // First calculate raw expenses by category
     const expensesByCategory: Record<number, number> = {};
@@ -272,10 +255,7 @@ const ReportsPage: React.FC = () => {
       }
     });
 
-    console.log('Initial expensesByCategory:', expensesByCategory);
-    if (reimbursableId) {
-      console.log('Initial Reimbursable expense:', expensesByCategory[reimbursableId]);
-    }
+
 
     // Then calculate reimbursements, but only apply what can be used
     monthlyTransactions.forEach(tx => {
@@ -284,48 +264,29 @@ const ReportsPage: React.FC = () => {
         if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
           const targetId = cat.reimbursement_target_category_id;
           const targetExpense = expensesByCategory[targetId] || 0;
-          console.log(`Reimbursement: ${tx.amount} for target ${targetId}, current expense: ${targetExpense}`);
           if (targetExpense < 0) {
             // If reimbursement exceeds or equals expense, set to 0
             if (tx.amount >= Math.abs(targetExpense)) {
               expensesByCategory[targetId] = 0;
-              console.log(`Setting ${targetId} to 0 (reimbursement >= expense)`);
             } else {
               // Otherwise, reduce the expense by the reimbursement amount
               expensesByCategory[targetId] += tx.amount;
-              console.log(`Reducing ${targetId} by ${tx.amount}, new value: ${expensesByCategory[targetId]}`);
             }
           }
         }
       }
     });
 
-    console.log('Final expensesByCategory:', expensesByCategory);
-    if (reimbursableId) {
-      console.log('Final Reimbursable expense:', expensesByCategory[reimbursableId]);
-    }
+
 
     // Only include categories that have negative net expenses (exclude positive/income categories)
     const result = Object.entries(expensesByCategory)
-      .filter(([, amount]) => {
-        const isNegative = amount < 0;
-        console.log(`Category ${amount}: ${isNegative ? 'included' : 'excluded'} (amount: ${amount})`);
-        return isNegative;
-      })
+      .filter(([, amount]) => amount < 0)
       .map(([id, amount]) => ({ 
         id: Number(id), 
         amount: amount
       }))
       .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-
-    console.log('Filtered result:', result);
-    
-    // Show alert with key values for debugging
-    if (reimbursableId && expensesByCategory[reimbursableId] !== undefined) {
-      const finalAmount = expensesByCategory[reimbursableId];
-      const isIncluded = finalAmount < 0;
-      alert(`Reimbursable Debug:\nInitial: ${expensesByCategory[reimbursableId]}\nFinal: ${finalAmount}\nIncluded: ${isIncluded}`);
-    }
     
     return result;
   }, [monthlyTransactions, categories]);
@@ -655,6 +616,69 @@ const ReportsPage: React.FC = () => {
       return { id: cat.id, name, monthlyAmounts };
     });
   }, [yearlyTransactions, categories, year]);
+
+  // Calculate previous month's data for comparison
+  const getPreviousMonthData = useMemo(() => {
+    const prevMonthData = new Map<number, number[]>();
+    
+    categories.forEach(cat => {
+      const monthlyAmounts = Array.from({ length: 12 }, (_, monthIndex) => {
+        // 같은 해의 이전 월 데이터를 가져옴
+        const prevMonthIndex = monthIndex - 1;
+        if (prevMonthIndex < 0) {
+          // 1월의 경우 이전 해 12월 데이터를 가져옴
+          const prevYear = parseInt(year) - 1;
+          const prevYearTransactions = allTransactions.filter(tx => tx.date.startsWith(`${prevYear}-`));
+          const monthKey = `${prevYear}-12`;
+          const monthTransactions = prevYearTransactions.filter(tx => tx.date.startsWith(monthKey));
+          
+          // Calculate raw expenses for this category in this month
+          const rawExpenses = monthTransactions
+            .filter(tx => tx.type === 'Expense' && tx.category_id === cat.id)
+            .reduce((sum, tx) => sum + tx.amount, 0);
+          
+          // Calculate reimbursements for this category in this month
+          const reimbursements = monthTransactions
+            .filter(tx => tx.type === 'Income' && tx.category_id != null)
+            .reduce((sum, tx) => {
+              const category = categories.find(c => c.id === tx.category_id);
+              if (category?.is_reimbursement && category.reimbursement_target_category_id === cat.id) {
+                return sum + tx.amount;
+              }
+              return sum;
+            }, 0);
+          
+          return rawExpenses + reimbursements;
+        } else {
+          // 같은 해의 이전 월
+          const monthKey = `${year}-${String(prevMonthIndex + 1).padStart(2, '0')}`;
+          const monthTransactions = yearlyTransactions.filter(tx => tx.date.startsWith(monthKey));
+          
+          // Calculate raw expenses for this category in this month
+          const rawExpenses = monthTransactions
+            .filter(tx => tx.type === 'Expense' && tx.category_id === cat.id)
+            .reduce((sum, tx) => sum + tx.amount, 0);
+          
+          // Calculate reimbursements for this category in this month
+          const reimbursements = monthTransactions
+            .filter(tx => tx.type === 'Income' && tx.category_id != null)
+            .reduce((sum, tx) => {
+              const category = categories.find(c => c.id === tx.category_id);
+              if (category?.is_reimbursement && category.reimbursement_target_category_id === cat.id) {
+                return sum + tx.amount;
+              }
+              return sum;
+            }, 0);
+          
+          return rawExpenses + reimbursements;
+        }
+      });
+      
+      prevMonthData.set(cat.id, monthlyAmounts);
+    });
+    
+    return prevMonthData;
+  }, [allTransactions, categories, year, yearlyTransactions]);
 
   // Yearly category monthly breakdown table data
   const yearlyCategoryMonthlyData = useMemo(() => {
@@ -1403,6 +1427,30 @@ const ReportsPage: React.FC = () => {
                                 categories.find(c => c.id === tx.category_id)?.reimbursement_target_category_id === row.category.id))
                             );
                             
+                            // Get previous month's data for comparison
+                            const prevMonthData = getPreviousMonthData.get(row.category.id);
+                            const prevMonthAmount = prevMonthData ? prevMonthData[monthIndex] : 0;
+                            const currentAmount = Math.abs(amount);
+                            const prevAmount = Math.abs(prevMonthAmount);
+                            
+                            // Determine if expense increased or decreased
+                            // Expense는 음수이므로 절대값이 작아지면 지출이 줄어든 것
+                            const showArrow = currentAmount > 0; // 현재 월에 지출이 있으면 화살표 표시
+                            const isIncrease = showArrow && prevAmount > 0 && currentAmount < prevAmount; // 절대값이 작아지면 지출 증가
+                            const isDecrease = showArrow && prevAmount > 0 && currentAmount > prevAmount; // 절대값이 커지면 지출 감소
+                            const isNewExpense = showArrow && prevAmount === 0; // 이전 월에 지출이 없었던 경우
+                            const isSame = showArrow && prevAmount > 0 && currentAmount === prevAmount;
+                            
+                            // 디버깅용 로그 (나중에 제거)
+                            if (currentAmount > 0 && prevAmount > 0) {
+                              console.log(`${row.category.name} ${monthIndex + 1}월:`, {
+                                current: currentAmount,
+                                prev: prevAmount,
+                                isIncrease,
+                                isDecrease
+                              });
+                            }
+                            
                             return (
                               <TableCell 
                                 key={monthIndex} 
@@ -1422,7 +1470,48 @@ const ReportsPage: React.FC = () => {
                                 }}
                                 onMouseLeave={handleTooltipClose}
                               >
-                                {monthTransactions.length > 0 ? safeFormatCurrency(amount) : '-'}
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                                  {monthTransactions.length > 0 ? safeFormatCurrency(amount) : '-'}
+                                  {showArrow && (
+                                    isIncrease ? (
+                                      <KeyboardArrowDownIcon 
+                                        sx={{ 
+                                          fontSize: '1.2rem', 
+                                          fontWeight: 'bold',
+                                          color: theme.palette.success.main,
+                                          ml: 0.5
+                                        }} 
+                                      />
+                                    ) : isDecrease ? (
+                                      <KeyboardArrowUpIcon 
+                                        sx={{ 
+                                          fontSize: '1.2rem', 
+                                          fontWeight: 'bold',
+                                          color: theme.palette.error.main,
+                                          ml: 0.5
+                                        }} 
+                                      />
+                                    ) : isNewExpense ? (
+                                      <KeyboardArrowUpIcon 
+                                        sx={{ 
+                                          fontSize: '1.2rem', 
+                                          fontWeight: 'bold',
+                                          color: theme.palette.error.main,
+                                          ml: 0.5
+                                        }} 
+                                      />
+                                    ) : isSame ? (
+                                      <RemoveIcon 
+                                        sx={{ 
+                                          fontSize: '1.2rem', 
+                                          fontWeight: 'bold',
+                                          color: theme.palette.primary.main,
+                                          ml: 0.5
+                                        }} 
+                                      />
+                                    ) : null
+                                  )}
+                                </Box>
                               </TableCell>
                             );
                           })}
@@ -1462,6 +1551,69 @@ const ReportsPage: React.FC = () => {
                           const monthTotal = yearlyCategoryMonthlyData.reduce((sum, row) => 
                             sum + row.monthlyAmounts[monthIndex], 0
                           );
+                          
+                          // Calculate previous month's total for comparison
+                          const prevMonthIndex = monthIndex - 1;
+                          let prevMonthTotal = 0;
+                          
+                          if (prevMonthIndex < 0) {
+                            // 1월의 경우 이전 해 12월 데이터를 가져옴
+                            const prevYear = parseInt(year) - 1;
+                            const prevYearTransactions = allTransactions.filter(tx => tx.date.startsWith(`${prevYear}-`));
+                            const monthKey = `${prevYear}-12`;
+                            const monthTransactions = prevYearTransactions.filter(tx => tx.date.startsWith(monthKey));
+                            
+                            // Calculate total expenses for all categories in this month
+                            const rawExpenses = monthTransactions
+                              .filter(tx => tx.type === 'Expense')
+                              .reduce((sum, tx) => sum + tx.amount, 0);
+                            
+                            // Calculate total reimbursements for all categories in this month
+                            const reimbursements = monthTransactions
+                              .filter(tx => tx.type === 'Income' && tx.category_id != null)
+                              .reduce((sum, tx) => {
+                                const category = categories.find(c => c.id === tx.category_id);
+                                if (category?.is_reimbursement) {
+                                  return sum + tx.amount;
+                                }
+                                return sum;
+                              }, 0);
+                            
+                            prevMonthTotal = rawExpenses + reimbursements;
+                          } else {
+                            // 같은 해의 이전 월
+                            const monthKey = `${year}-${String(prevMonthIndex + 1).padStart(2, '0')}`;
+                            const monthTransactions = yearlyTransactions.filter(tx => tx.date.startsWith(monthKey));
+                            
+                            // Calculate total expenses for all categories in this month
+                            const rawExpenses = monthTransactions
+                              .filter(tx => tx.type === 'Expense')
+                              .reduce((sum, tx) => sum + tx.amount, 0);
+                            
+                            // Calculate total reimbursements for all categories in this month
+                            const reimbursements = monthTransactions
+                              .filter(tx => tx.type === 'Income' && tx.category_id != null)
+                              .reduce((sum, tx) => {
+                                const category = categories.find(c => c.id === tx.category_id);
+                                if (category?.is_reimbursement) {
+                                  return sum + tx.amount;
+                                }
+                                return sum;
+                              }, 0);
+                            
+                            prevMonthTotal = rawExpenses + reimbursements;
+                          }
+                          
+                          // Determine if total expense increased or decreased
+                          const currentAmount = Math.abs(monthTotal);
+                          const prevAmount = Math.abs(prevMonthTotal);
+                          
+                          const showArrow = currentAmount > 0; // 현재 월에 지출이 있으면 화살표 표시
+                          const isIncrease = showArrow && prevAmount > 0 && currentAmount < prevAmount; // 절대값이 작아지면 지출 증가
+                          const isDecrease = showArrow && prevAmount > 0 && currentAmount > prevAmount; // 절대값이 커지면 지출 감소
+                          const isNewExpense = showArrow && prevAmount === 0; // 이전 월에 지출이 없었던 경우
+                          const isSame = showArrow && prevAmount > 0 && currentAmount === prevAmount;
+                          
                           return (
                             <TableCell key={monthIndex} align="right" sx={{ 
                               fontWeight: 'bold',
@@ -1470,7 +1622,48 @@ const ReportsPage: React.FC = () => {
                               fontSize: '0.7rem',
                               px: 0.5
                             }}>
-                              {monthTotal !== 0 ? safeFormatCurrency(monthTotal) : '-'}
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                                {monthTotal !== 0 ? safeFormatCurrency(monthTotal) : '-'}
+                                {showArrow && (
+                                  isIncrease ? (
+                                    <KeyboardArrowDownIcon 
+                                      sx={{ 
+                                        fontSize: '1.2rem', 
+                                        fontWeight: 'bold',
+                                        color: theme.palette.success.main,
+                                        ml: 0.5
+                                      }} 
+                                    />
+                                  ) : isDecrease ? (
+                                    <KeyboardArrowUpIcon 
+                                      sx={{ 
+                                        fontSize: '1.2rem', 
+                                        fontWeight: 'bold',
+                                        color: theme.palette.error.main,
+                                        ml: 0.5
+                                      }} 
+                                    />
+                                  ) : isNewExpense ? (
+                                    <KeyboardArrowUpIcon 
+                                      sx={{ 
+                                        fontSize: '1.2rem', 
+                                        fontWeight: 'bold',
+                                        color: theme.palette.error.main,
+                                        ml: 0.5
+                                      }} 
+                                    />
+                                  ) : isSame ? (
+                                    <RemoveIcon 
+                                      sx={{ 
+                                        fontSize: '1.2rem', 
+                                        fontWeight: 'bold',
+                                        color: theme.palette.primary.main,
+                                        ml: 0.5
+                                      }} 
+                                    />
+                                  ) : null
+                                )}
+                              </Box>
                             </TableCell>
                           );
                         })}

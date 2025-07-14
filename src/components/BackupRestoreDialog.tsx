@@ -66,7 +66,7 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
         return backupFolder;
       }
     } catch (error) {
-      console.log('Could not get OneDrive path from environment:', error);
+
     }
 
     // Fallback to desktop if OneDrive not found

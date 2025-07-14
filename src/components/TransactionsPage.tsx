@@ -95,7 +95,6 @@ const TransactionsPage: React.FC = () => {
     loadAllData();
     const handleDataUpdate = () => loadAllData();
     const handleTransactionsImported = (event: CustomEvent) => {
-      console.log('TransactionsPage received transactionsImported event:', event.detail);
       setImportedIds(event.detail.importedIds);
       setImportedDuplicateCount(event.detail.duplicateCount || 0);
     };

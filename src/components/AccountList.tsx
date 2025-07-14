@@ -187,7 +187,7 @@ const AccountList: React.FC<AccountListProps> = ({
                 </TableCell>
                 <TableCell align="center">{account.type}</TableCell>
                 <TableCell align="right">
-                  <Typography color={account.balance < 0 ? 'error.main' : 'inherit'}>
+                  <Typography color={account.balance < -0.01 ? 'error.main' : 'inherit'}>
                     {formatCreditBalance(account)}
                   </Typography>
                 </TableCell>
