@@ -111,24 +111,25 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
       }
     });
 
-    // 일반 수입과 환급 처리
+    // 순수 수입만 계산 (환급 제외)
+    transactionsToSummarize.forEach(tx => {
+      if (tx.type === 'Income') {
+        const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
+        if (!cat?.is_reimbursement) {
+          // 순수 수입만 포함
+          result.income += tx.amount;
+        }
+      }
+    });
+
+    // 환급 처리 (지출에만 적용)
     transactionsToSummarize.forEach(tx => {
       if (tx.type === 'Income') {
         const cat = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
         if (cat?.is_reimbursement && cat.reimbursement_target_category_id) {
           const targetId = cat.reimbursement_target_category_id;
-          
-          // Add the full reimbursement amount to the target category
+          // 환급을 해당 카테고리의 지출에 적용
           expensesByCategory[targetId] = (expensesByCategory[targetId] || 0) + tx.amount;
-          
-          // Add to total income only if it results in a positive category balance
-          const newCategoryBalance = expensesByCategory[targetId];
-          if (newCategoryBalance > 0) {
-            result.income += newCategoryBalance;
-          }
-        } else {
-          // 일반 수입
-          result.income += tx.amount;
         }
       }
     });
@@ -140,35 +141,17 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
 
     return result;
   }, [transactionsToSummarize, categoryMap]);
-  // Total reimbursed (sum of reimbursement incomes that were actually applied)
+  // Total reimbursed (sum of all reimbursement incomes)
   const totalReimbursed = useMemo(() => {
-    // First get raw expenses by category
-    const expensesByCategory: Record<number, number> = {};
-    transactionsToSummarize.forEach(tx => {
-      if (tx.type === 'Expense' && tx.category_id != null) {
-        expensesByCategory[tx.category_id] = (expensesByCategory[tx.category_id] || 0) + tx.amount;
-      }
-    });
-
-    // Then calculate reimbursements, but only count what can be applied
-    let appliedReimbursements = 0;
-    transactionsToSummarize.forEach(tx => {
-      if (tx.type === 'Income' && tx.category_id != null) {
-        const cat = categoryMap.get(tx.category_id);
-        if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
-          const targetExpense = expensesByCategory[cat.reimbursement_target_category_id] || 0;
-          if (targetExpense < 0) { // Only if there are expenses to reimburse
-            // Calculate how much of the reimbursement can be applied
-            // targetExpense is negative, so we want to add up to 0
-            const applicableAmount = Math.min(tx.amount, Math.abs(targetExpense));
-            appliedReimbursements += applicableAmount;
-            // Update the remaining expense for this category
-            expensesByCategory[cat.reimbursement_target_category_id] += applicableAmount;
-          }
+    return transactionsToSummarize
+      .filter(tx => tx.type === 'Income' && tx.category_id != null)
+      .reduce((sum, tx) => {
+        const cat = categoryMap.get(tx.category_id!);
+        if (cat?.is_reimbursement) {
+          return sum + tx.amount;
         }
-      }
-    });
-    return appliedReimbursements;
+        return sum;
+      }, 0);
   }, [transactionsToSummarize, categoryMap]);
 
   // Total raw expenses (before reimbursements), signed
@@ -227,7 +210,7 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     return categoryExpenses.labels.map(id => id === -1 ? 'Undefined' : getCategoryName(id));
   }, [categoryExpenses.labels, categories]);
 
-  // 월별 트렌드 계산: non-reimbursement income and net expense (raw minus reimbursements)
+  // 월별 트렌드 계산: Total Income과 Net Expense
   const monthlyTrends = useMemo(() => {
     if (!allTransactions.length) return { labels: [], income: [], expense: [] };
     // group transactions by year-month
@@ -247,20 +230,25 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
     const expenseData: number[] = [];
     monthKeys.forEach(key => {
       const txns = monthMap.get(key)!;
-      // total non-reimbursement income
+      
+      // Total Income: 순수 수입만 (환급 제외)
       const totalIncome = txns
         .filter(t => t.type === 'Income' && !(categoryMap.get(t.category_id ?? -1)?.is_reimbursement))
         .reduce((sum, t) => sum + t.amount, 0);
-      // total reimbursements
-      const totalReimb = txns
-        .filter(t => t.type === 'Income' && categoryMap.get(t.category_id ?? -1)?.is_reimbursement)
-        .reduce((sum, t) => sum + t.amount, 0);
-      // total raw expenses
+      
+      // Total Raw Expenses: 순수 지출만 (환급 적용 전)
       const rawExpenses = txns
         .filter(t => t.type === 'Expense')
         .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-      // net expense after reimbursements
-      const netExpense = rawExpenses - totalReimb;
+      
+      // Total Reimbursed: 모든 환급
+      const totalReimbursed = txns
+        .filter(t => t.type === 'Income' && categoryMap.get(t.category_id ?? -1)?.is_reimbursement)
+        .reduce((sum, t) => sum + t.amount, 0);
+      
+      // Net Expense: 순수 지출 - 환급 (환급으로 지출을 상쇄)
+      const netExpense = rawExpenses - totalReimbursed;
+      
       incomeData.push(totalIncome);
       expenseData.push(netExpense);
     });
@@ -747,14 +735,14 @@ const TransactionSummary: React.FC<TransactionSummaryProps> = ({ monthTransactio
                   labels: monthlyTrends.labels,
                   datasets: [
                     {
-                      label: 'Income',
+                      label: 'Total Income',
                       data: monthlyTrends.income.map(value => Math.abs(value)),
                       backgroundColor: 'rgba(134, 239, 172, 0.6)',
                       borderColor: 'rgb(34, 197, 94)',
                       borderWidth: 1
                     },
                     {
-                      label: 'Expense',
+                      label: 'Net Expense',
                       data: monthlyTrends.expense.map(value => Math.abs(value)),
                       backgroundColor: 'rgba(252, 165, 165, 0.6)',
                       borderColor: 'rgb(239, 68, 68)',

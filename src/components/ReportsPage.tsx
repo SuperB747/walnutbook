@@ -187,50 +187,36 @@ const ReportsPage: React.FC = () => {
     categories.forEach(c => categoryMap.set(c.id, c));
 
     let income = 0;
-    // First calculate raw expenses by category (including undefined category as -1)
-    const expensesByCategory: Record<number, number> = {};
+    
+    // 순수 수입만 계산 (환급 제외)
     txns.forEach(tx => {
-      if (tx.type === 'Expense') {
-        const id = tx.category_id ?? -1;
-        expensesByCategory[id] = (expensesByCategory[id] || 0) + tx.amount;
-      } else if (tx.type === 'Income') {
-        // Add all non-reimbursement income first
+      if (tx.type === 'Income') {
         const cat = categoryMap.get(tx.category_id ?? -1);
         if (!cat?.is_reimbursement) {
+          // 순수 수입만 포함
           income += tx.amount;
         }
       }
     });
 
-    // Apply reimbursements and handle excess amounts
-    txns.forEach(tx => {
-      if (tx.type === 'Income' && tx.category_id != null) {
-        const cat = categoryMap.get(tx.category_id);
-        if (cat?.is_reimbursement && cat.reimbursement_target_category_id != null) {
-          const targetId = cat.reimbursement_target_category_id;
-          const targetExpense = expensesByCategory[targetId] || 0;
-          if (targetExpense < 0) {
-            // Calculate how much of the reimbursement can be applied
-            const applicableAmount = Math.min(tx.amount, Math.abs(targetExpense));
-            expensesByCategory[targetId] += applicableAmount;
-            // If reimbursement exceeds expense, add excess to income
-            const excess = tx.amount - applicableAmount;
-            if (excess > 0) {
-              income += excess;
-            }
-          } else {
-            // No expense to reimburse, all goes to income
-            income += tx.amount;
-          }
+    // 순수 지출 계산 (환급 적용 전)
+    const rawExpenses = txns
+      .filter(tx => tx.type === 'Expense')
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    
+    // 환급 총액 계산
+    const totalReimbursed = txns
+      .filter(tx => tx.type === 'Income' && tx.category_id != null)
+      .reduce((sum, tx) => {
+        const cat = categoryMap.get(tx.category_id!);
+        if (cat?.is_reimbursement) {
+          return sum + tx.amount;
         }
-      }
-    });
+        return sum;
+      }, 0);
 
-    // Calculate total net expenses (after reimbursements applied)
-    // Only include negative category balances in total expenses
-    const expense = Object.values(expensesByCategory)
-      .filter(amount => amount < 0)
-      .reduce((sum, amount) => sum + amount, 0);
+    // Net Expense: 순수 지출 - 환급
+    const expense = -(rawExpenses - totalReimbursed);
 
     return { income, expense };
   }
