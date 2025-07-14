@@ -774,7 +774,7 @@ const ReportsPage: React.FC = () => {
         };
       }
       
-      // Get all transactions up to the end of this month
+      // Get all transactions up to the end of this month (cumulative balance)
       const transactionsUpToMonth = yearlyTransactions.filter(tx => {
         const txDate = tx.date;
         const txYear = txDate.substring(0, 4);
@@ -786,7 +786,7 @@ const ReportsPage: React.FC = () => {
                (parseInt(txYear) === currentYear && parseInt(txMonth) <= currentMonth);
       });
       
-      // Calculate checking account balance
+      // Calculate checking account balance as of end of this month
       const checkingBalance = checkingAccounts.reduce((total, account) => {
         const accountTransactions = transactionsUpToMonth.filter(tx => tx.account_id === account.id);
         const balance = accountTransactions.reduce((sum, tx) => {
@@ -804,7 +804,7 @@ const ReportsPage: React.FC = () => {
         return total + balance;
       }, 0);
       
-      // Calculate savings account balance
+      // Calculate savings account balance as of end of this month
       const savingsBalance = savingsAccounts.reduce((total, account) => {
         const accountTransactions = transactionsUpToMonth.filter(tx => tx.account_id === account.id);
         const balance = accountTransactions.reduce((sum, tx) => {
