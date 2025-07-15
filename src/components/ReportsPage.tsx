@@ -752,7 +752,7 @@ const ReportsPage: React.FC = () => {
     // Get current date
     const now = new Date();
     const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1; // 1-based month
+    const currentMonth = now.getMonth() + 1;
     
     // Calculate cumulative balances for each month
     const monthlyData = Array.from({ length: 12 }, (_, monthIndex) => {
@@ -782,8 +782,14 @@ const ReportsPage: React.FC = () => {
         const currentYear = parseInt(year);
         const currentMonth = monthNumber;
         
+        // 현재 달인 경우: 모든 거래 포함 (실시간 잔액)
+        if (parseInt(txYear) === currentYear && parseInt(txMonth) === currentMonth) {
+          return true;
+        }
+        
+        // 과거 달인 경우: 해당 월까지의 거래만 포함 (1일 잔액)
         return parseInt(txYear) < currentYear || 
-               (parseInt(txYear) === currentYear && parseInt(txMonth) <= currentMonth);
+               (parseInt(txYear) === currentYear && parseInt(txMonth) < currentMonth);
       });
       
       // Calculate checking account balance as of end of this month
