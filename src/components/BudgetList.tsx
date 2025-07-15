@@ -44,14 +44,27 @@ const BudgetList: React.FC<BudgetListProps> = ({
   };
 
   const calculateSpentAmount = (category_id: number) => {
-    return transactions
-      .filter(
-        (t) =>
-          t.category_id === category_id &&
-          t.type === 'Expense' &&
-          t.date.startsWith(month)
-      )
+    // 해당 월의 거래만 필터링
+    const monthTransactions = transactions.filter(t => t.date.startsWith(month));
+    
+    // 해당 카테고리의 지출 계산
+    const rawExpenses = monthTransactions
+      .filter(t => t.category_id === category_id && t.type === 'Expense')
       .reduce((sum, t) => sum + t.amount, 0);
+    
+    // 해당 카테고리로 향하는 환급 계산
+    const reimbursements = monthTransactions
+      .filter(t => t.type === 'Income' && t.category_id != null)
+      .reduce((sum, t) => {
+        const category = categories.find(c => c.id === t.category_id);
+        if (category?.is_reimbursement && category.reimbursement_target_category_id === category_id) {
+          return sum + t.amount;
+        }
+        return sum;
+      }, 0);
+    
+    // 순 지출 = 원래 지출 + 환급 (지출은 음수, 환급은 양수이므로 더하기)
+    return rawExpenses + reimbursements;
   };
 
   const getProgressColor = (progress: number) => {
