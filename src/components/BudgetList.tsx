@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Budget, Transaction, Category } from '../db';
+import { safeFormatCurrency } from '../utils';
 
 interface BudgetListProps {
   budgets: Budget[];
@@ -104,18 +105,34 @@ const BudgetList: React.FC<BudgetListProps> = ({
             .map((budget) => {
             const spent = Math.abs(calculateSpentAmount(budget.category_id));
             const remaining = budget.amount - spent;
+            // Handle near-zero remaining amounts as exactly zero
+            const normalizedRemaining = Math.abs(remaining) < 0.005 ? 0 : remaining;
             const hasBudget = budget.amount > 0;
-            const progress = hasBudget ? Math.min((spent / budget.amount) * 100, 999) : 0;
-            // fillPercent: how much to fill within 0-200% scale
-            const fillPercent = hasBudget ? Math.min(progress / 2, 100) : 0;
-            // barColor based on actual progress
+            const hasSpending = spent > 0;
+            
+            // Calculate progress and fill percent
+            let progress = 0;
+            let fillPercent = 0;
+            
+            if (hasBudget) {
+              progress = Math.min((spent / budget.amount) * 100, 999);
+              fillPercent = Math.min(progress / 2, 100);
+            } else if (hasSpending) {
+              // Budget is 0 but there's spending - show as 100% red
+              progress = 100;
+              fillPercent = 100;
+            }
+            
+            // barColor based on remaining amount and budget status
             const barColor = hasBudget
-              ? (progress > 200
+              ? (normalizedRemaining < 0
                   ? 'error.dark'
-                  : progress > 100
-                    ? 'error.light'
+                  : normalizedRemaining === 0
+                    ? 'success.main'  // Green for exactly zero remaining
                     : 'success.main')
-              : undefined;
+              : hasSpending
+                ? 'error.dark'  // Red for spending when budget is 0
+                : undefined;
 
             return (
               <TableRow 
@@ -141,10 +158,10 @@ const BudgetList: React.FC<BudgetListProps> = ({
                 <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>{formatCurrency(spent)}</TableCell>
                 <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>
                   <Typography
-                    color={remaining < 0 ? 'error' : 'success'}
+                    color={normalizedRemaining < 0 ? 'error' : normalizedRemaining === 0 ? 'text.primary' : 'success'}
                     fontWeight="bold"
                   >
-                    {formatCurrency(remaining)}
+                    {safeFormatCurrency(normalizedRemaining)}
                   </Typography>
                 </TableCell>
                 <TableCell sx={{ minWidth: 0 }}>
@@ -167,7 +184,7 @@ const BudgetList: React.FC<BudgetListProps> = ({
                     </Box>
                     <Box sx={{ minWidth: 35 }}>
                       <Typography variant="body2" color="text.secondary">
-                        {hasBudget ? Math.round(progress) : 0}%
+                        {hasBudget ? Math.round(progress) : hasSpending ? 100 : 0}%
                       </Typography>
                     </Box>
                   </Box>

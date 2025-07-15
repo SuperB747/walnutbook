@@ -1159,6 +1159,8 @@ const ReportsPage: React.FC = () => {
                           const spent = monthlyCategoryRaw.find(i => i.id === id)?.amount || 0;
                           const budgetAmount = budgets.find(b => b.category_id === id)?.amount || 0;
                           const diff = budgetAmount + spent; // Expense는 음수이므로 더하기
+                          // Handle near-zero diff values as exactly zero
+                          const normalizedDiff = Math.abs(diff) < 0.005 ? 0 : diff;
                           totalSpent += spent;
                           totalBudget += budgetAmount;
                           // Prepare detail list for tooltip: date, payee, amount
@@ -1180,8 +1182,8 @@ const ReportsPage: React.FC = () => {
                               <TableCell>{label}</TableCell>
                               <TableCell align="right">{safeFormatCurrency(spent)}</TableCell>
                               <TableCell align="right">{safeFormatCurrency(budgetAmount)}</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: 'bold', color: diff < 0 ? theme.palette.error.main : theme.palette.success.main }}>
-                                {safeFormatCurrency(diff)}
+                              <TableCell align="right" sx={{ fontWeight: 'bold', color: normalizedDiff < 0 ? theme.palette.error.main : normalizedDiff === 0 ? theme.palette.text.primary : theme.palette.success.main }}>
+                                {safeFormatCurrency(normalizedDiff)}
                               </TableCell>
                             </TableRow>
                           );
@@ -1193,8 +1195,15 @@ const ReportsPage: React.FC = () => {
                         <TableCell sx={{ fontWeight: 'bold' }}>Total</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{safeFormatCurrency(monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0))}</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{safeFormatCurrency(budgets.reduce((sum, b) => sum + b.amount, 0))}</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold', color: (budgets.reduce((sum, b) => sum + b.amount, 0) + monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0)) < 0 ? theme.palette.error.main : theme.palette.success.main }}>
-                          {safeFormatCurrency(budgets.reduce((sum, b) => sum + b.amount, 0) + monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0))}
+                        <TableCell align="right" sx={{ fontWeight: 'bold', color: (() => {
+                          const totalDiff = budgets.reduce((sum, b) => sum + b.amount, 0) + monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0);
+                          const normalizedTotalDiff = Math.abs(totalDiff) < 0.005 ? 0 : totalDiff;
+                          return normalizedTotalDiff < 0 ? theme.palette.error.main : normalizedTotalDiff === 0 ? theme.palette.text.primary : theme.palette.success.main;
+                        })() }}>
+                          {safeFormatCurrency((() => {
+                            const totalDiff = budgets.reduce((sum, b) => sum + b.amount, 0) + monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0);
+                            return Math.abs(totalDiff) < 0.005 ? 0 : totalDiff;
+                          })())}
                         </TableCell>
                       </TableRow>
                     </TableFooter>

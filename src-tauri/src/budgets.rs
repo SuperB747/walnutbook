@@ -65,22 +65,43 @@ pub fn update_budget(app: AppHandle, budget: Budget) -> Result<Vec<Budget>, Stri
 }
 
 #[tauri::command]
-pub fn delete_budget(app: AppHandle, id: i64) -> Result<Vec<Budget>, String> {
+pub fn delete_budget(app: AppHandle, id: i64, currentMonth: String) -> Result<Vec<Budget>, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     
-    // Get month before deleting
-    let month: String = conn.query_row(
-        "SELECT month FROM budgets WHERE id = ?1",
+    // Check if budget exists before deleting
+    let exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM budgets WHERE id = ?1",
         params![id],
         |row| row.get(0),
     ).map_err(|e| e.to_string())?;
     
-    conn.execute(
+    if !exists {
+        return Err(format!("Budget with id {} not found", id));
+    }
+    
+    // Get budget info for logging
+    let budget_info: Result<(i64, String), _> = conn.query_row(
+        "SELECT category_id, month FROM budgets WHERE id = ?1",
+        params![id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    );
+    
+    // Delete the budget
+    let rows_affected = conn.execute(
         "DELETE FROM budgets WHERE id = ?1",
         params![id],
     )
     .map_err(|e| e.to_string())?;
     
-    get_budgets(app, month)
+    if rows_affected == 0 {
+        return Err(format!("Failed to delete budget with id {}", id));
+    }
+    
+    // Log successful deletion
+    if let Ok((category_id, month)) = budget_info {
+        println!("Successfully deleted budget: id={}, category_id={}, month={}", id, category_id, month);
+    }
+    
+    get_budgets(app, currentMonth)
 } 

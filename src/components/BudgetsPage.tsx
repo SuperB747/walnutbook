@@ -22,7 +22,7 @@ import BudgetForm from './BudgetForm';
 import { Budget, Transaction, Category } from '../db';
 import { enCA } from 'date-fns/locale';
 import { invoke } from '@tauri-apps/api/core';
-import { formatCurrency } from '../utils';
+import { formatCurrency, safeFormatCurrency } from '../utils';
 
 const MONTHS = [
   { value: '01', label: 'January' },
@@ -106,12 +106,17 @@ const BudgetsPage: React.FC = () => {
 
   const handleDeleteBudget = async (budget: Budget) => {
     try {
-      const updatedBudgets = await invoke<Budget[]>('delete_budget', { id: budget.id });
+      const updatedBudgets = await invoke<Budget[]>('delete_budget', { 
+        id: budget.id, 
+        currentMonth: selectedMonth 
+      });
       setBudgets(updatedBudgets);
       window.dispatchEvent(new Event('budgetsUpdated'));
       setSnackbar({ open: true, message: 'Budget deleted successfully.', severity: 'success' });
-    } catch {
-      setSnackbar({ open: true, message: 'Failed to delete budget.', severity: 'error' });
+    } catch (error) {
+      console.error('Delete budget error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete budget.';
+      setSnackbar({ open: true, message: errorMessage, severity: 'error' });
     }
   };
 
@@ -164,6 +169,8 @@ const BudgetsPage: React.FC = () => {
     );
   }, [transactions, selectedMonth, budgets]);
   const remainingBudget = totalBudget - totalSpent;
+  // Handle near-zero remaining amounts as exactly zero
+  const normalizedRemainingBudget = Math.abs(remainingBudget) < 0.005 ? 0 : remainingBudget;
   const progress = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
   const handleAutoGenerateBudget = async () => {
@@ -333,9 +340,9 @@ const BudgetsPage: React.FC = () => {
                 <Typography
                   variant="h5"
                   component="div"
-                  color={remainingBudget < 0 ? 'error.main' : 'success.main'}
+                  color={normalizedRemainingBudget < 0 ? 'error.main' : normalizedRemainingBudget === 0 ? 'text.primary' : 'success.main'}
                 >
-                  {formatCurrency(remainingBudget)}
+                  {safeFormatCurrency(normalizedRemainingBudget)}
                 </Typography>
               </CardContent>
             </Card>
