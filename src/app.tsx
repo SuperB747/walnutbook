@@ -404,22 +404,13 @@ export const App: React.FC = () => {
 
   const handleBackup = async () => {
     try {
-      const backupDir = await findOneDrivePath();
-      const now = new Date();
-      const pad = (n: number) => n.toString().padStart(2, '0');
-      const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-      const savePath = `${backupDir}/walnutbook_backup_${timestamp}.db`;
+      const backupInfo = await invoke<{ timestamp: string; file_size: number }>('manual_backup_to_onedrive');
       
-      await invoke('backup_database', { savePath });
-      
-              const isOneDrive = savePath.includes('OneDrive') || savePath.includes('WalnutBook_Backups');
-        setSnackbar({
-          open: true,
-          message: isOneDrive 
-            ? `Backup saved to OneDrive/WalnutBook_Backups: ${savePath.split('/').pop()}`
-            : `Backup saved to Desktop: ${savePath.split('/').pop()}`,
-          severity: 'success',
-        });
+      setSnackbar({
+        open: true,
+        message: `Backup saved to OneDrive/WalnutBook_Backups: ${backupInfo.timestamp} (${(backupInfo.file_size / 1024).toFixed(1)} KB)`,
+        severity: 'success',
+      });
     } catch (err) {
       console.error('Backup failed:', err);
       setSnackbar({
@@ -458,6 +449,8 @@ export const App: React.FC = () => {
       console.error('Failed to load dialog data:', error);
     }
   };
+
+
 
   // Load data when dialogs open
   useEffect(() => {

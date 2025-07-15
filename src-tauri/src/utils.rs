@@ -116,18 +116,9 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS account_import_settings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id INTEGER NOT NULL,
-            csv_sign_logic TEXT NOT NULL DEFAULT 'standard',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
-            UNIQUE(account_id)
-        )",
-        [],
-    )
-    .map_err(|e| e.to_string())?;
+    // Remove account_import_settings table if it exists (migration)
+    conn.execute("DROP TABLE IF EXISTS account_import_settings", []).ok();
+
 
     Ok(())
 }

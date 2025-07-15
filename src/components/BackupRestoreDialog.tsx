@@ -14,9 +14,9 @@ import {
   IconButton,
   Divider,
   Chip,
-  Alert
+  Alert,
 } from '@mui/material';
-import { Refresh as RefreshIcon, RestoreFromTrash as RestoreIcon } from '@mui/icons-material';
+import { Refresh as RefreshIcon, RestoreFromTrash as RestoreIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
 import { desktopDir } from '@tauri-apps/api/path';
 
@@ -26,6 +26,8 @@ interface BackupInfo {
   version: string;
   is_compressed: boolean;
 }
+
+
 
 interface BackupRestoreDialogProps {
   open: boolean;
@@ -37,6 +39,7 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
   const [status, setStatus] = useState<{ message: string; error: boolean } | null>(null);
   const [backupHistory, setBackupHistory] = useState<BackupInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
 
   // Load backup history when dialog opens
   useEffect(() => {
@@ -53,6 +56,8 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
       console.error('Failed to load backup history:', error);
     }
   };
+
+
 
   // Function to find OneDrive path and create backup folder
   const findOneDrivePath = async (): Promise<string> => {
@@ -74,50 +79,27 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
   };
 
   const handleManualBackup = async () => {
-    setStatus({ message: 'Verifying database integrity...', error: false });
+    setStatus({ message: 'Creating manual backup...', error: false });
     setIsLoading(true);
     try {
-      // Determine OneDrive path
-      const backupDir = await findOneDrivePath();
-      const now = new Date();
-      const pad = (n: number) => n.toString().padStart(2, '0');
-      const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-      const savePath = `${backupDir}/walnutbook_backup_${timestamp}.db`;
-      
-      setStatus({ message: 'Creating backup...', error: false });
-      // Invoke Rust to copy the DB file to OneDrive
-      await invoke('backup_database', { savePath });
-      setStatus({ message: `✅ Backup successful! Saved to: ${savePath}`, error: false });
-      
-      // Refresh backup history
-      await loadBackupHistory();
-    } catch (err) {
-      console.error('Backup failed:', err);
-      setStatus({ message: '❌ Backup failed: ' + String(err), error: true });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleAutoBackup = async () => {
-    setStatus({ message: 'Creating automatic backup...', error: false });
-    setIsLoading(true);
-    try {
-      const backupInfo = await invoke<BackupInfo>('auto_backup_to_onedrive');
+      // Invoke Rust to create manual backup in Manual_Save folder
+      const backupInfo = await invoke<BackupInfo>('manual_backup_to_onedrive');
       setStatus({ 
-        message: `✅ Auto backup successful! Created: ${backupInfo.timestamp} (${(backupInfo.file_size / 1024).toFixed(1)} KB)`, 
+        message: `✅ Manual backup successful! Created: ${backupInfo.timestamp} (${(backupInfo.file_size / 1024).toFixed(1)} KB)`, 
         error: false 
       });
       
       // Refresh backup history
       await loadBackupHistory();
     } catch (err) {
-      console.error('Auto backup failed:', err);
-      setStatus({ message: '❌ Auto backup failed: ' + String(err), error: true });
+      console.error('Manual backup failed:', err);
+      setStatus({ message: '❌ Manual backup failed: ' + String(err), error: true });
     } finally {
       setIsLoading(false);
     }
   };
+
+
 
   const handleRestore = () => {
     setStatus({ message: 'Selecting backup file...', error: false });
@@ -178,17 +160,84 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
   };
 
   const formatTimestamp = (timestamp: string): string => {
-    // Convert YYYYMMDD_HHMMSS to readable format
+    // Handle different timestamp formats
     if (timestamp.length === 15) {
+      // Format: YYYYMMDD_HHMMSS
       const year = timestamp.substring(0, 4);
       const month = timestamp.substring(4, 6);
       const day = timestamp.substring(6, 8);
       const hour = timestamp.substring(9, 11);
       const minute = timestamp.substring(11, 13);
       const second = timestamp.substring(13, 15);
-      return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+      
+      // Create a more readable format with English date/time
+      const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
+      const now = new Date();
+      const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+      
+      if (diffInHours < 1) {
+        return `Just now (${hour}:${minute})`;
+      } else if (diffInHours < 24) {
+        return `${diffInHours} hours ago (${month}/${day} ${hour}:${minute})`;
+      } else if (diffInHours < 24 * 7) {
+        const days = Math.floor(diffInHours / 24);
+        return `${days} days ago (${month}/${day} ${hour}:${minute})`;
+      } else {
+        return `${year}-${month}-${day} ${hour}:${minute}`;
+      }
+    } else if (timestamp.length === 31) {
+      // Handle the duplicated timestamp format: YYYYMMDD_HHMMSS_YYYYMMDD_HHMMSS
+      // Extract the first part (YYYYMMDD_HHMMSS)
+      const firstPart = timestamp.substring(0, 15);
+      const year = firstPart.substring(0, 4);
+      const month = firstPart.substring(4, 6);
+      const day = firstPart.substring(6, 8);
+      const hour = firstPart.substring(9, 11);
+      const minute = firstPart.substring(11, 13);
+      const second = firstPart.substring(13, 15);
+      
+      // Create a more readable format with English date/time
+      const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
+      const now = new Date();
+      const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+      
+      if (diffInHours < 1) {
+        return `Just now (${hour}:${minute})`;
+      } else if (diffInHours < 24) {
+        return `${diffInHours} hours ago (${month}/${day} ${hour}:${minute})`;
+      } else if (diffInHours < 24 * 7) {
+        const days = Math.floor(diffInHours / 24);
+        return `${days} days ago (${month}/${day} ${hour}:${minute})`;
+      } else {
+        return `${year}-${month}-${day} ${hour}:${minute}`;
+      }
     }
+    // Fallback for other formats
     return timestamp;
+  };
+
+  const handleDeleteBackup = async (timestamp: string) => {
+    try {
+      await invoke('delete_backup_from_history', { timestamp });
+      setStatus({ message: '✅ Backup deleted successfully', error: false });
+      await loadBackupHistory();
+    } catch (error) {
+      setStatus({ message: '❌ Failed to delete backup: ' + String(error), error: true });
+    }
+  };
+
+  const handleRestoreBackup = async (timestamp: string) => {
+    try {
+      setStatus({ message: 'Restoring backup...', error: false });
+      await invoke('restore_backup_from_history', { timestamp });
+      setStatus({ message: '✅ Backup restored successfully', error: false });
+      onRestore?.();
+      setTimeout(() => {
+        handleClose();
+      }, 2000);
+    } catch (error) {
+      setStatus({ message: '❌ Failed to restore backup: ' + String(error), error: true });
+    }
   };
 
   const handleClose = () => {
@@ -197,7 +246,7 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Backup & Restore Database</DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
@@ -210,15 +259,7 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
               disabled={isLoading}
               fullWidth
             >
-              Manual Backup
-            </Button>
-            <Button 
-              variant="outlined" 
-              onClick={handleAutoBackup}
-              disabled={isLoading}
-              fullWidth
-            >
-              Auto Backup to OneDrive
+              Backup Now to OneDrive
             </Button>
           </Box>
 
@@ -228,6 +269,8 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
               {status.message}
             </Alert>
           )}
+
+
 
           {/* Backup History */}
           <Box sx={{ mt: 2 }}>
@@ -240,7 +283,7 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
             
             {backupHistory.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
-                No automatic backups found. Create your first backup using the "Auto Backup" button.
+                No backups found. Create your first backup using the "Backup Now to OneDrive" button.
               </Typography>
             ) : (
               <List sx={{ maxHeight: 300, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
@@ -263,12 +306,18 @@ const BackupRestoreDialog: React.FC<BackupRestoreDialogProps> = ({ open, onClose
                         <IconButton 
                           edge="end" 
                           aria-label="restore"
-                          onClick={() => {
-                            // TODO: Implement restore from history
-                            setStatus({ message: 'Restore from history not yet implemented', error: true });
-                          }}
+                          onClick={() => handleRestoreBackup(backup.timestamp)}
+                          sx={{ mr: 1 }}
                         >
                           <RestoreIcon />
+                        </IconButton>
+                        <IconButton 
+                          edge="end" 
+                          aria-label="delete"
+                          onClick={() => handleDeleteBackup(backup.timestamp)}
+                          color="error"
+                        >
+                          <DeleteIcon />
                         </IconButton>
                       </ListItemSecondaryAction>
                     </ListItem>
