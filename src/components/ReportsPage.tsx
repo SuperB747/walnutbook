@@ -1216,7 +1216,7 @@ const ReportsPage: React.FC = () => {
                             const displayNote = getDisplayNotes(tx.notes);
                             return (
                               <TableRow key={idx}>
-                                <TableCell sx={{ fontSize: '0.68rem', py: 0.3, px: 0.7 }}>{format(new Date(tx.date), 'yyyy-MM-dd')}</TableCell>
+                                <TableCell sx={{ fontSize: '0.68rem', py: 0.3, px: 0.7 }}>{tx.date}</TableCell>
                                 <TableCell sx={{ py: 0.3, px: 0.7 }}>
                                   <Typography noWrap sx={{ fontSize: '0.68rem' }}>
                                     {tx.payee}
@@ -1733,7 +1733,7 @@ const ReportsPage: React.FC = () => {
                             const displayNote = getDisplayNotes(tx.notes);
                             return (
                               <TableRow key={idx}>
-                                <TableCell sx={{ fontSize: '0.68rem', py: 0.3, px: 0.7 }}>{format(new Date(tx.date), 'yyyy-MM-dd')}</TableCell>
+                                <TableCell sx={{ fontSize: '0.68rem', py: 0.3, px: 0.7 }}>{tx.date}</TableCell>
                                 <TableCell sx={{ py: 0.3, px: 0.7 }}>
                                   <Typography noWrap sx={{ fontSize: '0.68rem' }}>
                                     {tx.payee}

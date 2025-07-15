@@ -50,7 +50,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
     types: [] as string[],
     categories: [] as string[],
     accounts: [] as number[],
-    dateRange: { start: '', end: '' },
+    amountMin: '', // 추가: 최소 금액
+    amountMax: '', // 추가: 최대 금액
   });
   const [selectedIds, setSelectedIds] = useState<number[]>(initialSelectedIds);
   
@@ -75,16 +76,35 @@ const TransactionList: React.FC<TransactionListProps> = ({
   // 필터링된 거래 내역
   const filteredTransactions = useMemo(() => {
     return transactions.filter(transaction => {
-      const { searchTerm, types, categories: catFilter, accounts: accFilter, dateRange } = filter;
-      const searchMatch = searchTerm === '' || 
-        transaction.payee.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        transaction.notes?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getCategoryName(categories, transaction.category_id).toLowerCase().includes(searchTerm.toLowerCase());
+      const { searchTerm, types, categories: catFilter, accounts: accFilter, amountMin, amountMax } = filter;
+      const searchMatch = (() => {
+        if (searchTerm === '') return true;
+        // 금액 숫자만 입력된 경우: 금액(절대값)에 해당 숫자가 포함되는지 확인
+        const trimmed = searchTerm.trim();
+        if (/^-?\d*\.?\d*$/.test(trimmed)) {
+          const searchAmount = Math.abs(parseFloat(trimmed));
+          const absAmount = Math.abs(transaction.amount);
+          // 정확히 일치하는 경우
+          if (absAmount === searchAmount) return true;
+          // 숫자가 금액에 포함되는 경우 (예: "1" 입력 시 173.50, 100 등 검색)
+          return absAmount.toString().includes(trimmed);
+        }
+        // 기존 텍스트 검색
+        return (
+          transaction.payee.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.notes?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          getCategoryName(categories, transaction.category_id).toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      })();
       const typeMatch = types.length === 0 || types.includes(transaction.type.toLowerCase());
       const categoryMatch = catFilter.length === 0 || catFilter.includes(getCategoryName(categories, transaction.category_id));
       const accountMatch = accFilter.length === 0 || accFilter.includes(transaction.account_id);
-      const dateMatch = (!dateRange.start || transaction.date >= dateRange.start) && (!dateRange.end || transaction.date <= dateRange.end);
-      return searchMatch && typeMatch && categoryMatch && accountMatch && dateMatch;
+      // 금액 필터: 절대값으로 비교
+      const absAmount = Math.abs(transaction.amount);
+      const amountMatch = 
+        (amountMin === '' || absAmount >= parseFloat(amountMin)) &&
+        (amountMax === '' || absAmount <= parseFloat(amountMax));
+      return searchMatch && typeMatch && categoryMatch && accountMatch && amountMatch;
     });
   }, [transactions, categories, filter]);
 
@@ -118,7 +138,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   };
 
   // 필터 초기화
-  const handleClearFilters = () => setFilter({ searchTerm: '', types: [], categories: [], accounts: [], dateRange: { start: '', end: '' } });
+  const handleClearFilters = () => setFilter({ searchTerm: '', types: [], categories: [], accounts: [], amountMin: '', amountMax: '' });
 
   // 기타 유틸
   const getDisplayPayee = (transaction: Transaction) => {
@@ -189,52 +209,20 @@ const TransactionList: React.FC<TransactionListProps> = ({
           <InputLabel>Category</InputLabel>
           <Select multiple value={filter.categories} onChange={e => setFilter(f => ({ ...f, categories: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value }))} input={<OutlinedInput label="Category" />} renderValue={selected => <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, pr: 2 }}>{selected.map((value: string) => <Chip key={value} label={value} size="small" />)}</Box>} MenuProps={{ MenuListProps: { dense: true } }}>{uniqueCategories.sort().map(category => (<MenuItem key={category} value={category} dense><Checkbox checked={filter.categories.indexOf(category) > -1} size="small" /><ListItemText primary={category} /></MenuItem>))}</Select>
         </FormControl>
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
-          <DatePicker 
-            label="From Date" 
-            value={filter.dateRange.start ? parse(filter.dateRange.start, 'yyyy-MM-dd', new Date()) : null} 
-            onChange={newDate => setFilter(f => ({ ...f, dateRange: { ...f.dateRange, start: newDate ? newDate.toISOString().split('T')[0] : '' } }))} 
-            slotProps={{ 
-              textField: { 
-                size: 'small', 
-                sx: { 
-                  width: 150,
-                  '& .MuiInputAdornment-root': {
-                    '& .MuiButtonBase-root': {
-                      bgcolor: 'transparent',
-                      '&:hover': {
-                        bgcolor: 'rgba(0, 0, 0, 0.04)',
-                        color: 'primary.main'
-                      }
-                    }
-                  }
-                } 
-              } 
-            }} 
-          />
-          <DatePicker 
-            label="To Date" 
-            value={filter.dateRange.end ? parse(filter.dateRange.end, 'yyyy-MM-dd', new Date()) : null} 
-            onChange={newDate => setFilter(f => ({ ...f, dateRange: { ...f.dateRange, end: newDate ? newDate.toISOString().split('T')[0] : '' } }))} 
-            slotProps={{ 
-              textField: { 
-                size: 'small', 
-                sx: { 
-                  width: 150,
-                  '& .MuiInputAdornment-root': {
-                    '& .MuiButtonBase-root': {
-                      bgcolor: 'transparent',
-                      '&:hover': {
-                        bgcolor: 'rgba(0, 0, 0, 0.04)',
-                        color: 'primary.main'
-                      }
-                    }
-                  }
-                } 
-              } 
-            }} 
-          />
-        </LocalizationProvider>
+        <TextField
+          label="Min Amount"
+          size="small"
+          value={filter.amountMin}
+          onChange={e => setFilter(f => ({ ...f, amountMin: e.target.value }))}
+          sx={{ width: 120 }}
+        />
+        <TextField
+          label="Max Amount"
+          size="small"
+          value={filter.amountMax}
+          onChange={e => setFilter(f => ({ ...f, amountMax: e.target.value }))}
+          sx={{ width: 120 }}
+        />
         <Button variant="outlined" size="small" onClick={handleClearFilters} sx={{ minWidth: 100, height: 40 }}>Clear Filters</Button>
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, p: 0.5 }}>
