@@ -228,8 +228,11 @@ const ReportsPage: React.FC = () => {
     const categoryMap = new Map<number, Category>();
     categories.forEach(c => categoryMap.set(c.id, c));
 
-    // Find Reimbursable category ID
-    const reimbursableCategory = categories.find(c => c.name === 'Reimbursable');
+    // Find Reimbursable category ID (case insensitive)
+    const reimbursableCategory = categories.find(c => 
+      c.name.toLowerCase() === 'reimbursable' || 
+      c.name.toLowerCase().includes('reimbursable')
+    );
     const reimbursableId = reimbursableCategory?.id;
 
     // First calculate raw expenses by category
@@ -265,14 +268,30 @@ const ReportsPage: React.FC = () => {
 
 
 
-    // Only include categories that have negative net expenses (exclude positive/income categories)
+    // Include all categories that have expenses or reimbursements (including positive amounts)
     const result = Object.entries(expensesByCategory)
-      .filter(([, amount]) => amount < 0)
+      .filter(([, amount]) => amount !== 0) // 0이 아닌 모든 카테고리 포함
       .map(([id, amount]) => ({ 
         id: Number(id), 
         amount: amount
       }))
       .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    
+    // Also include Reimbursable category if it has positive reimbursements
+    if (reimbursableId) {
+      const reimbursableAmount = monthlyTransactions
+        .filter(tx => tx.type === 'Income' && tx.category_id === reimbursableId)
+        .reduce((sum, tx) => sum + tx.amount, 0);
+      
+      if (reimbursableAmount > 0) {
+        result.push({
+          id: reimbursableId,
+          amount: reimbursableAmount
+        });
+      }
+    }
+    
+
     
     return result;
   }, [monthlyTransactions, categories]);
@@ -1146,17 +1165,40 @@ const ReportsPage: React.FC = () => {
                     </TableHead>
                     <TableBody>
                       {(() => {
-                        // Combine category IDs from expenses and budgets, excluding undefined
-                        const ids = new Set<number>([
-                          ...monthlyCategoryRaw.map(i => i.id),
-                          ...budgets.map(b => b.category_id)
-                        ]);
-                        const allIds = Array.from(ids).filter(id => id !== -1);
+                        // Show categories that have budgets OR have spending (including positive amounts from reimbursements)
+                        const budgetedCategoryIds = budgets.map(b => b.category_id);
+                        const spendingCategoryIds = monthlyCategoryRaw.map(i => i.id);
+                        const allIds = [...new Set([...budgetedCategoryIds, ...spendingCategoryIds])].filter(id => id !== -1);
+                        
+
                         let totalSpent = 0;
                         let totalBudget = 0;
-                        return allIds.map(id => {
+                        
+                        const rows = allIds.map(id => {
                           const label = id === -1 ? 'Undefined' : categories.find(c => c.id === id)?.name || 'Undefined';
-                          const spent = monthlyCategoryRaw.find(i => i.id === id)?.amount || 0;
+                          // Spent: 해당 카테고리의 Expense 합 + 해당 카테고리로 들어온 환급(Incomes) 합
+                          const expense = monthlyTransactions
+                            .filter(tx => tx.type === 'Expense' && tx.category_id === id)
+                            .reduce((sum, tx) => sum + tx.amount, 0);
+                          const reimbursement = monthlyTransactions
+                            .filter(tx => tx.type === 'Income' && tx.category_id != null)
+                            .reduce((sum, tx) => {
+                              const cat = categories.find(c => c.id === tx.category_id);
+                              if (cat?.is_reimbursement && cat.reimbursement_target_category_id === id) {
+                                return sum + tx.amount;
+                              }
+                              return sum;
+                            }, 0);
+                          // Reimbursable 카테고리 자체는 해당 카테고리로 들어온 Income(환급)만 합산
+                          const cat = categories.find(c => c.id === id);
+                          let spent = 0;
+                          if (cat?.is_reimbursement) {
+                            spent = monthlyTransactions
+                              .filter(tx => tx.type === 'Income' && tx.category_id === id)
+                              .reduce((sum, tx) => sum + tx.amount, 0);
+                          } else {
+                            spent = expense + reimbursement;
+                          }
                           const budgetAmount = budgets.find(b => b.category_id === id)?.amount || 0;
                           const diff = budgetAmount + spent; // Expense는 음수이므로 더하기
                           // Handle near-zero diff values as exactly zero
@@ -1180,7 +1222,15 @@ const ReportsPage: React.FC = () => {
                               sx={{ cursor: 'pointer' }}
                             >
                               <TableCell>{label}</TableCell>
-                              <TableCell align="right">{safeFormatCurrency(spent)}</TableCell>
+                              <TableCell align="right">
+                                {spent < 0 ? (
+                                  <Typography color="error.main">-{safeFormatCurrency(Math.abs(spent))}</Typography>
+                                ) : spent > 0 ? (
+                                  <Typography color="success.main">+{safeFormatCurrency(spent)}</Typography>
+                                ) : (
+                                  safeFormatCurrency(0)
+                                )}
+                              </TableCell>
                               <TableCell align="right">{safeFormatCurrency(budgetAmount)}</TableCell>
                               <TableCell align="right" sx={{ fontWeight: 'bold', color: normalizedDiff < 0 ? theme.palette.error.main : normalizedDiff === 0 ? theme.palette.text.primary : theme.palette.success.main }}>
                                 {safeFormatCurrency(normalizedDiff)}
@@ -1188,20 +1238,50 @@ const ReportsPage: React.FC = () => {
                             </TableRow>
                           );
                         });
+                        
+                        return rows;
                       })()}
                     </TableBody>
                     <TableFooter>
                       <TableRow sx={{ backgroundColor: theme.palette.action.selected }}>
                         <TableCell sx={{ fontWeight: 'bold' }}>Total</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>{safeFormatCurrency(monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0))}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>{safeFormatCurrency((() => {
+                          const budgetedCategoryIds = budgets.map(b => b.category_id);
+                          const spendingCategoryIds = monthlyCategoryRaw.map(i => i.id);
+                          const allIds = [...new Set([...budgetedCategoryIds, ...spendingCategoryIds])].filter(id => id !== -1);
+                          return allIds.reduce((sum, id) => {
+                            const spent = monthlyCategoryRaw.find(i => i.id === id)?.amount || 0;
+                            return sum + spent;
+                          }, 0);
+                        })())}</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{safeFormatCurrency(budgets.reduce((sum, b) => sum + b.amount, 0))}</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold', color: (() => {
-                          const totalDiff = budgets.reduce((sum, b) => sum + b.amount, 0) + monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0);
+                          const totalSpent = (() => {
+                            const budgetedCategoryIds = budgets.map(b => b.category_id);
+                            const spendingCategoryIds = monthlyCategoryRaw.map(i => i.id);
+                            const allIds = [...new Set([...budgetedCategoryIds, ...spendingCategoryIds])].filter(id => id !== -1);
+                            return allIds.reduce((sum, id) => {
+                              const spent = monthlyCategoryRaw.find(i => i.id === id)?.amount || 0;
+                              return sum + spent;
+                            }, 0);
+                          })();
+                          const totalBudget = budgets.reduce((sum, b) => sum + b.amount, 0);
+                          const totalDiff = totalBudget + totalSpent;
                           const normalizedTotalDiff = Math.abs(totalDiff) < 0.005 ? 0 : totalDiff;
                           return normalizedTotalDiff < 0 ? theme.palette.error.main : normalizedTotalDiff === 0 ? theme.palette.text.primary : theme.palette.success.main;
                         })() }}>
                           {safeFormatCurrency((() => {
-                            const totalDiff = budgets.reduce((sum, b) => sum + b.amount, 0) + monthlyCategoryRaw.reduce((sum, i) => sum + i.amount, 0);
+                            const totalSpent = (() => {
+                              const budgetedCategoryIds = budgets.map(b => b.category_id);
+                              const spendingCategoryIds = monthlyCategoryRaw.map(i => i.id);
+                              const allIds = [...new Set([...budgetedCategoryIds, ...spendingCategoryIds])].filter(id => id !== -1);
+                              return allIds.reduce((sum, id) => {
+                                const spent = monthlyCategoryRaw.find(i => i.id === id)?.amount || 0;
+                                return sum + spent;
+                              }, 0);
+                            })();
+                            const totalBudget = budgets.reduce((sum, b) => sum + b.amount, 0);
+                            const totalDiff = totalBudget + totalSpent;
                             return Math.abs(totalDiff) < 0.005 ? 0 : totalDiff;
                           })())}
                         </TableCell>

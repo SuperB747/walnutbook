@@ -103,12 +103,13 @@ const BudgetList: React.FC<BudgetListProps> = ({
           {budgets
             .sort((a, b) => getCategoryName(a.category_id).localeCompare(getCategoryName(b.category_id)))
             .map((budget) => {
-            const spent = Math.abs(calculateSpentAmount(budget.category_id));
-            const remaining = budget.amount - spent;
+            const netAmount = calculateSpentAmount(budget.category_id);
+            const spent = netAmount < 0 ? Math.abs(netAmount) : 0; // 음수일 때만 지출로 간주
+            const remaining = budget.amount - (netAmount < 0 ? Math.abs(netAmount) : 0);
             // Handle near-zero remaining amounts as exactly zero
             const normalizedRemaining = Math.abs(remaining) < 0.005 ? 0 : remaining;
             const hasBudget = budget.amount > 0;
-            const hasSpending = spent > 0;
+            const hasSpending = spent > 0 || netAmount > 0; // 지출이 있거나 수입이 있을 때
             
             // Calculate progress and fill percent
             let progress = 0;
@@ -118,7 +119,7 @@ const BudgetList: React.FC<BudgetListProps> = ({
               progress = Math.min((spent / budget.amount) * 100, 999);
               fillPercent = Math.min(progress / 2, 100);
             } else if (hasSpending) {
-              // Budget is 0 but there's spending - show as 100% red
+              // Budget is 0 but there's spending - show as 100% red for expenses, green for income
               progress = 100;
               fillPercent = 100;
             }
@@ -131,7 +132,7 @@ const BudgetList: React.FC<BudgetListProps> = ({
                     ? 'success.main'  // Green for exactly zero remaining
                     : 'success.main')
               : hasSpending
-                ? 'error.dark'  // Red for spending when budget is 0
+                ? (netAmount < 0 ? 'error.dark' : 'success.main')  // Red for expenses, green for income when budget is 0
                 : undefined;
 
             return (
@@ -155,7 +156,15 @@ const BudgetList: React.FC<BudgetListProps> = ({
                   </Box>
                 </TableCell>
                 <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>{formatCurrency(budget.amount)}</TableCell>
-                <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>{formatCurrency(spent)}</TableCell>
+                <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>
+                  {netAmount < 0 ? (
+                    <Typography color="error.main">-{formatCurrency(Math.abs(netAmount))}</Typography>
+                  ) : netAmount > 0 ? (
+                    <Typography color="success.main">+{formatCurrency(netAmount)}</Typography>
+                  ) : (
+                    formatCurrency(0)
+                  )}
+                </TableCell>
                 <TableCell align="right" sx={{ width: 120, minWidth: 120 }}>
                   <Typography
                     color={normalizedRemaining < 0 ? 'error' : normalizedRemaining === 0 ? 'text.primary' : 'success'}
