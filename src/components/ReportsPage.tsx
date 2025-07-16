@@ -1339,21 +1339,123 @@ const ReportsPage: React.FC = () => {
                </Paper>
              </Grid>
              <Grid item xs={12} md={6}>
-               <Paper sx={{ p: 2 }}>
-                 <Typography variant="h6" gutterBottom>Budget Alerts</Typography>
-                 {overBudgetCategories.length > 0 ? (
-                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                     {overBudgetCategories.map(({ name, over }) => (
-                       <Box key={name} sx={{ display: 'flex', alignItems: 'center', color: 'error.main', gap: 1 }}>
-                         <WarningAmberIcon color="error" />
-                         <Typography variant="body2">{name}: {safeFormatCurrency(over)}</Typography>
+               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                 <Paper sx={{ p: 2 }}>
+                   <Typography variant="h6" gutterBottom>Budget Alerts</Typography>
+                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1, mt: -1 }}>
+                     Overusage: Amount spent over budget for each category.
+                   </Typography>
+                   {overBudgetCategories.length > 0 ? (
+                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                       <Typography variant="subtitle2" color="error" sx={{ fontWeight: 'bold', mb: 1 }}>
+                         Total Overusage: {safeFormatCurrency(-overBudgetCategories.reduce((sum, c) => sum + c.over, 0))}
+                       </Typography>
+                       {overBudgetCategories.map(({ name, over }) => (
+                         <Box key={name} sx={{ display: 'flex', alignItems: 'center', color: 'error.main', gap: 1 }}>
+                           <WarningAmberIcon color="error" />
+                           <Typography variant="body2">{name}: {safeFormatCurrency(over)}</Typography>
+                         </Box>
+                       ))}
+                     </Box>
+                   ) : (
+                     <Typography variant="body2">No budget overages</Typography>
+                   )}
+                 </Paper>
+                 <Paper sx={{ p: 2 }}>
+                   <Typography variant="h6" gutterBottom>Monthly Progress</Typography>
+                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                     {/* Current Net Amount */}
+                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                         Current Net: <span style={{ color: (monthlySummary.income + monthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f' }}>
+                           {safeFormatCurrency(monthlySummary.income + monthlySummary.expense)}
+                         </span>
+                       </Typography>
+                       <Typography variant="body2" color="text.secondary">
+                         {(() => {
+                           const today = new Date();
+                           const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+                           const remainingDays = lastDay - today.getDate();
+                           return `${remainingDays} days remaining`;
+                         })()}
+                       </Typography>
+                     </Box>
+                     {/* Progress Bar */}
+                     <Box sx={{ width: '100%' }}>
+                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                         <Typography variant="body2" color="text.secondary">1st</Typography>
+                         <Typography variant="body2" color="text.secondary">
+                           {(() => {
+                             const today = new Date();
+                             const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+                             return `${lastDay}th`;
+                           })()}
+                         </Typography>
                        </Box>
-                     ))}
+                       <Box sx={{ 
+                         width: '100%', 
+                         height: 20, 
+                         bgcolor: 'grey.200', 
+                         borderRadius: 1,
+                         position: 'relative',
+                         overflow: 'hidden'
+                       }}>
+                         <Box sx={{
+                           width: `${(() => {
+                             const today = new Date();
+                             const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+                             const progress = (today.getDate() / lastDay) * 100;
+                             return Math.min(progress, 100);
+                           })()}%`,
+                           height: '100%',
+                           bgcolor: (monthlySummary.income + monthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f',
+                           borderRadius: 1,
+                           transition: 'width 0.3s ease'
+                         }} />
+                       </Box>
+                     </Box>
+                     {/* Motivational Message */}
+                     <Box sx={{ mt: 1 }}>
+                       <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                         {(() => {
+                           const netAmount = monthlySummary.income + monthlySummary.expense;
+                           const today = new Date();
+                           const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+                           const remainingDays = lastDay - today.getDate();
+                           const progress = (today.getDate() / lastDay) * 100;
+                           if (netAmount >= 0) {
+                             if (progress >= 80) {
+                               return "Great job! You're on track to finish the month strong! 💪";
+                             } else if (progress >= 60) {
+                               return "You're doing well! Keep up the good financial habits! 📈";
+                             } else {
+                               return "Good start! Focus on your goals for the rest of the month! 🎯";
+                             }
+                           } else {
+                             if (remainingDays > 10) {
+                               return "You still have time to turn things around! Stay focused! 🔄";
+                             } else {
+                               return "Every day is a new opportunity to improve! 💪";
+                             }
+                           }
+                         })()}
+                       </Typography>
+                       {/* Situation Summary */}
+                       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                         {overBudgetCategories.length > 0
+                           ? (<>
+                               You have overused your budget in the following categories:<br/>
+                               {overBudgetCategories.map(c => (
+                                 <span key={c.name} style={{ display: 'block', marginLeft: 12 }}>&bull; {c.name}</span>
+                               ))}
+                               Please try to spend less in these areas for the rest of the month.
+                             </>)
+                           : 'You are within your budget for all categories. Keep up the good work!'}
+                       </Typography>
+                     </Box>
                    </Box>
-                 ) : (
-                   <Typography variant="body2">No budget overages</Typography>
-                 )}
-               </Paper>
+                 </Paper>
+               </Box>
              </Grid>
            </Grid>
         </>
