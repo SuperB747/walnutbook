@@ -8,7 +8,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { parse } from 'date-fns';
-import { getCategoryName, formatCurrency } from '../utils';
+import { getCategoryName, formatCurrency, fixAmountSign } from '../utils';
 
 export interface TransactionListProps {
   transactions: Transaction[];
@@ -107,6 +107,21 @@ const TransactionList: React.FC<TransactionListProps> = ({
       return searchMatch && typeMatch && categoryMatch && accountMatch && amountMatch;
     });
   }, [transactions, categories, filter]);
+
+  // 필터된 거래 합계 계산 (Expense는 음수, Income은 양수, Transfer/Adjust는 sign 유지)
+  const filteredSum = useMemo(() => {
+    return filteredTransactions.reduce((sum, t) => sum + fixAmountSign(t.amount, t.type, getCategoryName(categories, t.category_id)), 0);
+  }, [filteredTransactions, categories]);
+
+  // 필터가 적용되어 있는지 여부
+  const isFilterActive = useMemo(() => {
+    return filter.searchTerm !== '' ||
+      filter.types.length > 0 ||
+      filter.categories.length > 0 ||
+      filter.accounts.length > 0 ||
+      filter.amountMin !== '' ||
+      filter.amountMax !== '';
+  }, [filter]);
 
   // 삭제 핸들러 통합
   const openDeleteDialog = (type: 'single' | 'bulk', id?: number, event?: React.MouseEvent) => {
@@ -226,8 +241,55 @@ const TransactionList: React.FC<TransactionListProps> = ({
         <Button variant="outlined" size="small" onClick={handleClearFilters} sx={{ minWidth: 100, height: 40 }}>Clear Filters</Button>
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, p: 0.5 }}>
-        <Button variant="outlined" disabled={selectedIds.length === 0 || isDeleting} onClick={e => openDeleteDialog('bulk')}>{isDeleting ? 'Deleting...' : 'Delete Selected'}</Button>
-        {onAddTransaction && (<Button variant="contained" color="secondary" onClick={onAddTransaction} startIcon={<AddIcon />} disabled={isDeleting}>Add Transaction</Button>)}
+        <Button variant="outlined" disabled={selectedIds.length === 0 || isDeleting} onClick={e => openDeleteDialog('bulk')}>
+          {isDeleting ? 'Deleting...' : 'Delete Selected'}
+        </Button>
+        {/* Show filtered sum only if a filter is active, styled like Min Amount input and next to Add Transaction */}
+        <Box sx={{ display: 'flex', alignItems: 'center', flex: 1, justifyContent: 'flex-end', gap: 1 }}>
+          {isFilterActive && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                border: '1px solid',
+                borderColor: 'rgba(35, 64, 117, 0.23)',
+                borderRadius: '14px',
+                px: 2.25, // Match MUI outlined button horizontal padding
+                height: 36, // Match DELETE SELECTED button height
+                bgcolor: 'background.paper',
+                fontFamily: '"Inter", "SF Pro Display", "Segoe UI", "Roboto", sans-serif',
+                fontSize: '0.9375rem',
+                color: 'text.primary',
+                fontWeight: 500,
+                letterSpacing: '0.1px',
+                mr: 1,
+                boxSizing: 'border-box',
+              }}
+            >
+              <span style={{ fontWeight: 500, letterSpacing: '0.1px', marginRight: 8, color: 'inherit', fontFamily: 'inherit', fontSize: 'inherit' }}>FILTERED TOTAL:</span>
+              <span
+                style={{
+                  fontWeight: 500,
+                  color:
+                    filteredSum > 0
+                      ? '#388e3c'
+                      : filteredSum < 0
+                      ? '#d32f2f'
+                      : 'inherit',
+                  fontFamily: 'inherit',
+                  fontSize: 'inherit',
+                }}
+              >
+                {formatCurrency(filteredSum)}
+              </span>
+            </Box>
+          )}
+          {onAddTransaction && (
+            <Button variant="contained" color="secondary" onClick={onAddTransaction} startIcon={<AddIcon />} disabled={isDeleting}>
+              Add Transaction
+            </Button>
+          )}
+        </Box>
       </Box>
       <TableContainer component={Paper} elevation={2} sx={{ width: '100%' }}>
         <Table size="small" sx={{ 
