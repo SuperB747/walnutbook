@@ -471,7 +471,7 @@ const ReportsPage: React.FC = () => {
       .map(id => {
         const spent = monthlyCategoryRaw.find(i => i.id === id)?.amount || 0;
         const budgetAmount = budgets.find(b => b.category_id === id)?.amount || 0;
-        const diff = budgetAmount - spent;
+        const diff = budgetAmount + spent;
         return { id, name: id === -1 ? 'Undefined' : categories.find(c => c.id === id)?.name || 'Undefined', over: Math.abs(diff), isOver: diff < 0 };
       })
       .filter(item => item.isOver)
