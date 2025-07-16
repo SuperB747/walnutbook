@@ -2,7 +2,6 @@ use rusqlite::Connection;
 use std::fs;
 use std::path::Path;
 use tauri::AppHandle;
-use chrono::Utc;
 use chrono::Local;
 
 use crate::utils::{get_db_path, get_onedrive_path};

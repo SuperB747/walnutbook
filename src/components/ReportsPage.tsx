@@ -16,7 +16,13 @@ import {
   TableCell,
   TableBody,
   TableFooter,
-  Popper
+  Popper,
+  Checkbox,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Divider
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
@@ -36,10 +42,10 @@ import {
   PointElement,
   LineElement
 } from 'chart.js';
-import { Transaction, Category, Budget, Account } from '../db';
+import { Transaction, Category, Budget, Account, RecurringItem } from '../db';
 import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
-import { safeFormatCurrency } from '../utils';
+import { safeFormatCurrency, parseLocalDate, createLocalDate } from '../utils';
 
 // Register Chart.js core components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, ChartTooltip, Legend, ArcElement, PointElement, LineElement);
@@ -66,6 +72,15 @@ const ReportsPage: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [recurringItems, setRecurringItems] = useState<RecurringItem[]>([]);
+  // Move checkedRecurringItems state here, before any useMemo/useEffect that uses it
+  const [checkedRecurringItems, setCheckedRecurringItems] = useState<Set<string>>(new Set());
+  
+  // Debug recurring items loading
+  useEffect(() => {
+    console.log('Debug - recurringItems state changed:', recurringItems);
+    console.log('Debug - recurringItems.length:', recurringItems.length);
+  }, [recurringItems]);
   const now = new Date();
   const currentYear = now.getFullYear();
   const years = Array.from({ length: 20 }, (_, i) => 2020 + i);
@@ -159,16 +174,26 @@ const ReportsPage: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [txns, cats, accts] = await Promise.all([
+        const [txns, cats, accts, recurring] = await Promise.all([
           invoke<Transaction[]>('get_transactions'),
           invoke<Category[]>('get_categories_full'),
-          invoke<Account[]>('get_accounts')
+          invoke<Account[]>('get_accounts'),
+          invoke<RecurringItem[]>('get_recurring_items')
         ]);
+        console.log('Debug - loaded recurring items:', recurring);
+        console.log('Debug - loaded recurring items length:', recurring?.length);
         setAllTransactions(txns || []);
         setCategories(cats || []);
         setAccounts(accts || []);
+        setRecurringItems(recurring || []);
       } catch (error) {
         console.error('Failed to load report data:', error);
+        console.error('Error details:', error);
+        // Set empty arrays as fallback
+        setAllTransactions([]);
+        setCategories([]);
+        setAccounts([]);
+        setRecurringItems([]);
       }
     };
     loadData();
@@ -220,7 +245,293 @@ const ReportsPage: React.FC = () => {
 
     return { income, expense };
   }
-  const monthlySummary = useMemo(() => summarizeTxns(monthlyTransactions), [monthlyTransactions, categories]);
+
+
+
+  // Recurring items for current month with dates
+  const monthlyRecurringItems = useMemo(() => {
+    // Parse year and month from selectedMonth (format: "YYYY-MM")
+    const [yearStr, monthStr] = selectedMonth.split('-');
+    const selectedYear = parseInt(yearStr);
+    const selectedMonthNum = parseInt(monthStr) - 1; // Convert to 0-based index
+    
+    console.log('Debug - selectedMonth:', selectedMonth);
+    console.log('Debug - selectedYear:', selectedYear, 'selectedMonthNum:', selectedMonthNum);
+    console.log('Debug - selectedMonthNum is correct for month:', selectedMonthNum === 6 ? 'July' : 'Not July');
+    console.log('Debug - recurringItems:', recurringItems);
+    console.log('Debug - recurringItems.length:', recurringItems.length);
+    console.log('Debug - active recurringItems:', recurringItems.filter(item => item.is_active));
+    console.log('Debug - active recurringItems details:', recurringItems.filter(item => item.is_active).map(item => ({
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      is_active: item.is_active,
+      repeat_type: item.repeat_type,
+      start_date: item.start_date,
+      day_of_month: item.day_of_month
+    })));
+    
+    const result: Array<RecurringItem & { occurrenceDate: Date; shouldInclude: boolean; occurrenceId: string }> = [];
+    
+    // Calculate all occurrences for each active item in the selected month
+    recurringItems
+      .filter(item => item.is_active)
+      .forEach(item => {
+        console.log('Debug - processing item:', item.name, 'type:', item.type, 'repeat_type:', item.repeat_type);
+        
+        if (item.repeat_type === 'interval') {
+          // For interval items, calculate all occurrences from start_date
+          console.log('Debug - processing interval item:', item.name, 'start_date:', item.start_date, 'interval_unit:', item.interval_unit, 'interval_value:', item.interval_value);
+          
+          if (item.start_date) {
+            // Parse start_date as local date to avoid timezone issues
+            const startDate = parseLocalDate(item.start_date);
+            const monthStart = new Date(selectedYear, selectedMonthNum, 1);
+            const monthEnd = new Date(selectedYear, selectedMonthNum + 1, 0);
+            
+            console.log('Debug - startDate:', startDate, 'monthStart:', monthStart, 'monthEnd:', monthEnd);
+            console.log('Debug - startDate month:', startDate.getMonth(), 'monthStart month:', monthStart.getMonth(), 'monthEnd month:', monthEnd.getMonth());
+            
+            let currentDate = new Date(startDate);
+            let occurrenceCount = 0;
+            
+            // Find the first occurrence that's >= month start
+            while (currentDate < monthStart) {
+              if (item.interval_unit === 'day') {
+                currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 24 * 60 * 60 * 1000);
+              } else if (item.interval_unit === 'week') {
+                currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 7 * 24 * 60 * 60 * 1000);
+              } else if (item.interval_unit === 'month') {
+                currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + (item.interval_value || 1), currentDate.getDate());
+              }
+              console.log('Debug - advancing currentDate:', currentDate);
+            }
+            
+            // Add all occurrences within the month
+            while (currentDate <= monthEnd) {
+              console.log('Debug - adding interval occurrence:', currentDate);
+              result.push({
+                ...item,
+                occurrenceDate: new Date(currentDate),
+                shouldInclude: true,
+                occurrenceId: `${item.id}_${occurrenceCount}`
+              });
+              
+              // Calculate next occurrence
+              if (item.interval_unit === 'day') {
+                currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 24 * 60 * 60 * 1000);
+              } else if (item.interval_unit === 'week') {
+                currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 7 * 24 * 60 * 60 * 1000);
+              } else if (item.interval_unit === 'month') {
+                currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + (item.interval_value || 1), currentDate.getDate());
+              }
+              occurrenceCount++;
+            }
+          } else {
+            // Fallback to first day of month if no start_date
+            console.log('Debug - no start_date, using fallback');
+            const occurrenceDate = new Date(selectedYear, selectedMonthNum, 1);
+            result.push({
+              ...item,
+              occurrenceDate,
+              shouldInclude: true,
+              occurrenceId: `${item.id}_0`
+            });
+          }
+        } else {
+          // For monthly_date items, use day_of_month
+          const dayOfMonth = item.day_of_month || 1;
+          const occurrenceDate = new Date(selectedYear, selectedMonthNum, dayOfMonth);
+          
+          // Only include if the date is valid for this month
+          if (occurrenceDate.getMonth() === selectedMonthNum) {
+            console.log('Debug - adding monthly_date occurrence:', occurrenceDate);
+            result.push({
+              ...item,
+              occurrenceDate,
+              shouldInclude: true,
+              occurrenceId: `${item.id}_0`
+            });
+          }
+        }
+      });
+    
+    console.log('Debug - final monthlyRecurringItems:', result);
+    console.log('Debug - checkedRecurringItems:', Array.from(checkedRecurringItems));
+    console.log('Debug - recurringIncomeItems will be:', result.filter(item => item.type === 'Income'));
+    console.log('Debug - recurringExpenseItems will be:', result.filter(item => item.type === 'Expense'));
+    console.log('Debug - result.length:', result.length);
+    console.log('Debug - result items with type:', result.map(item => ({ id: item.id, name: item.name, type: item.type, occurrenceDate: item.occurrenceDate })));
+    return result;
+  }, [recurringItems, selectedMonth]);
+
+  // Separate recurring income and expense items
+  const recurringIncomeItems = useMemo(() => {
+    const items = monthlyRecurringItems.filter(item => item.type === 'Income');
+    console.log('Debug - recurringIncomeItems calculated:', items);
+    return items;
+  }, [monthlyRecurringItems]);
+  
+  const recurringExpenseItems = useMemo(() => {
+    const items = monthlyRecurringItems.filter(item => item.type === 'Expense');
+    console.log('Debug - recurringExpenseItems calculated:', items);
+    return items;
+  }, [monthlyRecurringItems]);
+
+  // Load checked recurring items from database for the current month
+  useEffect(() => {
+    const loadCheckedItems = async () => {
+      try {
+        const checkedOccurrenceIds = await invoke<string[]>('get_recurring_checks', { month: selectedMonth });
+        setCheckedRecurringItems(new Set(checkedOccurrenceIds));
+        console.log('Loaded checked items for month:', selectedMonth, 'occurrence IDs:', checkedOccurrenceIds);
+      } catch (error) {
+        console.error('Failed to load checked items:', error);
+        setCheckedRecurringItems(new Set());
+      }
+    };
+    loadCheckedItems();
+  }, [selectedMonth, monthlyRecurringItems]);
+
+  // Clear checked items for inactive recurring items
+  useEffect(() => {
+    const activeItemIds = new Set(recurringItems.filter(item => item.is_active).map(item => item.id));
+    const newChecked = new Set<string>();
+    
+    // Only keep checked occurrences for active items
+    checkedRecurringItems.forEach(occurrenceId => {
+      const item = monthlyRecurringItems.find(occurrence => occurrence.occurrenceId === occurrenceId);
+      if (item && activeItemIds.has(item.id)) {
+        newChecked.add(occurrenceId);
+      }
+    });
+    
+    if (newChecked.size !== checkedRecurringItems.size) {
+      setCheckedRecurringItems(newChecked);
+    }
+  }, [recurringItems, checkedRecurringItems, monthlyRecurringItems]);
+
+  const handleRecurringItemCheck = async (occurrenceId: string, checked: boolean) => {
+    try {
+      // Find the item by occurrenceId
+      const item = monthlyRecurringItems.find(item => item.occurrenceId === occurrenceId);
+      if (!item) {
+        console.error('Item not found for occurrenceId:', occurrenceId);
+        return;
+      }
+
+      // Update check status in database first
+      await invoke('update_recurring_check', {
+        occurrenceId: occurrenceId,
+        month: selectedMonth,
+        isChecked: checked
+      });
+      
+      // Update local state
+      const newChecked = new Set(checkedRecurringItems);
+      if (checked) {
+        newChecked.add(occurrenceId);
+      } else {
+        newChecked.delete(occurrenceId);
+      }
+      setCheckedRecurringItems(newChecked);
+      // No transaction or recurring item update here!
+    } catch (error) {
+      console.error('Failed to update check status:', error);
+    }
+  };
+
+  // Calculate recurring amounts excluding checked items (as they're considered "processed")
+  const monthlyRecurringAmount = useMemo(() => {
+    return monthlyRecurringItems
+      .filter(item => !checkedRecurringItems.has(item.occurrenceId))
+      .reduce((total, item) => {
+        return total + (item.type === 'Income' ? item.amount : -item.amount);
+      }, 0);
+  }, [monthlyRecurringItems, checkedRecurringItems]);
+
+  // Auto-uncheck items whose next transaction date has passed
+  useEffect(() => {
+    const autoUncheckExpiredItems = async () => {
+      const today = new Date();
+      const currentMonth = today.getFullYear() * 100 + today.getMonth() + 1; // YYYYMM format
+      
+      const itemsToUncheck: string[] = [];
+      
+      for (const item of recurringItems) {
+        // Check if any occurrence of this item is checked
+        const checkedOccurrences = monthlyRecurringItems
+          .filter(occurrence => occurrence.id === item.id)
+          .filter(occurrence => checkedRecurringItems.has(occurrence.occurrenceId));
+        
+        if (checkedOccurrences.length > 0) {
+          let nextDate: Date;
+          
+          if (item.repeat_type === 'interval') {
+            if (item.start_date) {
+              // Parse start_date as local date to avoid timezone issues
+              const startDate = parseLocalDate(item.start_date);
+              let currentDate = new Date(startDate);
+              
+              while (currentDate <= today) {
+                if (item.interval_unit === 'day') {
+                  currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 24 * 60 * 60 * 1000);
+                } else if (item.interval_unit === 'week') {
+                  currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 7 * 24 * 60 * 60 * 1000);
+                } else if (item.interval_unit === 'month') {
+                  currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + (item.interval_value || 1), currentDate.getDate());
+                }
+              }
+              nextDate = currentDate;
+            } else {
+              nextDate = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+            }
+          } else {
+            const dayOfMonth = item.day_of_month || 1;
+            const currentMonth = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
+            
+            if (currentMonth > today) {
+              nextDate = currentMonth;
+            } else {
+              nextDate = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth);
+            }
+          }
+          
+          const nextMonth = nextDate.getFullYear() * 100 + nextDate.getMonth() + 1;
+          if (nextMonth > currentMonth) {
+            // Next transaction date is in the future, uncheck all occurrences of this item
+            const itemOccurrences = monthlyRecurringItems.filter(occurrence => occurrence.id === item.id);
+            for (const occurrence of itemOccurrences) {
+              if (checkedRecurringItems.has(occurrence.occurrenceId)) {
+                itemsToUncheck.push(occurrence.occurrenceId);
+              }
+            }
+          }
+        }
+      }
+      
+      if (itemsToUncheck.length > 0) {
+        const newChecked = new Set(checkedRecurringItems);
+        for (const occurrenceId of itemsToUncheck) {
+          newChecked.delete(occurrenceId);
+          // Find the item by occurrenceId for database update
+          const item = monthlyRecurringItems.find(occurrence => occurrence.occurrenceId === occurrenceId);
+          if (item) {
+            await invoke('update_recurring_check', {
+              occurrenceId: occurrenceId,
+              month: selectedMonth,
+              isChecked: false
+            });
+          }
+        }
+        setCheckedRecurringItems(newChecked);
+      }
+    };
+    
+    autoUncheckExpiredItems();
+  }, [recurringItems, checkedRecurringItems, selectedMonth]);
+
+
 
   // Monthly raw category expenses with reimbursements applied
   const monthlyCategoryRaw = useMemo<{ id: number; amount: number }[]>(() => {
@@ -443,12 +754,40 @@ const ReportsPage: React.FC = () => {
     }
   };
 
+  // Actual monthly summary based only on real transactions (for other sections)
+  const actualMonthlySummary = useMemo(() => {
+    return summarizeTxns(monthlyTransactions);
+  }, [monthlyTransactions, categories]);
+
+  // Predicted monthly summary including unchecked recurring items (for Progress section only)
+  const predictedMonthlySummary = useMemo(() => {
+    const currentNet = actualMonthlySummary.income + actualMonthlySummary.expense;
+    const predictedNet = currentNet + monthlyRecurringAmount;
+    
+    // Calculate the difference to add to income or expense
+    const netDifference = predictedNet - currentNet;
+    
+    if (netDifference >= 0) {
+      // If positive, add to income
+      return {
+        income: actualMonthlySummary.income + netDifference,
+        expense: actualMonthlySummary.expense
+      };
+    } else {
+      // If negative, add to expense (make it more negative)
+      return {
+        income: actualMonthlySummary.income,
+        expense: actualMonthlySummary.expense + netDifference
+      };
+    }
+  }, [actualMonthlySummary, monthlyRecurringAmount]);
+
   // Bar chart data
   const monthlyBarData = {
     labels: ['Income', 'Expense'],
     datasets: [{
       label: 'Amount',
-      data: [monthlySummary.income, Math.abs(monthlySummary.expense)],
+      data: [actualMonthlySummary.income, Math.abs(actualMonthlySummary.expense)],
       backgroundColor: [theme.palette.primary.main, theme.palette.error.main]
     }]
   };
@@ -950,6 +1289,10 @@ const ReportsPage: React.FC = () => {
     return -(rawExpenses - totalReimbursed);
   }, [yearlyTransactions, categories]);
 
+
+
+
+
   return (
     <Box p={3}>
       <Typography variant="h4" gutterBottom>Summary Report</Typography>
@@ -958,13 +1301,32 @@ const ReportsPage: React.FC = () => {
         onChange={(_, v) => setActiveTab(v)}
         sx={{
           mb: 3,
-          // Remove default indicator to rely on background styling
+          minHeight: 48,
           '& .MuiTabs-indicator': { display: 'none' },
-          // Tab hover effect
-          '& .MuiTab-root:hover': { backgroundColor: theme.palette.action.hover },
-          // Selected tab styling
-          '& .MuiTab-root.Mui-selected': { backgroundColor: theme.palette.primary.main, color: theme.palette.primary.contrastText },
-          '& .MuiTab-root.Mui-selected:hover': { backgroundColor: theme.palette.primary.dark },
+          '& .MuiTab-root': {
+            color: 'text.primary',
+            fontWeight: 700,
+            fontSize: '1rem',
+            letterSpacing: '0.15px',
+            textTransform: 'none',
+            minHeight: '48px',
+            padding: '12px 28px',
+            borderRadius: '12px 12px 0 0',
+            margin: '0 4px',
+            transition: 'background-color 0.2s, color 0.2s',
+            backgroundColor: 'rgba(0,0,0,0)',
+            '&:hover': {
+              backgroundColor: 'rgba(0,0,0,0.08)',
+              color: 'text.primary',
+            },
+            '&.Mui-selected': {
+              backgroundColor: '#1976d2',
+              color: 'white',
+              boxShadow: '0 2px 12px rgba(35, 64, 117, 0.10)',
+              zIndex: 1,
+            },
+          },
+          borderBottom: '2px solid #1976d2',
         }}
       >
         <Tab label="Monthly" />
@@ -1016,13 +1378,13 @@ const ReportsPage: React.FC = () => {
                   <Typography variant="h6" gutterBottom>Income vs Expense</Typography>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 2 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
-                      Income: {safeFormatCurrency(monthlySummary.income)}
+                      Income: {safeFormatCurrency(actualMonthlySummary.income)}
                     </Typography>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
-                      Expense: {safeFormatCurrency(monthlySummary.expense)}
+                                              Expense: {safeFormatCurrency(actualMonthlySummary.expense)}
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (monthlySummary.income + monthlySummary.expense) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
-                      Net: {safeFormatCurrency(monthlySummary.income + monthlySummary.expense)}
+                                          <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (actualMonthlySummary.income + actualMonthlySummary.expense) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                        Net: {safeFormatCurrency(actualMonthlySummary.income + actualMonthlySummary.expense)}
                     </Typography>
                   </Box>
                   <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
@@ -1030,7 +1392,7 @@ const ReportsPage: React.FC = () => {
                       data={{
                         labels: ['Income', 'Expense'],
                         datasets: [{
-                          data: [monthlySummary.income, Math.abs(monthlySummary.expense)],
+                          data: [actualMonthlySummary.income, Math.abs(actualMonthlySummary.expense)],
                           backgroundColor: [theme.palette.primary.main, theme.palette.error.main]
                         }]
                       }}
@@ -1367,8 +1729,8 @@ const ReportsPage: React.FC = () => {
                      {/* Current Net Amount */}
                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                         Current Net: <span style={{ color: (monthlySummary.income + monthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f' }}>
-                           {safeFormatCurrency(monthlySummary.income + monthlySummary.expense)}
+                         Current Net: <span style={{ color: (actualMonthlySummary.income + actualMonthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f' }}>
+                           {safeFormatCurrency(actualMonthlySummary.income + actualMonthlySummary.expense)}
                          </span>
                        </Typography>
                        <Typography variant="body2" color="text.secondary">
@@ -1380,6 +1742,156 @@ const ReportsPage: React.FC = () => {
                          })()}
                        </Typography>
                      </Box>
+                     
+                     {/* Recurring Total */}
+                     {monthlyRecurringAmount !== 0 && (
+                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                         <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                           Recurring Total: <span style={{ color: monthlyRecurringAmount >= 0 ? '#388e3c' : '#d32f2f' }}>
+                             {monthlyRecurringAmount >= 0 ? '+' : ''}{safeFormatCurrency(monthlyRecurringAmount)}
+                           </span>
+                         </Typography>
+                       </Box>
+                     )}
+                     
+                     {/* Predicted Net Amount */}
+                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                         Predicted Net: <span style={{ color: (predictedMonthlySummary.income + predictedMonthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f' }}>
+                           {safeFormatCurrency(predictedMonthlySummary.income + predictedMonthlySummary.expense)}
+                         </span>
+                       </Typography>
+                       <Typography variant="body2" color="text.secondary">
+                         Including recurring items
+                       </Typography>
+                     </Box>
+
+
+
+                     {/* Recurring Income Items */}
+                     {recurringIncomeItems.length > 0 ? (
+                       <Box>
+                         <Typography variant="subtitle2" color="success.main" sx={{ fontWeight: 'bold', mb: 1 }}>
+                           Recurring Income
+                         </Typography>
+                         <List dense sx={{ maxHeight: 200, overflow: 'auto', bgcolor: 'grey.50', borderRadius: 1 }}>
+                           {recurringIncomeItems.map((item) => (
+                             <ListItem key={item.occurrenceId} dense sx={{ py: 0.5 }}>
+                               <ListItemIcon sx={{ minWidth: 36 }}>
+                                 <Checkbox
+                                   size="small"
+                                   checked={checkedRecurringItems.has(item.occurrenceId)}
+                                   onChange={(e) => {
+                                     console.log('Income checkbox clicked for item:', item.occurrenceId, 'checked:', e.target.checked);
+                                     e.stopPropagation();
+                                     handleRecurringItemCheck(item.occurrenceId, e.target.checked);
+                                   }}
+                                   onClick={(e) => {
+                                     console.log('Income checkbox clicked (onClick):', item.occurrenceId);
+                                     e.stopPropagation();
+                                   }}
+                                   sx={{ 
+                                     cursor: 'pointer',
+                                     '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' }
+                                   }}
+                                 />
+                               </ListItemIcon>
+                               <ListItemText
+                                 primary={
+                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                     <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                                       {item.name} (ID: {item.id}, Checked: {checkedRecurringItems.has(item.occurrenceId) ? 'Yes' : 'No'})
+                                     </Typography>
+                                     <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
+                                       +{safeFormatCurrency(item.amount)}
+                                     </Typography>
+                                   </Box>
+                                 }
+                                 secondary={
+                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                     <Typography variant="caption" color="text.secondary">
+                                       {format(item.occurrenceDate, 'MMM dd')}
+                                     </Typography>
+                                     <Typography variant="caption" color="text.secondary">
+                                       {categories.find(c => c.id === item.category_id)?.name || 'Unknown'}
+                                     </Typography>
+                                   </Box>
+                                 }
+                               />
+                             </ListItem>
+                           ))}
+                         </List>
+                       </Box>
+                     ) : (
+                       <Box>
+                         <Typography variant="subtitle2" color="text.secondary">
+                           No recurring income items (Debug: recurringItems.length = {recurringItems.length}, monthlyRecurringItems.length = {monthlyRecurringItems.length})
+                         </Typography>
+                       </Box>
+                     )}
+
+                     {/* Recurring Expense Items */}
+                     {recurringExpenseItems.length > 0 ? (
+                       <Box>
+                         <Typography variant="subtitle2" color="error.main" sx={{ fontWeight: 'bold', mb: 1 }}>
+                           Recurring Expenses
+                         </Typography>
+                         <List dense sx={{ maxHeight: 200, overflow: 'auto', bgcolor: 'grey.50', borderRadius: 1 }}>
+                           {recurringExpenseItems.map((item) => (
+                             <ListItem key={item.occurrenceId} dense sx={{ py: 0.5 }}>
+                               <ListItemIcon sx={{ minWidth: 36 }}>
+                                 <Checkbox
+                                   size="small"
+                                   checked={checkedRecurringItems.has(item.occurrenceId)}
+                                   onChange={(e) => {
+                                     console.log('Expense checkbox clicked for item:', item.occurrenceId, 'checked:', e.target.checked);
+                                     e.stopPropagation();
+                                     handleRecurringItemCheck(item.occurrenceId, e.target.checked);
+                                   }}
+                                   onClick={(e) => {
+                                     console.log('Expense checkbox clicked (onClick):', item.occurrenceId);
+                                     e.stopPropagation();
+                                   }}
+                                   sx={{ 
+                                     cursor: 'pointer',
+                                     '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' }
+                                   }}
+                                 />
+                               </ListItemIcon>
+                               <ListItemText
+                                 primary={
+                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                     <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                                       {item.name} (ID: {item.id}, Checked: {checkedRecurringItems.has(item.occurrenceId) ? 'Yes' : 'No'})
+                                     </Typography>
+                                     <Typography variant="body2" color="error.main" sx={{ fontWeight: 'bold' }}>
+                                       -{safeFormatCurrency(item.amount)}
+                                     </Typography>
+                                   </Box>
+                                 }
+                                 secondary={
+                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                     <Typography variant="caption" color="text.secondary">
+                                       {format(item.occurrenceDate, 'MMM dd')}
+                                     </Typography>
+                                     <Typography variant="caption" color="text.secondary">
+                                       {categories.find(c => c.id === item.category_id)?.name || 'Unknown'}
+                                     </Typography>
+                                   </Box>
+                                 }
+                               />
+                             </ListItem>
+                           ))}
+                         </List>
+                       </Box>
+                     ) : (
+                       <Box>
+                         <Typography variant="subtitle2" color="text.secondary">
+                           No recurring expense items (Debug: recurringItems.length = {recurringItems.length}, monthlyRecurringItems.length = {monthlyRecurringItems.length})
+                         </Typography>
+                       </Box>
+                     )}
+                     
                      {/* Progress Bar */}
                      <Box sx={{ width: '100%' }}>
                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -1408,7 +1920,7 @@ const ReportsPage: React.FC = () => {
                              return Math.min(progress, 100);
                            })()}%`,
                            height: '100%',
-                           bgcolor: (monthlySummary.income + monthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f',
+                           bgcolor: (predictedMonthlySummary.income + predictedMonthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f',
                            borderRadius: 1,
                            transition: 'width 0.3s ease'
                          }} />
@@ -1418,7 +1930,7 @@ const ReportsPage: React.FC = () => {
                      <Box sx={{ mt: 1 }}>
                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                          {(() => {
-                           const netAmount = monthlySummary.income + monthlySummary.expense;
+                           const netAmount = predictedMonthlySummary.income + predictedMonthlySummary.expense;
                            const today = new Date();
                            const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
                            const remainingDays = lastDay - today.getDate();

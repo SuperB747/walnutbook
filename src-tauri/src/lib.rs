@@ -4,10 +4,15 @@ mod accounts;
 mod transactions;
 mod categories;
 mod budgets;
+mod recurring;
 mod backup;
 
+use std::sync::Mutex;
+use rusqlite::Connection;
+use tauri::Manager;
+
 // Re-export specific types and functions from models
-pub use models::{Account, Transaction, Category, Budget, AccountImportSettings};
+pub use models::{Account, Transaction, Category, Budget, AccountImportSettings, RecurringItem};
 
 // Re-export utility functions
 pub use utils::{init_db, home_dir, get_onedrive_path, reset_database};
@@ -30,6 +35,12 @@ pub use categories::{
 // Re-export budget functions
 pub use budgets::{get_budgets, add_budget, update_budget, delete_budget};
 
+// Re-export recurring functions
+pub use recurring::{
+    get_recurring_items, add_recurring_item, update_recurring_item, delete_recurring_item,
+    update_recurring_check, get_recurring_checks
+};
+
 // Re-export backup functions
 pub use backup::{
     backup_database, restore_database, export_database, import_database, create_backup_folder,
@@ -49,6 +60,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         .setup(|app| {
             // Initialize SQLite database schema
             utils::init_db(&app.handle()).map_err(|e| e.to_string())?;
+            
+            // Create and manage database connection
+            let db_path = utils::get_db_path(&app.handle());
+            let conn = Connection::open(&db_path).expect("Failed to open DB");
+            app.manage(Mutex::new(conn));
+            
             // Enable logging plugin in development
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -74,6 +91,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             add_budget,
             update_budget,
             delete_budget,
+            get_recurring_items,
+            add_recurring_item,
+            update_recurring_item,
+            delete_recurring_item,
+            update_recurring_check,
+            get_recurring_checks,
             get_categories,
             get_categories_full,
             add_category,

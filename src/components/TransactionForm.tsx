@@ -19,6 +19,7 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import { Transaction, Account, TransactionType, Category } from '../db';
 import { format, parse } from 'date-fns';
+import { getCurrentLocalDate, formatLocalDate } from '../utils';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
@@ -46,7 +47,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   categories,
 }) => {
   const [formData, setFormData] = useState<Partial<Transaction>>({
-    date: format(new Date(), 'yyyy-MM-dd'),
+    date: formatLocalDate(getCurrentLocalDate()),
     account_id: accounts[0]?.id,
     type: 'Expense' as TransactionType,
     category_id: undefined,
@@ -63,7 +64,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   
   // State to preserve values for continuous mode
   const [preservedValues, setPreservedValues] = useState<Partial<Transaction>>({
-    date: format(new Date(), 'yyyy-MM-dd'),
+    date: formatLocalDate(getCurrentLocalDate()),
     account_id: accounts[0]?.id,
     type: 'Expense' as TransactionType,
     category_id: undefined,

@@ -31,6 +31,7 @@ import BackupRestoreDialog from './BackupRestoreDialog';
 import { Transaction, Account, Category } from '../db';
 import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
+import { getCurrentLocalDate, formatLocalDate } from '../utils';
 
 interface SnackbarState {
   open: boolean;
@@ -53,7 +54,7 @@ const TransactionsPage: React.FC = () => {
     severity: 'success',
   });
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    const currentMonth = format(new Date(), 'yyyy-MM');
+    const currentMonth = format(getCurrentLocalDate(), 'yyyy-MM');
     const isFirstStart = !sessionStorage.getItem('walnutbook_session_started');
     if (isFirstStart) {
       sessionStorage.setItem('walnutbook_session_started', 'true');

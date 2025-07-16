@@ -26,6 +26,7 @@ import { desktopDir } from '@tauri-apps/api/path';
 import AccountsPage from './components/AccountsPage';
 import TransactionsPage from './components/TransactionsPage';
 import BudgetsPage from './components/BudgetsPage';
+import RecurringPage from './components/RecurringPage';
 import CategoryManagementDialog from './components/CategoryManagementDialog';
 import BulkTransactionEdit from './components/BulkTransactionEdit';
 import ImportExportDialog from './components/ImportExportDialog';
@@ -427,8 +428,10 @@ export const App: React.FC = () => {
         return 1;
       case '/budgets':
         return 2;
-      case '/reports':
+      case '/recurring':
         return 3;
+      case '/reports':
+        return 4;
       default:
         return 0;
     }
@@ -599,6 +602,7 @@ export const App: React.FC = () => {
                 <Tab label="Accounts" component={Link} to="/" />
                 <Tab label="Transactions" component={Link} to="/transactions" />
                 <Tab label="Budgets" component={Link} to="/budgets" />
+                <Tab label="Recurring" component={Link} to="/recurring" />
                 <Tab label="Reports" component={Link} to="/reports" />
               </Tabs>
             </Box>
@@ -610,6 +614,7 @@ export const App: React.FC = () => {
             <Route path="/" element={<AccountsPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/budgets" element={<BudgetsPage />} />
+            <Route path="/recurring" element={<RecurringPage />} />
             <Route path="/reports" element={<ReportsPage />} />
           </Routes>
         </Box>

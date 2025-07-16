@@ -40,3 +40,20 @@ export interface Budget {
   notes?: string;
   created_at: string;
 }
+
+export interface RecurringItem {
+  id: number;
+  name: string;
+  amount: number;
+  type: 'Income' | 'Expense';
+  category_id: number;
+  account_id: number;
+  day_of_month: number;
+  is_active: boolean;
+  notes?: string;
+  created_at: string;
+  repeat_type?: 'monthly_date' | 'interval';
+  start_date?: string;
+  interval_value?: number;
+  interval_unit?: 'day' | 'week' | 'month';
+}
