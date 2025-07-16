@@ -22,7 +22,9 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Divider
+  Divider,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
@@ -76,11 +78,12 @@ const ReportsPage: React.FC = () => {
   // Move checkedRecurringItems state here, before any useMemo/useEffect that uses it
   const [checkedRecurringItems, setCheckedRecurringItems] = useState<Set<string>>(new Set());
   
-  // Debug recurring items loading
-  useEffect(() => {
-    console.log('Debug - recurringItems state changed:', recurringItems);
-    console.log('Debug - recurringItems.length:', recurringItems.length);
-  }, [recurringItems]);
+  // Snackbar state for database update confirmation
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
+  
+
   const now = new Date();
   const currentYear = now.getFullYear();
   const years = Array.from({ length: 20 }, (_, i) => 2020 + i);
@@ -180,8 +183,6 @@ const ReportsPage: React.FC = () => {
           invoke<Account[]>('get_accounts'),
           invoke<RecurringItem[]>('get_recurring_items')
         ]);
-        console.log('Debug - loaded recurring items:', recurring);
-        console.log('Debug - loaded recurring items length:', recurring?.length);
         setAllTransactions(txns || []);
         setCategories(cats || []);
         setAccounts(accts || []);
@@ -255,21 +256,7 @@ const ReportsPage: React.FC = () => {
     const selectedYear = parseInt(yearStr);
     const selectedMonthNum = parseInt(monthStr) - 1; // Convert to 0-based index
     
-    console.log('Debug - selectedMonth:', selectedMonth);
-    console.log('Debug - selectedYear:', selectedYear, 'selectedMonthNum:', selectedMonthNum);
-    console.log('Debug - selectedMonthNum is correct for month:', selectedMonthNum === 6 ? 'July' : 'Not July');
-    console.log('Debug - recurringItems:', recurringItems);
-    console.log('Debug - recurringItems.length:', recurringItems.length);
-    console.log('Debug - active recurringItems:', recurringItems.filter(item => item.is_active));
-    console.log('Debug - active recurringItems details:', recurringItems.filter(item => item.is_active).map(item => ({
-      id: item.id,
-      name: item.name,
-      type: item.type,
-      is_active: item.is_active,
-      repeat_type: item.repeat_type,
-      start_date: item.start_date,
-      day_of_month: item.day_of_month
-    })));
+
     
     const result: Array<RecurringItem & { occurrenceDate: Date; shouldInclude: boolean; occurrenceId: string }> = [];
     
@@ -277,11 +264,9 @@ const ReportsPage: React.FC = () => {
     recurringItems
       .filter(item => item.is_active)
       .forEach(item => {
-        console.log('Debug - processing item:', item.name, 'type:', item.type, 'repeat_type:', item.repeat_type);
         
         if (item.repeat_type === 'interval') {
           // For interval items, calculate all occurrences from start_date
-          console.log('Debug - processing interval item:', item.name, 'start_date:', item.start_date, 'interval_unit:', item.interval_unit, 'interval_value:', item.interval_value);
           
           if (item.start_date) {
             // Parse start_date as local date to avoid timezone issues
@@ -289,8 +274,7 @@ const ReportsPage: React.FC = () => {
             const monthStart = new Date(selectedYear, selectedMonthNum, 1);
             const monthEnd = new Date(selectedYear, selectedMonthNum + 1, 0);
             
-            console.log('Debug - startDate:', startDate, 'monthStart:', monthStart, 'monthEnd:', monthEnd);
-            console.log('Debug - startDate month:', startDate.getMonth(), 'monthStart month:', monthStart.getMonth(), 'monthEnd month:', monthEnd.getMonth());
+
             
             let currentDate = new Date(startDate);
             let occurrenceCount = 0;
@@ -304,12 +288,11 @@ const ReportsPage: React.FC = () => {
               } else if (item.interval_unit === 'month') {
                 currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + (item.interval_value || 1), currentDate.getDate());
               }
-              console.log('Debug - advancing currentDate:', currentDate);
+
             }
             
             // Add all occurrences within the month
             while (currentDate <= monthEnd) {
-              console.log('Debug - adding interval occurrence:', currentDate);
               result.push({
                 ...item,
                 occurrenceDate: new Date(currentDate),
@@ -329,7 +312,6 @@ const ReportsPage: React.FC = () => {
             }
           } else {
             // Fallback to first day of month if no start_date
-            console.log('Debug - no start_date, using fallback');
             const occurrenceDate = new Date(selectedYear, selectedMonthNum, 1);
             result.push({
               ...item,
@@ -345,7 +327,6 @@ const ReportsPage: React.FC = () => {
           
           // Only include if the date is valid for this month
           if (occurrenceDate.getMonth() === selectedMonthNum) {
-            console.log('Debug - adding monthly_date occurrence:', occurrenceDate);
             result.push({
               ...item,
               occurrenceDate,
@@ -356,25 +337,17 @@ const ReportsPage: React.FC = () => {
         }
       });
     
-    console.log('Debug - final monthlyRecurringItems:', result);
-    console.log('Debug - checkedRecurringItems:', Array.from(checkedRecurringItems));
-    console.log('Debug - recurringIncomeItems will be:', result.filter(item => item.type === 'Income'));
-    console.log('Debug - recurringExpenseItems will be:', result.filter(item => item.type === 'Expense'));
-    console.log('Debug - result.length:', result.length);
-    console.log('Debug - result items with type:', result.map(item => ({ id: item.id, name: item.name, type: item.type, occurrenceDate: item.occurrenceDate })));
     return result;
   }, [recurringItems, selectedMonth]);
 
   // Separate recurring income and expense items
   const recurringIncomeItems = useMemo(() => {
     const items = monthlyRecurringItems.filter(item => item.type === 'Income');
-    console.log('Debug - recurringIncomeItems calculated:', items);
     return items;
   }, [monthlyRecurringItems]);
   
   const recurringExpenseItems = useMemo(() => {
     const items = monthlyRecurringItems.filter(item => item.type === 'Expense');
-    console.log('Debug - recurringExpenseItems calculated:', items);
     return items;
   }, [monthlyRecurringItems]);
 
@@ -384,7 +357,7 @@ const ReportsPage: React.FC = () => {
       try {
         const checkedOccurrenceIds = await invoke<string[]>('get_recurring_checks', { month: selectedMonth });
         setCheckedRecurringItems(new Set(checkedOccurrenceIds));
-        console.log('Loaded checked items for month:', selectedMonth, 'occurrence IDs:', checkedOccurrenceIds);
+
       } catch (error) {
         console.error('Failed to load checked items:', error);
         setCheckedRecurringItems(new Set());
@@ -417,6 +390,9 @@ const ReportsPage: React.FC = () => {
       const item = monthlyRecurringItems.find(item => item.occurrenceId === occurrenceId);
       if (!item) {
         console.error('Item not found for occurrenceId:', occurrenceId);
+        setSnackbarMessage('Item not found');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
         return;
       }
 
@@ -435,9 +411,18 @@ const ReportsPage: React.FC = () => {
         newChecked.delete(occurrenceId);
       }
       setCheckedRecurringItems(newChecked);
+      
+      // Show success message
+      setSnackbarMessage('Database updated');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      
       // No transaction or recurring item update here!
     } catch (error) {
       console.error('Failed to update check status:', error);
+      setSnackbarMessage('Database update failed');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
     }
   };
 
@@ -1782,12 +1767,10 @@ const ReportsPage: React.FC = () => {
                                    size="small"
                                    checked={checkedRecurringItems.has(item.occurrenceId)}
                                    onChange={(e) => {
-                                     console.log('Income checkbox clicked for item:', item.occurrenceId, 'checked:', e.target.checked);
                                      e.stopPropagation();
                                      handleRecurringItemCheck(item.occurrenceId, e.target.checked);
                                    }}
                                    onClick={(e) => {
-                                     console.log('Income checkbox clicked (onClick):', item.occurrenceId);
                                      e.stopPropagation();
                                    }}
                                    sx={{ 
@@ -1800,7 +1783,7 @@ const ReportsPage: React.FC = () => {
                                  primary={
                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                                       {item.name} (ID: {item.id}, Checked: {checkedRecurringItems.has(item.occurrenceId) ? 'Yes' : 'No'})
+                                       {item.name}
                                      </Typography>
                                      <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
                                        +{safeFormatCurrency(item.amount)}
@@ -1825,7 +1808,7 @@ const ReportsPage: React.FC = () => {
                      ) : (
                        <Box>
                          <Typography variant="subtitle2" color="text.secondary">
-                           No recurring income items (Debug: recurringItems.length = {recurringItems.length}, monthlyRecurringItems.length = {monthlyRecurringItems.length})
+                           No recurring income items
                          </Typography>
                        </Box>
                      )}
@@ -1844,12 +1827,10 @@ const ReportsPage: React.FC = () => {
                                    size="small"
                                    checked={checkedRecurringItems.has(item.occurrenceId)}
                                    onChange={(e) => {
-                                     console.log('Expense checkbox clicked for item:', item.occurrenceId, 'checked:', e.target.checked);
                                      e.stopPropagation();
                                      handleRecurringItemCheck(item.occurrenceId, e.target.checked);
                                    }}
                                    onClick={(e) => {
-                                     console.log('Expense checkbox clicked (onClick):', item.occurrenceId);
                                      e.stopPropagation();
                                    }}
                                    sx={{ 
@@ -1862,7 +1843,7 @@ const ReportsPage: React.FC = () => {
                                  primary={
                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                                       {item.name} (ID: {item.id}, Checked: {checkedRecurringItems.has(item.occurrenceId) ? 'Yes' : 'No'})
+                                       {item.name}
                                      </Typography>
                                      <Typography variant="body2" color="error.main" sx={{ fontWeight: 'bold' }}>
                                        -{safeFormatCurrency(item.amount)}
@@ -1887,7 +1868,7 @@ const ReportsPage: React.FC = () => {
                      ) : (
                        <Box>
                          <Typography variant="subtitle2" color="text.secondary">
-                           No recurring expense items (Debug: recurringItems.length = {recurringItems.length}, monthlyRecurringItems.length = {monthlyRecurringItems.length})
+                           No recurring expense items
                          </Typography>
                        </Box>
                      )}
@@ -1952,18 +1933,7 @@ const ReportsPage: React.FC = () => {
                            }
                          })()}
                        </Typography>
-                       {/* Situation Summary */}
-                       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                         {overBudgetCategories.length > 0
-                           ? (<>
-                               You have overused your budget in the following categories:<br/>
-                               {overBudgetCategories.map(c => (
-                                 <span key={c.name} style={{ display: 'block', marginLeft: 12 }}>&bull; {c.name}</span>
-                               ))}
-                               Please try to spend less in these areas for the rest of the month.
-                             </>)
-                           : 'You are within your budget for all categories. Keep up the good work!'}
-                       </Typography>
+
                      </Box>
                    </Box>
                  </Paper>
@@ -2696,6 +2666,60 @@ const ReportsPage: React.FC = () => {
         </>
       )}
       {/* Removed extraneous Yearly Category Details outside of tab condition */}
+      
+      {/* Snackbar for database update confirmation */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{
+          '& .MuiSnackbar-root': {
+            bottom: '24px',
+          },
+        }}
+      >
+        <Alert 
+          onClose={() => setSnackbarOpen(false)} 
+          severity={snackbarSeverity}
+          variant="filled"
+          sx={{ 
+            width: '100%',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
+            padding: '8px 12px',
+            minHeight: 'auto',
+            '& .MuiAlert-icon': {
+              padding: '0',
+              marginRight: '8px',
+              fontSize: '20px',
+            },
+            '& .MuiAlert-message': {
+              padding: '0',
+              fontSize: '14px',
+              fontWeight: 500,
+            },
+            '& .MuiAlert-action': {
+              padding: '0',
+              marginLeft: '8px',
+              '& .MuiIconButton-root': {
+                padding: '2px',
+                color: 'inherit',
+                width: '16px',
+                height: '16px',
+                '& .MuiSvgIcon-root': {
+                  fontSize: '14px',
+                },
+                '&:hover': {
+                  backgroundColor: 'transparent',
+                },
+              },
+            },
+          }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
