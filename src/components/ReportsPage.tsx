@@ -1560,30 +1560,30 @@ const ReportsPage: React.FC = () => {
                  </Paper>
                  </Popper>
                </Paper>
+               <Paper sx={{ p: 2, mt: 2 }}>
+                 <Typography variant="h6" gutterBottom>Budget Alerts</Typography>
+                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1, mt: -1 }}>
+                   Overusage: Amount spent over budget for each category.
+                 </Typography>
+                 {overBudgetCategories.length > 0 ? (
+                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                     <Typography variant="subtitle2" color="error" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                       Total Overusage: {safeFormatCurrency(-overBudgetCategories.reduce((sum, c) => sum + c.over, 0))}
+                     </Typography>
+                     {overBudgetCategories.map(({ name, over }) => (
+                       <Box key={name} sx={{ display: 'flex', alignItems: 'center', color: 'error.main', gap: 0.5 }}>
+                         <WarningAmberIcon color="error" sx={{ fontSize: '1rem' }} />
+                         <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>{name}: {safeFormatCurrency(-over)}</Typography>
+                       </Box>
+                     ))}
+                   </Box>
+                 ) : (
+                   <Typography variant="body2">No budget overages</Typography>
+                 )}
+               </Paper>
              </Grid>
              <Grid item xs={12} md={6}>
                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                 <Paper sx={{ p: 2 }}>
-                   <Typography variant="h6" gutterBottom>Budget Alerts</Typography>
-                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1, mt: -1 }}>
-                     Overusage: Amount spent over budget for each category.
-                   </Typography>
-                   {overBudgetCategories.length > 0 ? (
-                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                       <Typography variant="subtitle2" color="error" sx={{ fontWeight: 'bold', mb: 1 }}>
-                         Total Overusage: {safeFormatCurrency(-overBudgetCategories.reduce((sum, c) => sum + c.over, 0))}
-                       </Typography>
-                       {overBudgetCategories.map(({ name, over }) => (
-                         <Box key={name} sx={{ display: 'flex', alignItems: 'center', color: 'error.main', gap: 1 }}>
-                           <WarningAmberIcon color="error" />
-                           <Typography variant="body2">{name}: {safeFormatCurrency(over)}</Typography>
-                         </Box>
-                       ))}
-                     </Box>
-                   ) : (
-                     <Typography variant="body2">No budget overages</Typography>
-                   )}
-                 </Paper>
                  <Paper sx={{ p: 2 }}>
                    <Typography variant="h6" gutterBottom>Monthly Progress</Typography>
                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -1876,6 +1876,7 @@ const ReportsPage: React.FC = () => {
                      </Box>
                    </Box>
                  </Paper>
+
                </Box>
              </Grid>
            </Grid>
