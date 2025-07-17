@@ -311,22 +311,24 @@ const ReportsPage: React.FC = () => {
               occurrenceCount++;
             }
           } else {
-            // Fallback to first day of month if no start_date
-            const occurrenceDate = new Date(selectedYear, selectedMonthNum, 1);
-            result.push({
-              ...item,
-              occurrenceDate,
-              shouldInclude: true,
-              occurrenceId: `${item.id}_0`
-            });
+            // If no start_date, don't include the item (it needs a start_date to be valid)
+            // This prevents items without start_date from appearing in all months
           }
         } else {
           // For monthly_date items, use day_of_month
           const dayOfMonth = item.day_of_month || 1;
           const occurrenceDate = new Date(selectedYear, selectedMonthNum, dayOfMonth);
           
-          // Only include if the date is valid for this month
-          if (occurrenceDate.getMonth() === selectedMonthNum) {
+          // Check if start_date exists and if the occurrence date is after start_date
+          let shouldInclude = occurrenceDate.getMonth() === selectedMonthNum;
+          
+          if (item.start_date) {
+            const startDate = parseLocalDate(item.start_date);
+            // Only include if occurrence date is on or after start_date
+            shouldInclude = shouldInclude && occurrenceDate >= startDate;
+          }
+          
+          if (shouldInclude) {
             result.push({
               ...item,
               occurrenceDate,

@@ -70,6 +70,7 @@ const RecurringPage: React.FC = () => {
   const [recurringItems, setRecurringItems] = useState<RecurringItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<RecurringItem | undefined>();
   const [snackbar, setSnackbar] = useState<{
@@ -120,9 +121,18 @@ const RecurringPage: React.FC = () => {
     }
   };
   // 미리보기 날짜 계산
-  const getPreviewDates = () => {
+  const previewDates = useMemo(() => {
     const result: string[] = [];
     const today = toMidnight(new Date());
+    
+    console.log('Preview calculation:', {
+      startDate,
+      repeatType,
+      intervalUnit,
+      intervalValue,
+      today: format(today, 'yyyy-MM-dd')
+    });
+    
     if (repeatType === 'monthly_date') {
       // 매월 n일
       let base = startDate ? toMidnight(parse(startDate, 'yyyy-MM-dd', new Date())) : today;
@@ -134,19 +144,49 @@ const RecurringPage: React.FC = () => {
         }
       }
     } else {
-      // 시작일 + 반복주기
-      let base = startDate ? toMidnight(parse(startDate, 'yyyy-MM-dd', new Date())) : today;
-      for (let i = 0; i < 12; i++) {
-        if (isAfter(base, today) || format(base, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')) {
-          result.push(format(base, 'yyyy-MM-dd'));
+      // 시작일 + 반복주기 - 단순한 계산
+      if (startDate) {
+        let currentDate = toMidnight(parse(startDate, 'yyyy-MM-dd', new Date()));
+        console.log('Start date parsed:', format(currentDate, 'yyyy-MM-dd'));
+        
+        // 12개의 발생일 계산
+        for (let i = 0; i < 12; i++) {
+          console.log(`Iteration ${i}: current date:`, format(currentDate, 'yyyy-MM-dd'));
+          
+          // 현재 날짜 이후이거나 오늘인 경우에만 추가
+          if (isAfter(currentDate, today) || format(currentDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')) {
+            result.push(format(currentDate, 'yyyy-MM-dd'));
+            console.log('Added to result:', format(currentDate, 'yyyy-MM-dd'));
+          }
+          
+          // 다음 발생일 계산
+          if (intervalUnit === 'day') {
+            currentDate = toMidnight(addDays(currentDate, intervalValue));
+          } else if (intervalUnit === 'week') {
+            currentDate = toMidnight(addWeeks(currentDate, intervalValue));
+          } else {
+            currentDate = toMidnight(addMonths(currentDate, intervalValue));
+          }
         }
-        if (intervalUnit === 'day') base = toMidnight(addDays(base, intervalValue));
-        else if (intervalUnit === 'week') base = toMidnight(addWeeks(base, intervalValue));
-        else base = toMidnight(addMonths(base, intervalValue));
+      } else {
+        // Start Date가 없는 경우 현재 날짜부터 계산
+        let base = today;
+        for (let i = 0; i < 12; i++) {
+          result.push(format(base, 'yyyy-MM-dd'));
+          if (intervalUnit === 'day') {
+            base = toMidnight(addDays(base, intervalValue));
+          } else if (intervalUnit === 'week') {
+            base = toMidnight(addWeeks(base, intervalValue));
+          } else {
+            base = toMidnight(addMonths(base, intervalValue));
+          }
+        }
       }
     }
+    
+    console.log('Final preview dates:', result);
     return result;
-  };
+  }, [startDate, repeatType, formData.day_of_month, intervalUnit, intervalValue]);
 
   const loadData = async () => {
     try {
@@ -158,15 +198,51 @@ const RecurringPage: React.FC = () => {
       setRecurringItems(items || []);
       setCategories(cats || []);
       setAccounts(accts || []);
+      
+      // Load checked items for all months
+      await loadCheckedItems();
     } catch (error) {
       console.error('Failed to load recurring data:', error);
       setSnackbar({ open: true, message: 'Failed to load data', severity: 'error' });
     }
   };
 
+  const loadCheckedItems = async () => {
+    try {
+      // Get current month and previous months to check for completed transactions
+      const today = new Date();
+      const currentMonth = format(today, 'yyyy-MM');
+      const monthsToCheck = [];
+      
+      // Check current month and previous 12 months
+      for (let i = 0; i < 12; i++) {
+        const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        monthsToCheck.push(format(date, 'yyyy-MM'));
+      }
+      
+      const allCheckedItems = new Set<string>();
+      
+      for (const month of monthsToCheck) {
+        const checkedIds = await invoke<string[]>('get_recurring_checks', { month });
+        checkedIds.forEach(id => allCheckedItems.add(id));
+        if (checkedIds.length > 0) {
+          console.log(`Month ${month} has checked items:`, checkedIds);
+        }
+      }
+      
+      setCheckedItems(allCheckedItems);
+      console.log('All checked items loaded:', Array.from(allCheckedItems));
+    } catch (error) {
+      console.error('Failed to load checked items:', error);
+    }
+  };
+
   useEffect(() => {
     loadData();
+    loadCheckedItems(); // Also load checked items on mount
   }, []);
+
+
 
   // activeTab이 바뀔 때마다 formData.type도 업데이트
   useEffect(() => {
@@ -179,6 +255,21 @@ const RecurringPage: React.FC = () => {
       }));
     }
   }, [activeTab, isFormOpen, selectedItem, categories]);
+
+  // Refresh checked items when tab changes
+  useEffect(() => {
+    loadCheckedItems();
+  }, [activeTab]);
+
+  // Listen for window focus to refresh data when returning from Reports page
+  useEffect(() => {
+    const handleFocus = () => {
+      loadCheckedItems();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
 
   const handleAddItem = () => {
     setSelectedItem(undefined);
@@ -411,13 +502,63 @@ const RecurringPage: React.FC = () => {
               <Tab label="Expenses" />
               <Tab label="Income" />
             </Tabs>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleAddItem}
-            >
-              Add {activeTab === 0 ? 'Expense' : 'Income'}
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="outlined"
+                onClick={async () => {
+                  await loadData();
+                  await loadCheckedItems();
+                }}
+                size="small"
+              >
+                Refresh
+              </Button>
+              <Button
+                variant="outlined"
+                color="warning"
+                onClick={async () => {
+                  try {
+                    console.log('Clearing all checked items...');
+                    // Clear all checked items from database
+                    const today = new Date();
+                    const monthsToCheck = [];
+                    
+                    // Check current month and previous 12 months
+                    for (let i = 0; i < 12; i++) {
+                      const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                      monthsToCheck.push(format(date, 'yyyy-MM'));
+                    }
+                    
+                    for (const month of monthsToCheck) {
+                      const checkedIds = await invoke<string[]>('get_recurring_checks', { month });
+                      for (const id of checkedIds) {
+                        await invoke('update_recurring_check', {
+                          occurrenceId: id,
+                          month: month,
+                          isChecked: false
+                        });
+                        console.log(`Unchecked ${id} for month ${month}`);
+                      }
+                    }
+                    
+                    await loadCheckedItems();
+                    console.log('All checked items cleared');
+                  } catch (error) {
+                    console.error('Failed to clear checked items:', error);
+                  }
+                }}
+                size="small"
+              >
+                Clear Checks
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleAddItem}
+              >
+                Add {activeTab === 0 ? 'Expense' : 'Income'}
+              </Button>
+            </Box>
           </Box>
           <Box sx={{ borderBottom: '2px solid #1976d2', width: '100%' }} />
         </Box>
@@ -489,12 +630,26 @@ const RecurringPage: React.FC = () => {
                       
                       if (item.repeat_type === 'interval') {
                         // For interval items, calculate next occurrence from start_date
-                                if (item.start_date) {
-          const startDate = parseLocalDate(item.start_date);
+                        if (item.start_date) {
+                          const startDate = parseLocalDate(item.start_date);
                           let currentDate = new Date(startDate);
+                          let occurrenceCount = 0;
                           
-                          // Find the next occurrence after today
-                          while (currentDate <= today) {
+                          // Find the next occurrence
+                          while (true) {
+                            const occurrenceId = `${item.id}_${occurrenceCount}`;
+                            
+                            // If this occurrence is in the future, check if it's completed
+                            if (currentDate > today) {
+                              // If not checked, use it as next transaction date
+                              if (!checkedItems.has(occurrenceId)) {
+                                nextDate = currentDate;
+                                break;
+                              }
+                              // If checked, continue to next occurrence
+                            }
+                            
+                            // Calculate next occurrence
                             if (item.interval_unit === 'day') {
                               currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 24 * 60 * 60 * 1000);
                             } else if (item.interval_unit === 'week') {
@@ -502,20 +657,46 @@ const RecurringPage: React.FC = () => {
                             } else if (item.interval_unit === 'month') {
                               currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + (item.interval_value || 1), currentDate.getDate());
                             }
+                            occurrenceCount++;
+                            
+                            // Safety check to prevent infinite loop
+                            if (occurrenceCount > 100) {
+                              nextDate = currentDate;
+                              break;
+                            }
                           }
-                          nextDate = currentDate;
                         } else {
                           nextDate = new Date(); // Fallback
                         }
                       } else {
                         // For monthly_date items, calculate next occurrence
                         const dayOfMonth = item.day_of_month || 1;
-                        const currentMonth = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
+                        let currentMonth = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
+                        let monthCount = 0;
                         
-                        if (currentMonth > today) {
-                          nextDate = currentMonth;
-                        } else {
-                          nextDate = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth);
+                        // Find the next month
+                        while (true) {
+                          const occurrenceId = `${item.id}_${monthCount}`;
+                          
+                          // If this month is in the future, check if it's completed
+                          if (currentMonth > today) {
+                            // If not checked, use it as next transaction date
+                            if (!checkedItems.has(occurrenceId)) {
+                              nextDate = currentMonth;
+                              break;
+                            }
+                            // If checked, continue to next month
+                          }
+                          
+                          // Move to next month
+                          monthCount++;
+                          currentMonth = new Date(today.getFullYear(), today.getMonth() + monthCount, dayOfMonth);
+                          
+                          // Safety check to prevent infinite loop
+                          if (monthCount > 100) {
+                            nextDate = currentMonth;
+                            break;
+                          }
                         }
                       }
                       
@@ -730,7 +911,7 @@ const RecurringPage: React.FC = () => {
               <Box sx={{ mt: 2 }}>
                 <Typography variant="subtitle2" color="text.secondary">Expected Occurrence Dates (Preview)</Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                  {getPreviewDates().map(date => (
+                  {previewDates.map(date => (
                     <Box key={date} sx={{ px: 1.5, py: 0.5, bgcolor: '#e3f2fd', borderRadius: 1, fontSize: 14 }}>
                       {date}
                     </Box>
