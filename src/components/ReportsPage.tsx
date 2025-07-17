@@ -282,13 +282,15 @@ const ReportsPage: React.FC = () => {
 
   // Separate recurring income and expense items
   const recurringIncomeItems = useMemo(() => {
-    const items = monthlyRecurringItems.filter(item => item.type === 'Income');
-    return items;
+    return monthlyRecurringItems
+      .filter(item => item.type === 'Income')
+      .sort((a, b) => a.occurrenceDate.getTime() - b.occurrenceDate.getTime());
   }, [monthlyRecurringItems]);
   
   const recurringExpenseItems = useMemo(() => {
-    const items = monthlyRecurringItems.filter(item => item.type === 'Expense');
-    return items;
+    return monthlyRecurringItems
+      .filter(item => item.type === 'Expense')
+      .sort((a, b) => a.occurrenceDate.getTime() - b.occurrenceDate.getTime());
   }, [monthlyRecurringItems]);
 
   // Load checked recurring items from database for the current month
@@ -1647,7 +1649,7 @@ const ReportsPage: React.FC = () => {
                          <Typography variant="subtitle2" color="success.main" sx={{ fontWeight: 'bold', mb: 1 }}>
                            Recurring Income
                          </Typography>
-                         <List dense sx={{ maxHeight: 200, overflow: 'auto', bgcolor: 'grey.50', borderRadius: 1 }}>
+                         <List dense sx={{ bgcolor: 'grey.50', borderRadius: 1 }}>
                            {recurringIncomeItems.map((item) => (
                              <ListItem key={item.occurrenceId} dense sx={{ py: 0.5 }}>
                                <ListItemIcon sx={{ minWidth: 36 }}>
@@ -1712,7 +1714,7 @@ const ReportsPage: React.FC = () => {
                          <Typography variant="subtitle2" color="error.main" sx={{ fontWeight: 'bold', mb: 1 }}>
                            Recurring Expenses
                          </Typography>
-                         <List dense sx={{ maxHeight: 200, overflow: 'auto', bgcolor: 'grey.50', borderRadius: 1 }}>
+                         <List dense sx={{ bgcolor: 'grey.50', borderRadius: 1 }}>
                            {recurringExpenseItems.map((item) => (
                              <ListItem key={item.occurrenceId} dense sx={{ py: 0.5 }}>
                                <ListItemIcon sx={{ minWidth: 36 }}>
