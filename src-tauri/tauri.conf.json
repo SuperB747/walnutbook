@@ -13,6 +13,21 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "splash",
+        "title": "WalnutBook",
+        "width": 1920,
+        "height": 1080,
+        "resizable": false,
+        "fullscreen": true,
+        "decorations": false,
+        "transparent": false,
+        "visible": true,
+        "center": true,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "url": "splash.html"
+      },
+      {
         "label": "main",
         "title": "WalnutBook",
         "width": 1200,
@@ -20,7 +35,7 @@
         "resizable": true,
         "fullscreen": false,
         "maximized": true,
-        "visible": true
+        "visible": false
       }
     ],
     "security": {

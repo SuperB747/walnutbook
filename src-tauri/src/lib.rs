@@ -72,6 +72,23 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .build(),
                 )?;
             }
+            
+            // Get splash window and main window
+            let splash_window = app.get_webview_window("splash").unwrap();
+            let main_window = app.get_webview_window("main").unwrap();
+            
+            // Ensure splash is visible and main is hidden
+            splash_window.show().unwrap();
+            main_window.hide().unwrap();
+            
+            // After 3 seconds, hide splash and show main window
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                splash_window.close().unwrap();
+                main_window.show().unwrap();
+                main_window.set_focus().unwrap();
+            });
+            
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
