@@ -1586,7 +1586,7 @@ const ReportsPage: React.FC = () => {
                  </Paper>
                  <Paper sx={{ p: 2 }}>
                    <Typography variant="h6" gutterBottom>Monthly Progress</Typography>
-                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                      {/* Current Net Amount */}
                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
@@ -1630,7 +1630,7 @@ const ReportsPage: React.FC = () => {
                      )}
                      
                      {/* Predicted Net Amount */}
-                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
                          Predicted Net: <span style={{ color: (predictedMonthlySummary.income + predictedMonthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f' }}>
                            {safeFormatCurrency(predictedMonthlySummary.income + predictedMonthlySummary.expense)}
@@ -1746,7 +1746,7 @@ const ReportsPage: React.FC = () => {
                                        {item.name}
                                      </Typography>
                                      <Typography variant="body2" color="error.main" sx={{ fontWeight: 'bold' }}>
-                                       -{safeFormatCurrency(item.amount)}
+                                       -{safeFormatCurrency(Math.abs(item.amount))}
                                      </Typography>
                                    </Box>
                                  }

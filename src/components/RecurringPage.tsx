@@ -638,7 +638,7 @@ const RecurringPage: React.FC = () => {
                   </TableCell>
                   <TableCell align="right">
                     <Typography color={item.type === 'Expense' ? 'error.main' : 'success.main'}>
-                      {item.type === 'Expense' ? '-' : '+'}{formatCurrency(item.amount)}
+                      {item.type === 'Expense' ? '-' + formatCurrency(Math.abs(item.amount)) : formatCurrency(item.amount)}
                     </Typography>
                   </TableCell>
                   <TableCell>{getCategoryName(item.category_id)}</TableCell>
