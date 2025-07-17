@@ -60,12 +60,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         .setup(|app| {
             // Initialize SQLite database schema
             utils::init_db(&app.handle()).map_err(|e| e.to_string())?;
-            
             // Create and manage database connection
             let db_path = utils::get_db_path(&app.handle());
             let conn = Connection::open(&db_path).expect("Failed to open DB");
             app.manage(Mutex::new(conn));
-            
             // Enable logging plugin in development
             if cfg!(debug_assertions) {
                 app.handle().plugin(

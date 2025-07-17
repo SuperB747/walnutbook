@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>WalnutBook</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loading...</title>
   <style>
     * {
       margin: 0;
@@ -11,27 +11,23 @@
       box-sizing: border-box;
     }
     
-    body {
-      overflow: hidden;
+    html, body {
+      height: 100%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
     }
     
-    #splash {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
+    .splash-container {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      z-index: 9999;
-      color: white;
+      height: 100%;
+      position: relative;
     }
     
-    .splash-content {
+    .content {
       text-align: center;
       animation: fadeInUp 0.5s ease-out;
     }
@@ -48,15 +44,15 @@
     }
     
     .logo {
-      width: 100px;
-      height: 100px;
+      width: 80px;
+      height: 80px;
       background: rgba(255, 255, 255, 0.95);
-      border-radius: 24px;
+      border-radius: 20px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-      margin: 0 auto 32px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      margin: 0 auto 24px;
       animation: pulse 2s ease-in-out infinite;
     }
     
@@ -66,7 +62,7 @@
     }
     
     .logo-text {
-      font-size: 2.5rem;
+      font-size: 2rem;
       font-weight: 800;
       background: linear-gradient(135deg, #667eea, #764ba2);
       -webkit-background-clip: text;
@@ -75,33 +71,24 @@
     }
     
     .app-title {
-      font-size: 2.5rem;
+      font-size: 2rem;
       font-weight: 700;
+      color: white;
       margin-bottom: 8px;
-      letter-spacing: 2px;
+      letter-spacing: 1px;
       text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     }
     
     .app-subtitle {
-      font-size: 1rem;
-      color: rgba(255, 255, 255, 0.8);
-      margin-bottom: 40px;
-      font-weight: 300;
-      letter-spacing: 1px;
-    }
-    
-    .tagline {
       font-size: 0.9rem;
-      color: rgba(255, 255, 255, 0.7);
-      margin-bottom: 40px;
+      color: rgba(255, 255, 255, 0.8);
+      margin-bottom: 32px;
       font-weight: 300;
-      letter-spacing: 0.5px;
-      font-style: italic;
     }
     
     .loader {
-      width: 60px;
-      height: 60px;
+      width: 40px;
+      height: 40px;
       border: 3px solid rgba(255, 255, 255, 0.2);
       border-top: 3px solid white;
       border-radius: 50%;
@@ -116,49 +103,24 @@
     
     .loading-text {
       color: rgba(255, 255, 255, 0.9);
-      font-size: 1.1rem;
+      font-size: 1rem;
       font-weight: 500;
-      letter-spacing: 1px;
-    }
-    
-    #App {
-      display: none;
-    }
-    
-    .app-loaded #App {
-      display: block;
-    }
-    
-    .app-loaded #splash {
-      display: none;
     }
   </style>
 </head>
 <body>
-  <div id="splash">
-    <div class="splash-content">
+  <div class="splash-container">
+    <div class="content">
       <div class="logo">
         <span class="logo-text">WB</span>
       </div>
       
       <div class="app-title">WalnutBook</div>
       <div class="app-subtitle">Personal Finance Manager</div>
-      <div class="tagline">Smart Finance Management Made Simple</div>
       
       <div class="loader"></div>
       <div class="loading-text">Loading...</div>
     </div>
   </div>
-  
-  <div id="App"></div>
-  <script src="renderer.js"></script>
-  <script>
-    // Hide splash and show app after React loads
-    window.addEventListener('load', function() {
-      setTimeout(function() {
-        document.body.classList.add('app-loaded');
-      }, 3000);
-    });
-  </script>
 </body>
-</html>
+</html> 
