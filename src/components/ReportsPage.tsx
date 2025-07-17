@@ -47,7 +47,7 @@ import {
 import { Transaction, Category, Budget, Account, RecurringItem } from '../db';
 import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
-import { safeFormatCurrency, parseLocalDate, createLocalDate } from '../utils';
+import { safeFormatCurrency, parseLocalDate, createLocalDate, calculateMonthlyOccurrences } from '../utils';
 
 // Register Chart.js core components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, ChartTooltip, Legend, ArcElement, PointElement, LineElement);
@@ -251,92 +251,30 @@ const ReportsPage: React.FC = () => {
 
   // Recurring items for current month with dates
   const monthlyRecurringItems = useMemo(() => {
-    // Parse year and month from selectedMonth (format: "YYYY-MM")
-    const [yearStr, monthStr] = selectedMonth.split('-');
-    const selectedYear = parseInt(yearStr);
-    const selectedMonthNum = parseInt(monthStr) - 1; // Convert to 0-based index
-    
-
-    
     const result: Array<RecurringItem & { occurrenceDate: Date; shouldInclude: boolean; occurrenceId: string }> = [];
     
     // Calculate all occurrences for each active item in the selected month
     recurringItems
       .filter(item => item.is_active)
       .forEach(item => {
+        const monthlyOccurrences = calculateMonthlyOccurrences(item, selectedMonth);
         
-        if (item.repeat_type === 'interval') {
-          // For interval items, calculate all occurrences from start_date
+        monthlyOccurrences.forEach(occurrence => {
+          console.log('Creating occurrence:', { 
+            itemId: item.id, 
+            itemName: item.name, 
+            occurrenceCount: occurrence.occurrenceCount, 
+            occurrenceId: occurrence.occurrenceId, 
+            date: occurrence.date 
+          });
           
-          if (item.start_date) {
-            // Parse start_date as local date to avoid timezone issues
-            const startDate = parseLocalDate(item.start_date);
-            const monthStart = new Date(selectedYear, selectedMonthNum, 1);
-            const monthEnd = new Date(selectedYear, selectedMonthNum + 1, 0);
-            
-
-            
-            let currentDate = new Date(startDate);
-            let occurrenceCount = 0;
-            
-            // Find the first occurrence that's >= month start
-            while (currentDate < monthStart) {
-              if (item.interval_unit === 'day') {
-                currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 24 * 60 * 60 * 1000);
-              } else if (item.interval_unit === 'week') {
-                currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 7 * 24 * 60 * 60 * 1000);
-              } else if (item.interval_unit === 'month') {
-                currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + (item.interval_value || 1), currentDate.getDate());
-              }
-
-            }
-            
-            // Add all occurrences within the month
-            while (currentDate <= monthEnd) {
-              result.push({
-                ...item,
-                occurrenceDate: new Date(currentDate),
-                shouldInclude: true,
-                occurrenceId: `${item.id}_${occurrenceCount}`
-              });
-              
-              // Calculate next occurrence
-              if (item.interval_unit === 'day') {
-                currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 24 * 60 * 60 * 1000);
-              } else if (item.interval_unit === 'week') {
-                currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 7 * 24 * 60 * 60 * 1000);
-              } else if (item.interval_unit === 'month') {
-                currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + (item.interval_value || 1), currentDate.getDate());
-              }
-              occurrenceCount++;
-            }
-          } else {
-            // If no start_date, don't include the item (it needs a start_date to be valid)
-            // This prevents items without start_date from appearing in all months
-          }
-        } else {
-          // For monthly_date items, use day_of_month
-          const dayOfMonth = item.day_of_month || 1;
-          const occurrenceDate = new Date(selectedYear, selectedMonthNum, dayOfMonth);
-          
-          // Check if start_date exists and if the occurrence date is after start_date
-          let shouldInclude = occurrenceDate.getMonth() === selectedMonthNum;
-          
-          if (item.start_date) {
-            const startDate = parseLocalDate(item.start_date);
-            // Only include if occurrence date is on or after start_date
-            shouldInclude = shouldInclude && occurrenceDate >= startDate;
-          }
-          
-          if (shouldInclude) {
-            result.push({
-              ...item,
-              occurrenceDate,
-              shouldInclude: true,
-              occurrenceId: `${item.id}_0`
-            });
-          }
-        }
+          result.push({
+            ...item,
+            occurrenceDate: parseLocalDate(occurrence.date),
+            shouldInclude: true,
+            occurrenceId: occurrence.occurrenceId
+          });
+        });
       });
     
     return result;
@@ -388,15 +326,20 @@ const ReportsPage: React.FC = () => {
 
   const handleRecurringItemCheck = async (occurrenceId: string, checked: boolean) => {
     try {
+      console.log('handleRecurringItemCheck called:', { occurrenceId, checked });
+      
       // Find the item by occurrenceId
       const item = monthlyRecurringItems.find(item => item.occurrenceId === occurrenceId);
       if (!item) {
         console.error('Item not found for occurrenceId:', occurrenceId);
+        console.log('Available items:', monthlyRecurringItems.map(i => ({ id: i.id, occurrenceId: i.occurrenceId, name: i.name })));
         setSnackbarMessage('Item not found');
         setSnackbarSeverity('error');
         setSnackbarOpen(true);
         return;
       }
+
+      console.log('Found item:', item);
 
       // Update check status in database first
       await invoke('update_recurring_check', {
@@ -413,6 +356,13 @@ const ReportsPage: React.FC = () => {
         newChecked.delete(occurrenceId);
       }
       setCheckedRecurringItems(newChecked);
+      
+      console.log('Updated checked items:', Array.from(newChecked));
+      
+      // Dispatch custom event to notify other components about the change
+      window.dispatchEvent(new CustomEvent('recurringCheckChanged', {
+        detail: { occurrenceId, checked, month: selectedMonth }
+      }));
       
       // Show success message
       setSnackbarMessage('Database updated');
@@ -437,86 +387,8 @@ const ReportsPage: React.FC = () => {
       }, 0);
   }, [monthlyRecurringItems, checkedRecurringItems]);
 
-  // Auto-uncheck items whose next transaction date has passed
-  useEffect(() => {
-    const autoUncheckExpiredItems = async () => {
-      const today = new Date();
-      const currentMonth = today.getFullYear() * 100 + today.getMonth() + 1; // YYYYMM format
-      
-      const itemsToUncheck: string[] = [];
-      
-      for (const item of recurringItems) {
-        // Check if any occurrence of this item is checked
-        const checkedOccurrences = monthlyRecurringItems
-          .filter(occurrence => occurrence.id === item.id)
-          .filter(occurrence => checkedRecurringItems.has(occurrence.occurrenceId));
-        
-        if (checkedOccurrences.length > 0) {
-          let nextDate: Date;
-          
-          if (item.repeat_type === 'interval') {
-            if (item.start_date) {
-              // Parse start_date as local date to avoid timezone issues
-              const startDate = parseLocalDate(item.start_date);
-              let currentDate = new Date(startDate);
-              
-              while (currentDate <= today) {
-                if (item.interval_unit === 'day') {
-                  currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 24 * 60 * 60 * 1000);
-                } else if (item.interval_unit === 'week') {
-                  currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 7 * 24 * 60 * 60 * 1000);
-                } else if (item.interval_unit === 'month') {
-                  currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + (item.interval_value || 1), currentDate.getDate());
-                }
-              }
-              nextDate = currentDate;
-            } else {
-              nextDate = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-            }
-          } else {
-            const dayOfMonth = item.day_of_month || 1;
-            const currentMonth = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
-            
-            if (currentMonth > today) {
-              nextDate = currentMonth;
-            } else {
-              nextDate = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth);
-            }
-          }
-          
-          const nextMonth = nextDate.getFullYear() * 100 + nextDate.getMonth() + 1;
-          if (nextMonth > currentMonth) {
-            // Next transaction date is in the future, uncheck all occurrences of this item
-            const itemOccurrences = monthlyRecurringItems.filter(occurrence => occurrence.id === item.id);
-            for (const occurrence of itemOccurrences) {
-              if (checkedRecurringItems.has(occurrence.occurrenceId)) {
-                itemsToUncheck.push(occurrence.occurrenceId);
-              }
-            }
-          }
-        }
-      }
-      
-      if (itemsToUncheck.length > 0) {
-        const newChecked = new Set(checkedRecurringItems);
-        for (const occurrenceId of itemsToUncheck) {
-          newChecked.delete(occurrenceId);
-          // Find the item by occurrenceId for database update
-          const item = monthlyRecurringItems.find(occurrence => occurrence.occurrenceId === occurrenceId);
-          if (item) {
-            await invoke('update_recurring_check', {
-              occurrenceId: occurrenceId,
-              month: selectedMonth,
-              isChecked: false
-            });
-          }
-        }
-        setCheckedRecurringItems(newChecked);
-      }
-    };
-    
-    autoUncheckExpiredItems();
-  }, [recurringItems, checkedRecurringItems, selectedMonth]);
+  // Note: Auto-uncheck logic removed to prevent interference with manual checkbox interactions
+  // Users should manually uncheck items when they want to mark them as incomplete
 
 
 
@@ -1769,15 +1641,20 @@ const ReportsPage: React.FC = () => {
                                    size="small"
                                    checked={checkedRecurringItems.has(item.occurrenceId)}
                                    onChange={(e) => {
+                                     console.log('Income Checkbox onChange:', { occurrenceId: item.occurrenceId, checked: e.target.checked });
                                      e.stopPropagation();
                                      handleRecurringItemCheck(item.occurrenceId, e.target.checked);
                                    }}
                                    onClick={(e) => {
+                                     console.log('Income Checkbox onClick:', { occurrenceId: item.occurrenceId });
                                      e.stopPropagation();
                                    }}
                                    sx={{ 
                                      cursor: 'pointer',
-                                     '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' }
+                                     '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                                     '& .MuiSvgIcon-root': { fontSize: 20 },
+                                     zIndex: 1,
+                                     position: 'relative'
                                    }}
                                  />
                                </ListItemIcon>
@@ -1829,15 +1706,20 @@ const ReportsPage: React.FC = () => {
                                    size="small"
                                    checked={checkedRecurringItems.has(item.occurrenceId)}
                                    onChange={(e) => {
+                                     console.log('Expense Checkbox onChange:', { occurrenceId: item.occurrenceId, checked: e.target.checked });
                                      e.stopPropagation();
                                      handleRecurringItemCheck(item.occurrenceId, e.target.checked);
                                    }}
                                    onClick={(e) => {
+                                     console.log('Expense Checkbox onClick:', { occurrenceId: item.occurrenceId });
                                      e.stopPropagation();
                                    }}
                                    sx={{ 
                                      cursor: 'pointer',
-                                     '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' }
+                                     '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                                     '& .MuiSvgIcon-root': { fontSize: 20 },
+                                     zIndex: 1,
+                                     position: 'relative'
                                    }}
                                  />
                                </ListItemIcon>

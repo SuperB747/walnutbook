@@ -32,7 +32,7 @@ import {
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Category, Account } from '../db';
 import { invoke } from '@tauri-apps/api/core';
-import { formatCurrency, safeFormatCurrency, parseLocalDate, createLocalDate, formatLocalDate, getCurrentLocalDate } from '../utils';
+import { formatCurrency, safeFormatCurrency, parseLocalDate, createLocalDate, formatLocalDate, getCurrentLocalDate, calculateNextTransactionDate } from '../utils';
 import { format, addDays, addWeeks, addMonths, isAfter, parse } from 'date-fns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -139,9 +139,8 @@ const RecurringPage: React.FC = () => {
       let day = formData.day_of_month || 1;
       for (let i = 0; i < 12; i++) {
         const d = toMidnight(new Date(base.getFullYear(), base.getMonth() + i, day));
-        if (isAfter(d, today) || format(d, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')) {
-          result.push(format(d, 'yyyy-MM-dd'));
-        }
+        // 모든 발생일을 추가 (과거 날짜도 포함)
+        result.push(format(d, 'yyyy-MM-dd'));
       }
     } else {
       // 시작일 + 반복주기 - 단순한 계산
@@ -153,11 +152,9 @@ const RecurringPage: React.FC = () => {
         for (let i = 0; i < 12; i++) {
           console.log(`Iteration ${i}: current date:`, format(currentDate, 'yyyy-MM-dd'));
           
-          // 현재 날짜 이후이거나 오늘인 경우에만 추가
-          if (isAfter(currentDate, today) || format(currentDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')) {
-            result.push(format(currentDate, 'yyyy-MM-dd'));
-            console.log('Added to result:', format(currentDate, 'yyyy-MM-dd'));
-          }
+          // 모든 발생일을 추가 (과거 날짜도 포함)
+          result.push(format(currentDate, 'yyyy-MM-dd'));
+          console.log('Added to result:', format(currentDate, 'yyyy-MM-dd'));
           
           // 다음 발생일 계산
           if (intervalUnit === 'day') {
@@ -269,6 +266,17 @@ const RecurringPage: React.FC = () => {
 
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  // Listen for recurring check changes from Reports page
+  useEffect(() => {
+    const handleRecurringCheckChanged = (event: CustomEvent) => {
+      console.log('Recurring check changed:', event.detail);
+      loadCheckedItems();
+    };
+
+    window.addEventListener('recurringCheckChanged', handleRecurringCheckChanged as EventListener);
+    return () => window.removeEventListener('recurringCheckChanged', handleRecurringCheckChanged as EventListener);
   }, []);
 
   const handleAddItem = () => {
@@ -625,84 +633,10 @@ const RecurringPage: React.FC = () => {
                   <TableCell>{getAccountName(item.account_id)}</TableCell>
                   <TableCell align="center">
                     {(() => {
-                      const today = new Date();
-                      let nextDate: Date;
-                      
-                      if (item.repeat_type === 'interval') {
-                        // For interval items, calculate next occurrence from start_date
-                        if (item.start_date) {
-                          const startDate = parseLocalDate(item.start_date);
-                          let currentDate = new Date(startDate);
-                          let occurrenceCount = 0;
-                          
-                          // Find the next occurrence
-                          while (true) {
-                            const occurrenceId = `${item.id}_${occurrenceCount}`;
-                            
-                            // If this occurrence is in the future, check if it's completed
-                            if (currentDate > today) {
-                              // If not checked, use it as next transaction date
-                              if (!checkedItems.has(occurrenceId)) {
-                                nextDate = currentDate;
-                                break;
-                              }
-                              // If checked, continue to next occurrence
-                            }
-                            
-                            // Calculate next occurrence
-                            if (item.interval_unit === 'day') {
-                              currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 24 * 60 * 60 * 1000);
-                            } else if (item.interval_unit === 'week') {
-                              currentDate = new Date(currentDate.getTime() + (item.interval_value || 1) * 7 * 24 * 60 * 60 * 1000);
-                            } else if (item.interval_unit === 'month') {
-                              currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + (item.interval_value || 1), currentDate.getDate());
-                            }
-                            occurrenceCount++;
-                            
-                            // Safety check to prevent infinite loop
-                            if (occurrenceCount > 100) {
-                              nextDate = currentDate;
-                              break;
-                            }
-                          }
-                        } else {
-                          nextDate = new Date(); // Fallback
-                        }
-                      } else {
-                        // For monthly_date items, calculate next occurrence
-                        const dayOfMonth = item.day_of_month || 1;
-                        let currentMonth = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
-                        let monthCount = 0;
-                        
-                        // Find the next month
-                        while (true) {
-                          const occurrenceId = `${item.id}_${monthCount}`;
-                          
-                          // If this month is in the future, check if it's completed
-                          if (currentMonth > today) {
-                            // If not checked, use it as next transaction date
-                            if (!checkedItems.has(occurrenceId)) {
-                              nextDate = currentMonth;
-                              break;
-                            }
-                            // If checked, continue to next month
-                          }
-                          
-                          // Move to next month
-                          monthCount++;
-                          currentMonth = new Date(today.getFullYear(), today.getMonth() + monthCount, dayOfMonth);
-                          
-                          // Safety check to prevent infinite loop
-                          if (monthCount > 100) {
-                            nextDate = currentMonth;
-                            break;
-                          }
-                        }
-                      }
-                      
+                      const nextDate = calculateNextTransactionDate(item, checkedItems);
                       return (
                         <Typography variant="body2" color="text.primary">
-                          {nextDate.toISOString().split('T')[0]}
+                          {nextDate}
                         </Typography>
                       );
                     })()}
