@@ -67,7 +67,7 @@ pub struct RecurringItem {
     pub item_type: String,
     pub category_id: i64,
     pub account_id: i64,
-    pub day_of_month: i32,
+    pub day_of_month: String, // JSON array of integers, e.g. "[1,15]" or "[1]"
     pub is_active: bool,
     pub notes: Option<String>,
     pub created_at: String,
@@ -90,4 +90,6 @@ fn default_interval_value() -> i32 {
 
 fn default_interval_unit() -> String {
     "month".to_string()
-} 
+}
+
+ 

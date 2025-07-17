@@ -1,4 +1,4 @@
-import { Category } from './db';
+import { Category, RecurringItem } from './db';
 
 // Currency formatting
 export const formatCurrency = (amount: number): string => {
@@ -94,22 +94,7 @@ export function formatLocalDate(date: Date): string {
 } 
 
 // Recurring item의 Next Transaction Date 계산을 위한 유틸리티 함수들
-export interface RecurringItem {
-  id: number;
-  name: string;
-  amount: number;
-  type: 'Income' | 'Expense';
-  category_id: number;
-  account_id: number;
-  day_of_month: number;
-  is_active: boolean;
-  notes?: string;
-  created_at: string;
-  repeat_type?: string;
-  start_date?: string;
-  interval_value?: number;
-  interval_unit?: string;
-}
+// Using RecurringItem from db.ts instead of duplicating the interface
 
 /**
  * Recurring item의 모든 발생일을 계산합니다.
@@ -133,7 +118,7 @@ export function calculateRecurringOccurrences(
     let occurrenceCount = 0;
     
     while (occurrenceCount < maxOccurrences) {
-      const occurrenceId = `${item.id}_${occurrenceCount}`;
+      const occurrenceId = `${item.id}_${occurrenceCount}_0`; // Use consistent format with dayIndex 0 for interval
       const dateStr = formatLocalDate(currentDate); // Changed from format to formatLocalDate
       
       occurrences.push({
@@ -154,23 +139,29 @@ export function calculateRecurringOccurrences(
     }
   } else {
     // monthly_date 타입
-    const dayOfMonth = item.day_of_month || 1;
+    const daysOfMonth = parseDayOfMonth(item.day_of_month);
+    if (!Array.isArray(daysOfMonth)) {
+      console.error('daysOfMonth is not an array:', daysOfMonth);
+      return occurrences;
+    }
     let occurrenceCount = 0;
     
     // 시작일부터 계산
     let baseDate = item.start_date ? parseLocalDate(item.start_date) : new Date();
     
     while (occurrenceCount < maxOccurrences) {
-      const occurrenceId = `${item.id}_${occurrenceCount}`;
-      const currentDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + occurrenceCount, dayOfMonth);
-      const dateStr = formatLocalDate(currentDate); // Changed from format to formatLocalDate
-      
-      occurrences.push({
-        date: dateStr,
-        occurrenceId,
-        occurrenceCount
-      });
-      
+      for (let dayIndex = 0; dayIndex < daysOfMonth.length; dayIndex++) {
+        const dayOfMonth = daysOfMonth[dayIndex];
+        const occurrenceId = `${item.id}_${occurrenceCount}_${dayIndex}`; // Unique ID for each day
+        const currentDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + occurrenceCount, dayOfMonth);
+        const dateStr = formatLocalDate(currentDate); // Changed from format to formatLocalDate
+        
+        occurrences.push({
+          date: dateStr,
+          occurrenceId,
+          occurrenceCount
+        });
+      }
       occurrenceCount++;
     }
   }
@@ -248,4 +239,29 @@ export function calculateMonthlyOccurrences(
     const occurrenceDate = parseLocalDate(occurrence.date);
     return occurrenceDate >= monthStart && occurrenceDate <= monthEnd;
   });
+}
+
+// Helper function to parse day_of_month from JSON string
+export function parseDayOfMonth(dayOfMonthStr: string | number): number[] {
+  try {
+    // If it's already a number (old format), convert to array
+    if (typeof dayOfMonthStr === 'number') {
+      return [dayOfMonthStr];
+    }
+    
+    // If it's a string, try to parse as JSON
+    if (typeof dayOfMonthStr === 'string') {
+      return JSON.parse(dayOfMonthStr);
+    }
+    
+    // Fallback
+    return [1];
+  } catch (error) {
+    // Fallback for old format (single number)
+    if (typeof dayOfMonthStr === 'string') {
+      const num = parseInt(dayOfMonthStr);
+      return isNaN(num) ? [1] : [num];
+    }
+    return [1];
+  }
 } 

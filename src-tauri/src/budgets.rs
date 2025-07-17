@@ -65,7 +65,7 @@ pub fn update_budget(app: AppHandle, budget: Budget) -> Result<Vec<Budget>, Stri
 }
 
 #[tauri::command]
-pub fn delete_budget(app: AppHandle, id: i64, currentMonth: String) -> Result<Vec<Budget>, String> {
+pub fn delete_budget(app: AppHandle, id: i64, current_month: String) -> Result<Vec<Budget>, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     
@@ -103,5 +103,5 @@ pub fn delete_budget(app: AppHandle, id: i64, currentMonth: String) -> Result<Ve
         println!("Successfully deleted budget: id={}, category_id={}, month={}", id, category_id, month);
     }
     
-    get_budgets(app, currentMonth)
+    get_budgets(app, current_month)
 } 

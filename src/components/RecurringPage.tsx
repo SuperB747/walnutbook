@@ -30,29 +30,14 @@ import {
   InputLabel,
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import { Category, Account } from '../db';
+import { Category, Account, RecurringItem } from '../db';
 import { invoke } from '@tauri-apps/api/core';
-import { formatCurrency, safeFormatCurrency, parseLocalDate, createLocalDate, formatLocalDate, getCurrentLocalDate, calculateNextTransactionDate } from '../utils';
+import { formatCurrency, safeFormatCurrency, parseLocalDate, createLocalDate, formatLocalDate, getCurrentLocalDate, calculateNextTransactionDate, parseDayOfMonth } from '../utils';
 import { format, addDays, addWeeks, addMonths, isAfter, parse } from 'date-fns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
-interface RecurringItem {
-  id: number;
-  name: string;
-  amount: number;
-  type: 'Income' | 'Expense';
-  category_id: number;
-  account_id: number;
-  day_of_month: number;
-  is_active: boolean;
-  notes?: string;
-  created_at: string;
-  repeat_type?: string;
-  start_date?: string;
-  interval_value?: number;
-  interval_unit?: string;
-}
+
 
 interface RecurringFormData {
   name: string;
@@ -60,7 +45,7 @@ interface RecurringFormData {
   type: 'Income' | 'Expense';
   category_id: number | undefined;
   account_id: number | undefined;
-  day_of_month: number;
+  day_of_month: number[]; // Changed to array
   is_active: boolean;
   notes: string;
 }
@@ -89,12 +74,14 @@ const RecurringPage: React.FC = () => {
     type: 'Expense',
     category_id: 0,
     account_id: 0,
-    day_of_month: 1,
+    day_of_month: [1], // Changed to array
     is_active: true,
     notes: '',
   });
   // 추가: 금액 입력값을 문자열로 관리
   const [amountInputValue, setAmountInputValue] = useState('');
+  // Day of month 입력값들을 문자열로 관리
+  const [dayOfMonthInputValues, setDayOfMonthInputValues] = useState<string[]>(['1']);
   // 반복 방식: 'monthly_date' | 'interval'
   const [repeatType, setRepeatType] = useState<'monthly_date' | 'interval'>('monthly_date');
   // interval 관련 상태
@@ -105,6 +92,8 @@ const RecurringPage: React.FC = () => {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [datePickerOpen2, setDatePickerOpen2] = useState(false);
   // 프리셋 선택
+  const [selectedPreset, setSelectedPreset] = useState<string>('');
+  
   const handlePreset = (preset: 'biweekly' | 'monthly' | 'weekly') => {
     if (preset === 'biweekly') {
       setIntervalValue(2);
@@ -119,10 +108,11 @@ const RecurringPage: React.FC = () => {
       setIntervalUnit('week');
       setRepeatType('interval');
     }
+    setSelectedPreset(preset);
   };
   // 미리보기 날짜 계산
   const previewDates = useMemo(() => {
-    const result: string[] = [];
+    const result: Set<string> = new Set(); // Use Set to avoid duplicates
     const today = toMidnight(new Date());
     
     console.log('Preview calculation:', {
@@ -134,13 +124,28 @@ const RecurringPage: React.FC = () => {
     });
     
     if (repeatType === 'monthly_date') {
-      // 매월 n일
+      // 매월 n일들
       let base = startDate ? toMidnight(parse(startDate, 'yyyy-MM-dd', new Date())) : today;
-      let day = formData.day_of_month || 1;
-      for (let i = 0; i < 12; i++) {
-        const d = toMidnight(new Date(base.getFullYear(), base.getMonth() + i, day));
-        // 모든 발생일을 추가 (과거 날짜도 포함)
-        result.push(format(d, 'yyyy-MM-dd'));
+      console.log('formData.day_of_month:', formData.day_of_month, 'type:', typeof formData.day_of_month);
+      const days = formData.day_of_month || [1]; // Safety check
+      console.log('days after safety check:', days, 'type:', typeof days, 'isArray:', Array.isArray(days));
+      
+      if (!Array.isArray(days)) {
+        console.error('days is not an array, using fallback');
+        const fallbackDays = [1];
+        for (let i = 0; i < 12; i++) {
+          for (const day of fallbackDays) {
+            const d = toMidnight(new Date(base.getFullYear(), base.getMonth() + i, day));
+            result.add(format(d, 'yyyy-MM-dd'));
+          }
+        }
+      } else {
+        for (let i = 0; i < 12; i++) {
+          for (const day of days) {
+            const d = toMidnight(new Date(base.getFullYear(), base.getMonth() + i, day));
+            result.add(format(d, 'yyyy-MM-dd'));
+          }
+        }
       }
     } else {
       // 시작일 + 반복주기 - 단순한 계산
@@ -152,8 +157,7 @@ const RecurringPage: React.FC = () => {
         for (let i = 0; i < 12; i++) {
           console.log(`Iteration ${i}: current date:`, format(currentDate, 'yyyy-MM-dd'));
           
-          // 모든 발생일을 추가 (과거 날짜도 포함)
-          result.push(format(currentDate, 'yyyy-MM-dd'));
+          result.add(format(currentDate, 'yyyy-MM-dd'));
           console.log('Added to result:', format(currentDate, 'yyyy-MM-dd'));
           
           // 다음 발생일 계산
@@ -169,7 +173,7 @@ const RecurringPage: React.FC = () => {
         // Start Date가 없는 경우 현재 날짜부터 계산
         let base = today;
         for (let i = 0; i < 12; i++) {
-          result.push(format(base, 'yyyy-MM-dd'));
+          result.add(format(base, 'yyyy-MM-dd'));
           if (intervalUnit === 'day') {
             base = toMidnight(addDays(base, intervalValue));
           } else if (intervalUnit === 'week') {
@@ -181,8 +185,9 @@ const RecurringPage: React.FC = () => {
       }
     }
     
-    console.log('Final preview dates:', result);
-    return result;
+    const sortedResult = Array.from(result).sort();
+    console.log('Final preview dates:', sortedResult);
+    return sortedResult;
   }, [startDate, repeatType, formData.day_of_month, intervalUnit, intervalValue]);
 
   const loadData = async () => {
@@ -288,47 +293,84 @@ const RecurringPage: React.FC = () => {
       type: itemType,
       category_id: getFirstCategoryId(categories, itemType),
       account_id: getFirstAccountId(accounts),
-      day_of_month: 1,
+      day_of_month: [1],
       is_active: true,
       notes: '',
     });
     setAmountInputValue('');
+    setDayOfMonthInputValues(['1']);
     setRepeatType('monthly_date');
     setStartDate(formatLocalDate(getCurrentLocalDate()));
     setIntervalValue(14);
     setIntervalUnit('week');
+    setSelectedPreset('');
     setIsFormOpen(true);
   };
 
   const handleEditItem = (item: RecurringItem) => {
-    setSelectedItem(item);
-    setFormData({
-      name: item.name,
-      amount: item.amount,
-      type: item.type,
-      category_id: item.category_id,
-      account_id: item.account_id,
-      day_of_month: item.day_of_month,
-      is_active: item.is_active,
-      notes: item.notes || '',
-    });
-    setAmountInputValue(item.amount !== undefined ? Math.abs(item.amount).toString() : '');
-    
-    // Load new fields if they exist
-    if (item.repeat_type) {
-      setRepeatType(item.repeat_type as 'monthly_date' | 'interval');
+    try {
+      console.log('handleEditItem called with item:', item);
+      console.log('item.day_of_month:', item.day_of_month, 'type:', typeof item.day_of_month);
+      
+      setSelectedItem(item);
+      const parsedDays = parseDayOfMonth(item.day_of_month);
+      console.log('parsedDays:', parsedDays, 'type:', typeof parsedDays, 'isArray:', Array.isArray(parsedDays));
+      
+      // Ensure parsedDays is an array
+      const safeParsedDays = Array.isArray(parsedDays) ? parsedDays : [1];
+      
+      setFormData({
+        name: item.name,
+        amount: item.amount,
+        type: item.type,
+        category_id: item.category_id,
+        account_id: item.account_id,
+        day_of_month: safeParsedDays,
+        is_active: item.is_active,
+        notes: item.notes || '',
+      });
+      setAmountInputValue(item.amount !== undefined ? Math.abs(item.amount).toString() : '');
+      // Parse day_of_month from JSON string to array
+      setDayOfMonthInputValues(safeParsedDays.map((d: number) => d.toString()));
+      
+      // Load new fields if they exist
+      if (item.repeat_type) {
+        setRepeatType(item.repeat_type as 'monthly_date' | 'interval');
+      }
+      if (item.start_date) {
+        setStartDate(item.start_date);
+      }
+      if (item.interval_value) {
+        setIntervalValue(item.interval_value);
+      }
+      if (item.interval_unit) {
+        setIntervalUnit(item.interval_unit as 'day' | 'week' | 'month');
+      }
+      
+      // Set selected preset based on current interval settings
+      if (item.repeat_type === 'interval') {
+        if (item.interval_unit === 'week' && item.interval_value === 1) {
+          setSelectedPreset('weekly');
+        } else if (item.interval_unit === 'week' && item.interval_value === 2) {
+          setSelectedPreset('biweekly');
+        } else if (item.interval_unit === 'month' && item.interval_value === 1) {
+          setSelectedPreset('monthly');
+        } else {
+          setSelectedPreset('');
+        }
+      } else {
+        setSelectedPreset('');
+      }
+      
+      setIsFormOpen(true);
+    } catch (error) {
+      console.error('Error in handleEditItem:', error);
+      setSnackbar({ 
+        open: true, 
+        message: 'Failed to load item for editing. Please try again.', 
+        severity: 'error' 
+      });
     }
-    if (item.start_date) {
-      setStartDate(item.start_date);
-    }
-    if (item.interval_value) {
-      setIntervalValue(item.interval_value);
-    }
-    if (item.interval_unit) {
-      setIntervalUnit(item.interval_unit as 'day' | 'week' | 'month');
-    }
-    
-    setIsFormOpen(true);
   };
 
   const handleDeleteItem = async (item: RecurringItem) => {
@@ -343,8 +385,21 @@ const RecurringPage: React.FC = () => {
 
   const handleSaveItem = async () => {
     try {
-      // 보정: interval 방식일 때 day_of_month는 1로 설정 (데이터베이스 제약조건 때문)
-      const safeDayOfMonth = repeatType === 'interval' ? 1 : (formData.day_of_month || 1);
+      // Debug form validation
+      console.log('Form validation check:', {
+        name: formData.name,
+        amount: formData.amount,
+        category_id: formData.category_id,
+        account_id: formData.account_id,
+        nameValid: !!formData.name,
+        amountValid: Math.abs(formData.amount) > 0,
+        categoryValid: !!formData.category_id,
+        accountValid: !!formData.account_id,
+        allValid: !!(formData.name && Math.abs(formData.amount) > 0 && formData.category_id && formData.account_id)
+      });
+
+      // 보정: interval 방식일 때 day_of_month는 [1]로 설정, monthly_date일 때는 배열을 JSON으로 저장
+      const safeDayOfMonth = repeatType === 'interval' ? '[1]' : JSON.stringify(formData.day_of_month);
       // 보정: repeat_type, interval_unit, interval_value, start_date
       const safeRepeatType = repeatType === 'interval' ? 'interval' : 'monthly_date';
       const safeIntervalUnit = ['day', 'week', 'month'].includes(intervalUnit) ? intervalUnit : 'month';
@@ -358,6 +413,7 @@ const RecurringPage: React.FC = () => {
         category_id: formData.category_id,
         account_id: formData.account_id,
         day_of_month: safeDayOfMonth,
+        day_of_month_original: formData.day_of_month,
         is_active: formData.is_active,
         notes: formData.notes,
         repeat_type: safeRepeatType,
@@ -383,7 +439,7 @@ const RecurringPage: React.FC = () => {
           intervalUnit: safeIntervalUnit,
         });
       } else {
-        await invoke('add_recurring_item', {
+        const invokeData = {
           name: formData.name,
           amount: formData.amount,
           itemType: formData.type,
@@ -396,7 +452,11 @@ const RecurringPage: React.FC = () => {
           startDate: safeStartDate,
           intervalValue: safeIntervalValue,
           intervalUnit: safeIntervalUnit,
-        });
+        };
+        console.log('Invoking add_recurring_item with data:', invokeData);
+        console.log('Data keys:', Object.keys(invokeData));
+        console.log('itemType value:', invokeData.itemType);
+        await invoke('add_recurring_item', invokeData);
       }
       await loadData();
       setIsFormOpen(false);
@@ -512,54 +572,6 @@ const RecurringPage: React.FC = () => {
             </Tabs>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button
-                variant="outlined"
-                onClick={async () => {
-                  await loadData();
-                  await loadCheckedItems();
-                }}
-                size="small"
-              >
-                Refresh
-              </Button>
-              <Button
-                variant="outlined"
-                color="warning"
-                onClick={async () => {
-                  try {
-                    console.log('Clearing all checked items...');
-                    // Clear all checked items from database
-                    const today = new Date();
-                    const monthsToCheck = [];
-                    
-                    // Check current month and previous 12 months
-                    for (let i = 0; i < 12; i++) {
-                      const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-                      monthsToCheck.push(format(date, 'yyyy-MM'));
-                    }
-                    
-                    for (const month of monthsToCheck) {
-                      const checkedIds = await invoke<string[]>('get_recurring_checks', { month });
-                      for (const id of checkedIds) {
-                        await invoke('update_recurring_check', {
-                          occurrenceId: id,
-                          month: month,
-                          isChecked: false
-                        });
-                        console.log(`Unchecked ${id} for month ${month}`);
-                      }
-                    }
-                    
-                    await loadCheckedItems();
-                    console.log('All checked items cleared');
-                  } catch (error) {
-                    console.error('Failed to clear checked items:', error);
-                  }
-                }}
-                size="small"
-              >
-                Clear Checks
-              </Button>
-              <Button
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={handleAddItem}
@@ -650,7 +662,13 @@ const RecurringPage: React.FC = () => {
                     </Typography>
                   </TableCell>
                   <TableCell align="center">
-                    <IconButton size="small" onClick={() => handleEditItem(item)}>
+                    <IconButton 
+                      size="small" 
+                      onClick={() => {
+                        console.log('Edit button clicked for item:', item);
+                        handleEditItem(item);
+                      }}
+                    >
                       <EditIcon />
                     </IconButton>
                     <IconButton size="small" onClick={() => handleDeleteItem(item)}>
@@ -673,37 +691,109 @@ const RecurringPage: React.FC = () => {
         </TableContainer>
 
         <Dialog open={isFormOpen} onClose={() => setIsFormOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>
+          <DialogTitle sx={{ pb: 1 }}>
             {selectedItem ? 'Edit' : 'Add'} Recurring {activeTab === 0 ? 'Expense' : 'Income'}
           </DialogTitle>
-          <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          <DialogContent sx={{ pt: 1 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {/* Repeat Type Selection */}
-              <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                 <Button
+                  size="small"
                   variant={repeatType === 'monthly_date' ? 'contained' : 'outlined'}
-                  onClick={() => setRepeatType('monthly_date')}
+                  onClick={() => {
+                    setRepeatType('monthly_date');
+                    setSelectedPreset('');
+                  }}
                 >Monthly Date</Button>
                 <Button
+                  size="small"
                   variant={repeatType === 'interval' ? 'contained' : 'outlined'}
-                  onClick={() => setRepeatType('interval')}
+                  onClick={() => {
+                    setRepeatType('interval');
+                    setSelectedPreset('');
+                  }}
                 >Start Date + Interval</Button>
-                <Button size="small" onClick={() => handlePreset('biweekly')}>Biweekly</Button>
-                <Button size="small" onClick={() => handlePreset('monthly')}>Monthly</Button>
-                <Button size="small" onClick={() => handlePreset('weekly')}>Weekly</Button>
+                <FormControl size="small" sx={{ minWidth: 100 }}>
+                  <InputLabel>Preset</InputLabel>
+                  <Select
+                    value={selectedPreset}
+                    label="Preset"
+                    onChange={(e) => handlePreset(e.target.value as 'biweekly' | 'monthly' | 'weekly')}
+                  >
+                    <MenuItem value="">Select Preset</MenuItem>
+                    <MenuItem value="weekly">Weekly</MenuItem>
+                    <MenuItem value="biweekly">Bi-Weekly</MenuItem>
+                    <MenuItem value="monthly">Monthly</MenuItem>
+                  </Select>
+                </FormControl>
               </Box>
               {/* Input fields based on repeat type */}
               {repeatType === 'monthly_date' ? (
                 <>
-                  <TextField
-                    label="Day of Month"
-                    type="number"
-                    value={formData.day_of_month}
-                    onChange={(e) => setFormData({ ...formData, day_of_month: parseInt(e.target.value) || 1 })}
-                    fullWidth
-                    inputProps={{ min: 1, max: 31 }}
-                    required
-                  />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                      Day(s) of Month (up to 2)
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      {dayOfMonthInputValues.map((value, index) => (
+                        <TextField
+                          key={index}
+                          size="small"
+                          label={`Day ${index + 1}`}
+                          type="number"
+                          value={value}
+                          onChange={(e) => {
+                            const newValues = [...dayOfMonthInputValues];
+                            newValues[index] = e.target.value;
+                            setDayOfMonthInputValues(newValues);
+                            
+                            // Update formData with valid numbers
+                            const validNumbers = newValues
+                              .map(v => parseInt(v))
+                              .filter(num => !isNaN(num) && num >= 1 && num <= 31);
+                            setFormData({ ...formData, day_of_month: validNumbers.length > 0 ? validNumbers : [1] });
+                          }}
+                          sx={{ width: 100 }}
+                          inputProps={{ min: 1, max: 31 }}
+                          required={index === 0}
+                        />
+                      ))}
+                      {dayOfMonthInputValues.length < 2 && (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          sx={{ minWidth: 40 }}
+                          onClick={() => {
+                            const newValues = [...dayOfMonthInputValues, ''];
+                            setDayOfMonthInputValues(newValues);
+                          }}
+                        >
+                          +
+                        </Button>
+                      )}
+                      {dayOfMonthInputValues.length > 1 && (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          color="error"
+                          sx={{ minWidth: 40 }}
+                          onClick={() => {
+                            const newValues = dayOfMonthInputValues.slice(0, -1);
+                            setDayOfMonthInputValues(newValues);
+                            
+                            // Update formData
+                            const validNumbers = newValues
+                              .map(v => parseInt(v))
+                              .filter(num => !isNaN(num) && num >= 1 && num <= 31);
+                            setFormData({ ...formData, day_of_month: validNumbers.length > 0 ? validNumbers : [1] });
+                          }}
+                        >
+                          -
+                        </Button>
+                      )}
+                    </Box>
+                  </Box>
                   <LocalizationProvider dateAdapter={AdapterDateFns}>
                     <DatePicker
                       label="Start Date"
@@ -759,16 +849,17 @@ const RecurringPage: React.FC = () => {
                       disableFuture={false}
                     />
                   </LocalizationProvider>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
                     <TextField
+                      size="small"
                       label="Interval"
                       type="number"
                       value={intervalValue}
                       onChange={e => setIntervalValue(parseInt(e.target.value) || 1)}
-                      sx={{ width: 120 }}
+                      sx={{ width: 100 }}
                       inputProps={{ min: 1 }}
                     />
-                    <FormControl sx={{ minWidth: 120 }}>
+                    <FormControl size="small" sx={{ minWidth: 100 }}>
                       <InputLabel>Unit</InputLabel>
                       <Select
                         value={intervalUnit}
@@ -783,83 +874,104 @@ const RecurringPage: React.FC = () => {
                   </Box>
                 </>
               )}
+              <Grid container spacing={1}>
+                <Grid item xs={12}>
+                  <TextField
+                    size="small"
+                    label="Name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    fullWidth
+                    required
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    size="small"
+                    label="Amount"
+                    type="number"
+                    value={amountInputValue}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setAmountInputValue(value);
+                      const num = parseFloat(value);
+                      // For income, store positive value; for expense, store negative value
+                      const finalAmount = isNaN(num) ? 0 : (formData.type === 'Income' ? Math.abs(num) : -Math.abs(num));
+                      setFormData({ ...formData, amount: finalAmount });
+                    }}
+                    fullWidth
+                    required
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <FormControl size="small" fullWidth>
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      value={safeSelectValue(formData.category_id, availableCategories)}
+                      onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
+                      label="Category"
+                      required
+                    >
+                      {availableCategories.map((category) => (
+                        <MenuItem key={category.id} value={category.id}>
+                          {category.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControl size="small" fullWidth>
+                    <InputLabel>Account</InputLabel>
+                    <Select
+                      value={safeSelectValue(formData.account_id, accounts)}
+                      onChange={(e) => setFormData({ ...formData, account_id: Number(e.target.value) })}
+                      label="Account"
+                      required
+                    >
+                      {accounts.map((account) => (
+                        <MenuItem key={account.id} value={account.id}>
+                          {account.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
               <TextField
-                label="Name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                fullWidth
-                required
-              />
-              <TextField
-                label="Amount"
-                type="number"
-                value={amountInputValue}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setAmountInputValue(value);
-                  const num = parseFloat(value);
-                  setFormData({ ...formData, amount: isNaN(num) ? 0 : num });
-                }}
-                fullWidth
-                required
-              />
-              <FormControl fullWidth>
-                <InputLabel>Category</InputLabel>
-                <Select
-                  value={safeSelectValue(formData.category_id, availableCategories)}
-                  onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
-                  label="Category"
-                  required
-                >
-                  {availableCategories.map((category) => (
-                    <MenuItem key={category.id} value={category.id}>
-                      {category.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl fullWidth>
-                <InputLabel>Account</InputLabel>
-                <Select
-                  value={safeSelectValue(formData.account_id, accounts)}
-                  onChange={(e) => setFormData({ ...formData, account_id: Number(e.target.value) })}
-                  label="Account"
-                  required
-                >
-                  {accounts.map((account) => (
-                    <MenuItem key={account.id} value={account.id}>
-                      {account.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
+                size="small"
                 label="Notes (Optional)"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 fullWidth
                 multiline
-                rows={2}
+                rows={1}
               />
               {/* Preview */}
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle2" color="text.secondary">Expected Occurrence Dates (Preview)</Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                  {previewDates.map(date => (
-                    <Box key={date} sx={{ px: 1.5, py: 0.5, bgcolor: '#e3f2fd', borderRadius: 1, fontSize: 14 }}>
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Expected Occurrence Dates (Preview)</Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {previewDates.slice(0, 8).map(date => (
+                    <Box key={date} sx={{ px: 1, py: 0.25, bgcolor: '#e3f2fd', borderRadius: 0.5, fontSize: 12 }}>
                       {date}
                     </Box>
                   ))}
+                  {previewDates.length > 8 && (
+                    <Box sx={{ px: 1, py: 0.25, bgcolor: '#e3f2fd', borderRadius: 0.5, fontSize: 12 }}>
+                      +{previewDates.length - 8} more
+                    </Box>
+                  )}
                 </Box>
               </Box>
             </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setIsFormOpen(false)}>Cancel</Button>
+          <DialogActions sx={{ px: 2, pb: 1 }}>
+            <Button size="small" onClick={() => setIsFormOpen(false)}>Cancel</Button>
             <Button 
+              size="small"
               onClick={handleSaveItem} 
               variant="contained"
-              disabled={!formData.name || formData.amount <= 0 || !formData.category_id || !formData.account_id}
+              disabled={!formData.name || Math.abs(formData.amount) <= 0 || !formData.category_id || !formData.account_id}
             >
               {selectedItem ? 'Update' : 'Add'}
             </Button>

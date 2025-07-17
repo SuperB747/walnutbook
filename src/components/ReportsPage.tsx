@@ -1595,9 +1595,23 @@ const ReportsPage: React.FC = () => {
                        <Typography variant="body2" color="text.secondary">
                          {(() => {
                            const today = new Date();
-                           const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
-                           const remainingDays = lastDay - today.getDate();
-                           return `${remainingDays} days remaining`;
+                           const currentYear = today.getFullYear();
+                           const currentMonth = today.getMonth() + 1; // 1-based
+                           const selectedYear = parseInt(year);
+                           const selectedMonth = parseInt(month);
+                           const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
+                           
+                           if (selectedYear < currentYear || (selectedYear === currentYear && selectedMonth < currentMonth)) {
+                             // Past month: no days remaining
+                             return "Month completed";
+                           } else if (selectedYear === currentYear && selectedMonth === currentMonth) {
+                             // Current month: calculate remaining days
+                             const remainingDays = lastDay - today.getDate();
+                             return `${remainingDays} days remaining`;
+                           } else {
+                             // Future month: all days remaining
+                             return `${lastDay} days remaining`;
+                           }
                          })()}
                        </Typography>
                      </Box>
@@ -1780,8 +1794,26 @@ const ReportsPage: React.FC = () => {
                          <Box sx={{
                            width: `${(() => {
                              const today = new Date();
-                             const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
-                             const progress = (today.getDate() / lastDay) * 100;
+                             const currentYear = today.getFullYear();
+                             const currentMonth = today.getMonth() + 1; // 1-based
+                             const selectedYear = parseInt(year);
+                             const selectedMonth = parseInt(month);
+                             const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
+                             
+                             // Calculate progress based on month status
+                             let progress = 0;
+                             
+                             if (selectedYear < currentYear || (selectedYear === currentYear && selectedMonth < currentMonth)) {
+                               // Past month: 100% filled
+                               progress = 100;
+                             } else if (selectedYear === currentYear && selectedMonth === currentMonth) {
+                               // Current month: progress based on current day
+                               progress = (today.getDate() / lastDay) * 100;
+                             } else {
+                               // Future month: 0% filled
+                               progress = 0;
+                             }
+                             
                              return Math.min(progress, 100);
                            })()}%`,
                            height: '100%',
@@ -1797,9 +1829,30 @@ const ReportsPage: React.FC = () => {
                          {(() => {
                            const netAmount = predictedMonthlySummary.income + predictedMonthlySummary.expense;
                            const today = new Date();
-                           const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
-                           const remainingDays = lastDay - today.getDate();
-                           const progress = (today.getDate() / lastDay) * 100;
+                           const currentYear = today.getFullYear();
+                           const currentMonth = today.getMonth() + 1; // 1-based
+                           const selectedYear = parseInt(year);
+                           const selectedMonth = parseInt(month);
+                           const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
+                           
+                           // Calculate progress and remaining days based on month status
+                           let progress = 0;
+                           let remainingDays = 0;
+                           
+                           if (selectedYear < currentYear || (selectedYear === currentYear && selectedMonth < currentMonth)) {
+                             // Past month: 100% progress, 0 remaining days
+                             progress = 100;
+                             remainingDays = 0;
+                           } else if (selectedYear === currentYear && selectedMonth === currentMonth) {
+                             // Current month: progress based on current day
+                             progress = (today.getDate() / lastDay) * 100;
+                             remainingDays = lastDay - today.getDate();
+                           } else {
+                             // Future month: 0% progress, all days remaining
+                             progress = 0;
+                             remainingDays = lastDay;
+                           }
+                           
                            if (netAmount >= 0) {
                              if (progress >= 80) {
                                return "Great job! You're on track to finish the month strong! 💪";

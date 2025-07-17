@@ -48,7 +48,7 @@ export interface RecurringItem {
   type: 'Income' | 'Expense';
   category_id: number;
   account_id: number;
-  day_of_month: number;
+  day_of_month: string | number; // Allow both string (new format) and number (old format) for backward compatibility
   is_active: boolean;
   notes?: string;
   created_at: string;

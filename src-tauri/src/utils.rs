@@ -124,7 +124,7 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
             type TEXT NOT NULL CHECK (type IN ('Income', 'Expense')),
             category_id INTEGER NOT NULL,
             account_id INTEGER NOT NULL,
-            day_of_month INTEGER NOT NULL CHECK (day_of_month >= 1 AND day_of_month <= 31),
+            day_of_month TEXT NOT NULL, -- JSON array of integers, e.g. '[1,15]' or '[1]'
             is_active BOOLEAN NOT NULL DEFAULT 1,
             notes TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -148,40 +148,142 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
             .map(|r| r.unwrap_or_default())
             .collect();
         
-        // Add repeat_type column
-        if !existing.contains(&"repeat_type".to_string()) {
-            conn.execute(
-                "ALTER TABLE recurring_items ADD COLUMN repeat_type TEXT DEFAULT 'monthly_date' CHECK (repeat_type IN ('monthly_date', 'interval'))",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
+        // Check if day_of_month column exists and has the old integer type
+        let mut day_of_month_type = String::new();
+        if existing.contains(&"day_of_month".to_string()) {
+            let mut type_stmt = conn.prepare("SELECT type FROM pragma_table_info('recurring_items') WHERE name = 'day_of_month'").map_err(|e| e.to_string())?;
+            if let Ok(row) = type_stmt.query_row([], |row| row.get::<_, String>(0)) {
+                day_of_month_type = row;
+            }
         }
         
-        // Add start_date column
-        if !existing.contains(&"start_date".to_string()) {
+        // If day_of_month is INTEGER, we need to recreate the table to remove the CHECK constraint
+        if day_of_month_type == "INTEGER" {
+            // Create temporary table with new schema
             conn.execute(
-                "ALTER TABLE recurring_items ADD COLUMN start_date TEXT",
+                "CREATE TABLE recurring_items_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    type TEXT NOT NULL CHECK (type IN ('Income', 'Expense')),
+                    category_id INTEGER NOT NULL,
+                    account_id INTEGER NOT NULL,
+                    day_of_month TEXT NOT NULL,
+                    is_active BOOLEAN NOT NULL DEFAULT 1,
+                    notes TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    repeat_type TEXT DEFAULT 'monthly_date' CHECK (repeat_type IN ('monthly_date', 'interval')),
+                    start_date TEXT,
+                    interval_value INTEGER DEFAULT 1,
+                    interval_unit TEXT DEFAULT 'month' CHECK (interval_unit IN ('day', 'week', 'month')),
+                    FOREIGN KEY (category_id) REFERENCES categories (id),
+                    FOREIGN KEY (account_id) REFERENCES accounts (id)
+                )",
                 [],
-            )
-            .map_err(|e| e.to_string())?;
+            ).map_err(|e| e.to_string())?;
+            
+            // Copy data from old table to new table
+            conn.execute(
+                "INSERT INTO recurring_items_new SELECT * FROM recurring_items",
+                [],
+            ).map_err(|e| e.to_string())?;
+            
+            // Drop old table and rename new table
+            conn.execute("DROP TABLE recurring_items", []).map_err(|e| e.to_string())?;
+            conn.execute("ALTER TABLE recurring_items_new RENAME TO recurring_items", []).map_err(|e| e.to_string())?;
+            
+            // Migrate day_of_month from integer to JSON array format
+            let mut stmt = conn.prepare("SELECT id, day_of_month FROM recurring_items WHERE repeat_type = 'monthly_date' OR repeat_type IS NULL").map_err(|e| e.to_string())?;
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, i32>(1)?))
+            }).map_err(|e| e.to_string())?;
+            
+            for row in rows {
+                let (id, day_of_month) = row.map_err(|e| e.to_string())?;
+                let json_array = format!("[{}]", day_of_month);
+                conn.execute(
+                    "UPDATE recurring_items SET day_of_month = ? WHERE id = ?",
+                    rusqlite::params![json_array, id],
+                ).map_err(|e| e.to_string())?;
+            }
+        } else {
+            // Add repeat_type column
+            if !existing.contains(&"repeat_type".to_string()) {
+                conn.execute(
+                    "ALTER TABLE recurring_items ADD COLUMN repeat_type TEXT DEFAULT 'monthly_date' CHECK (repeat_type IN ('monthly_date', 'interval'))",
+                    [],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            
+            // Add start_date column
+            if !existing.contains(&"start_date".to_string()) {
+                conn.execute(
+                    "ALTER TABLE recurring_items ADD COLUMN start_date TEXT",
+                    [],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            
+            // Add interval_value column
+            if !existing.contains(&"interval_value".to_string()) {
+                conn.execute(
+                    "ALTER TABLE recurring_items ADD COLUMN interval_value INTEGER DEFAULT 1",
+                    [],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            
+            // Add interval_unit column
+            if !existing.contains(&"interval_unit".to_string()) {
+                conn.execute(
+                    "ALTER TABLE recurring_items ADD COLUMN interval_unit TEXT DEFAULT 'month' CHECK (interval_unit IN ('day', 'week', 'month'))",
+                    [],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            
+            // Migrate day_of_month from integer to JSON array format if it's still integer
+            if day_of_month_type == "INTEGER" {
+                let mut stmt = conn.prepare("SELECT id, day_of_month FROM recurring_items WHERE repeat_type = 'monthly_date' OR repeat_type IS NULL").map_err(|e| e.to_string())?;
+                let rows = stmt.query_map([], |row| {
+                    Ok((row.get::<_, i64>(0)?, row.get::<_, i32>(1)?))
+                }).map_err(|e| e.to_string())?;
+                
+                for row in rows {
+                    let (id, day_of_month) = row.map_err(|e| e.to_string())?;
+                    let json_array = format!("[{}]", day_of_month);
+                    conn.execute(
+                        "UPDATE recurring_items SET day_of_month = ? WHERE id = ?",
+                        rusqlite::params![json_array, id],
+                    ).map_err(|e| e.to_string())?;
+                }
+            }
         }
+    }
+
+    // Force migrate day_of_month from integer to JSON array format for all existing items
+    {
+        let mut stmt = conn.prepare("SELECT id, day_of_month FROM recurring_items").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            let id: i64 = row.get(0)?;
+            let day_of_month: String = row.get(1)?;
+            Ok((id, day_of_month))
+        }).map_err(|e| e.to_string())?;
         
-        // Add interval_value column
-        if !existing.contains(&"interval_value".to_string()) {
-            conn.execute(
-                "ALTER TABLE recurring_items ADD COLUMN interval_value INTEGER DEFAULT 1",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-        }
-        
-        // Add interval_unit column
-        if !existing.contains(&"interval_unit".to_string()) {
-            conn.execute(
-                "ALTER TABLE recurring_items ADD COLUMN interval_unit TEXT DEFAULT 'month' CHECK (interval_unit IN ('day', 'week', 'month'))",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (id, day_of_month) = row.map_err(|e| e.to_string())?;
+            
+            // Check if day_of_month is a single number (old format)
+            if let Ok(day_num) = day_of_month.parse::<i32>() {
+                // Convert single number to JSON array format
+                let json_array = format!("[{}]", day_num);
+                conn.execute(
+                    "UPDATE recurring_items SET day_of_month = ? WHERE id = ?",
+                    rusqlite::params![json_array, id],
+                ).map_err(|e| e.to_string())?;
+                println!("Migrated recurring item {}: {} -> {}", id, day_of_month, json_array);
+            }
         }
     }
 
@@ -226,6 +328,30 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
                 "ALTER TABLE recurring_checks ADD COLUMN occurrence_id TEXT",
                 [],
             ).map_err(|e| e.to_string())?;
+        }
+    }
+
+    // Clean up old occurrence_id format (item_id_occurrenceCount) to new format (item_id_occurrenceCount_dayIndex)
+    // This migration handles the change from duplicate occurrence IDs to unique ones
+    {
+        let mut stmt = conn.prepare("SELECT occurrence_id FROM recurring_checks WHERE occurrence_id LIKE '%_%' AND occurrence_id NOT LIKE '%_%_%'").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            Ok(row.get::<_, String>(0)?)
+        }).map_err(|e| e.to_string())?;
+        
+        for row in rows {
+            if let Ok(old_occurrence_id) = row {
+                // Check if this is an old format occurrence_id (item_id_occurrenceCount)
+                let parts: Vec<&str> = old_occurrence_id.split('_').collect();
+                if parts.len() == 2 {
+                    // This is old format, delete it as it's no longer valid
+                    conn.execute(
+                        "DELETE FROM recurring_checks WHERE occurrence_id = ?",
+                        rusqlite::params![old_occurrence_id],
+                    ).map_err(|e| e.to_string())?;
+                    println!("Cleaned up old occurrence_id format: {}", old_occurrence_id);
+                }
+            }
         }
     }
 
