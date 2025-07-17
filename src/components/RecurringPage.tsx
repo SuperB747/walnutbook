@@ -491,8 +491,18 @@ const RecurringPage: React.FC = () => {
   }, [recurringItems, activeTab]);
 
   const totalAmount = useMemo(() => {
-    return filteredItems.reduce((sum, item) => sum + item.amount, 0);
-  }, [filteredItems]);
+    if (activeTab === 0) {
+      // Expense 탭: Expense만, 절대값 합산
+      return filteredItems
+        .filter(item => item.type === 'Expense')
+        .reduce((sum, item) => sum + Math.abs(item.amount), 0);
+    } else {
+      // Income 탭: Income만 합산
+      return filteredItems
+        .filter(item => item.type === 'Income')
+        .reduce((sum, item) => sum + item.amount, 0);
+    }
+  }, [filteredItems, activeTab]);
 
   const getCategoryName = (categoryId: number) => {
     return categories.find(c => c.id === categoryId)?.name || 'Undefined';

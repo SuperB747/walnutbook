@@ -381,13 +381,21 @@ const ReportsPage: React.FC = () => {
   };
 
   // Calculate recurring amounts excluding checked items (as they're considered "processed")
-  const monthlyRecurringAmount = useMemo(() => {
+  const recurringIncomeTotal = useMemo(() => {
     return monthlyRecurringItems
-      .filter(item => !checkedRecurringItems.has(item.occurrenceId))
-      .reduce((total, item) => {
-        return total + (item.type === 'Income' ? item.amount : -item.amount);
-      }, 0);
+      .filter(item => !checkedRecurringItems.has(item.occurrenceId) && item.type === 'Income')
+      .reduce((sum, item) => sum + item.amount, 0);
   }, [monthlyRecurringItems, checkedRecurringItems]);
+
+  const recurringExpenseTotal = useMemo(() => {
+    return monthlyRecurringItems
+      .filter(item => !checkedRecurringItems.has(item.occurrenceId) && item.type === 'Expense')
+      .reduce((sum, item) => sum + Math.abs(item.amount), 0);
+  }, [monthlyRecurringItems, checkedRecurringItems]);
+
+  const monthlyRecurringAmount = useMemo(() => {
+    return recurringIncomeTotal - recurringExpenseTotal;
+  }, [recurringIncomeTotal, recurringExpenseTotal]);
 
   // Note: Auto-uncheck logic removed to prevent interference with manual checkbox interactions
   // Users should manually uncheck items when they want to mark them as incomplete
