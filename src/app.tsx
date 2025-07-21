@@ -424,6 +424,8 @@ export const App: React.FC = () => {
 
   const getActiveTab = () => {
     switch (location.pathname) {
+      case '/accounts':
+        return 0;
       case '/transactions':
         return 1;
       case '/budgets':
@@ -433,7 +435,7 @@ export const App: React.FC = () => {
       case '/reports':
         return 4;
       default:
-        return 0;
+        return 4; // Default to Reports tab
     }
   };
 
@@ -599,7 +601,7 @@ export const App: React.FC = () => {
                     },
                   }}
                 >
-                  <Tab label="Accounts" component={Link} to="/" />
+                  <Tab label="Accounts" component={Link} to="/accounts" />
                   <Tab label="Transactions" component={Link} to="/transactions" />
                   <Tab label="Budgets" component={Link} to="/budgets" />
                   <Tab label="Recurring" component={Link} to="/recurring" />
@@ -611,7 +613,8 @@ export const App: React.FC = () => {
           </AppBar>
             <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
             <Routes>
-              <Route path="/" element={<AccountsPage />} />
+              <Route path="/" element={<ReportsPage />} />
+              <Route path="/accounts" element={<AccountsPage />} />
               <Route path="/transactions" element={<TransactionsPage />} />
               <Route path="/budgets" element={<BudgetsPage />} />
               <Route path="/recurring" element={<RecurringPage />} />
