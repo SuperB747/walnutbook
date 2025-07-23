@@ -24,6 +24,7 @@ pub struct Transaction {
     pub payee: String,
     pub notes: Option<String>,
     pub transfer_id: Option<i64>,
+    pub to_account_id: Option<i64>,
     #[serde(default)]
     pub created_at: String,
 }

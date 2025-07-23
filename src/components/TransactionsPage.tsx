@@ -314,7 +314,16 @@ const TransactionsPage: React.FC = () => {
       const tx = transactions.find(t => t.id === id);
       if (tx) {
         await invoke('update_transaction', { transaction: { ...tx, notes } });
-        setTransactions(prev => prev.map(t => t.id === id ? { ...t, notes } : t));
+        if (tx.type === 'Transfer' && tx.transfer_id) {
+          // Transfer면 같은 transfer_id를 가진 모든 트랜잭션의 notes를 갱신
+          setTransactions(prev =>
+            prev.map(t =>
+              t.transfer_id === tx.transfer_id ? { ...t, notes } : t
+            )
+          );
+        } else {
+          setTransactions(prev => prev.map(t => t.id === id ? { ...t, notes } : t));
+        }
         setSnackbar({ open: true, message: 'Notes updated', severity: 'success' });
       }
     } catch {

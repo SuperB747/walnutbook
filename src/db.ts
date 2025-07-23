@@ -12,6 +12,7 @@ export interface Transaction {
   payee: string;
   notes?: string;
   transfer_id?: number;
+  to_account_id?: number;
   created_at: string;
 }
 

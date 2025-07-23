@@ -1412,68 +1412,68 @@ const ReportsPage: React.FC = () => {
                           }))
                           .sort((a, b) => a.label.localeCompare(b.label))
                           .map(({ id, label }) => {
-                            // Spent: 해당 카테고리의 Expense 합 + 해당 카테고리로 들어온 환급(Incomes) 합
-                            const expense = monthlyTransactions
-                              .filter(tx => tx.type === 'Expense' && tx.category_id === id)
+                          // Spent: 해당 카테고리의 Expense 합 + 해당 카테고리로 들어온 환급(Incomes) 합
+                          const expense = monthlyTransactions
+                            .filter(tx => tx.type === 'Expense' && tx.category_id === id)
+                            .reduce((sum, tx) => sum + tx.amount, 0);
+                          const reimbursement = monthlyTransactions
+                            .filter(tx => tx.type === 'Income' && tx.category_id != null)
+                            .reduce((sum, tx) => {
+                              const cat = categories.find(c => c.id === tx.category_id);
+                              if (cat?.is_reimbursement && cat.reimbursement_target_category_id === id) {
+                                return sum + tx.amount;
+                              }
+                              return sum;
+                            }, 0);
+                          // Reimbursable 카테고리 자체는 해당 카테고리로 들어온 Income(환급)만 합산
+                          const cat = categories.find(c => c.id === id);
+                          let spent = 0;
+                          if (cat?.is_reimbursement) {
+                            spent = monthlyTransactions
+                              .filter(tx => tx.type === 'Income' && tx.category_id === id)
                               .reduce((sum, tx) => sum + tx.amount, 0);
-                            const reimbursement = monthlyTransactions
-                              .filter(tx => tx.type === 'Income' && tx.category_id != null)
-                              .reduce((sum, tx) => {
-                                const cat = categories.find(c => c.id === tx.category_id);
-                                if (cat?.is_reimbursement && cat.reimbursement_target_category_id === id) {
-                                  return sum + tx.amount;
-                                }
-                                return sum;
-                              }, 0);
-                            // Reimbursable 카테고리 자체는 해당 카테고리로 들어온 Income(환급)만 합산
-                            const cat = categories.find(c => c.id === id);
-                            let spent = 0;
-                            if (cat?.is_reimbursement) {
-                              spent = monthlyTransactions
-                                .filter(tx => tx.type === 'Income' && tx.category_id === id)
-                                .reduce((sum, tx) => sum + tx.amount, 0);
-                            } else {
-                              spent = expense + reimbursement;
-                            }
-                            const budgetAmount = budgets.find(b => b.category_id === id)?.amount || 0;
-                            const diff = budgetAmount + spent; // Expense는 음수이므로 더하기
-                            // Handle near-zero diff values as exactly zero
-                            const normalizedDiff = Math.abs(diff) < 0.005 ? 0 : diff;
-                            totalSpent += spent;
-                            totalBudget += budgetAmount;
-                            // Prepare detail list for tooltip: date, payee, amount
-                            const txnsForCat = monthlyTransactions
-                              .filter(tx => {
-                                if (tx.category_id === id) return true;
-                                const cat = categories.find(c => c.id === tx.category_id);
-                                return cat?.is_reimbursement && cat.reimbursement_target_category_id === id;
-                              })
-                              .sort((a, b) => a.date.localeCompare(b.date));
-                            return (
-                              <TableRow
-                                hover
-                                key={id}
-                                onMouseEnter={(e) => handleCategoryRowEnter(e, txnsForCat)}
-                                onMouseLeave={handleTooltipClose}
-                                sx={{ cursor: 'pointer' }}
-                              >
-                                <TableCell>{label}</TableCell>
-                                <TableCell align="right">
-                                  {spent < 0 ? (
-                                    <Typography color="error.main">-{safeFormatCurrency(Math.abs(spent))}</Typography>
-                                  ) : spent > 0 ? (
-                                    <Typography color="success.main">+{safeFormatCurrency(spent)}</Typography>
-                                  ) : (
-                                    safeFormatCurrency(0)
-                                  )}
-                                </TableCell>
-                                <TableCell align="right">{safeFormatCurrency(budgetAmount)}</TableCell>
-                                <TableCell align="right" sx={{ fontWeight: 'bold', color: normalizedDiff < 0 ? theme.palette.error.main : normalizedDiff === 0 ? theme.palette.text.primary : theme.palette.success.main }}>
-                                  {safeFormatCurrency(normalizedDiff)}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          });
+                          } else {
+                            spent = expense + reimbursement;
+                          }
+                          const budgetAmount = budgets.find(b => b.category_id === id)?.amount || 0;
+                          const diff = budgetAmount + spent; // Expense는 음수이므로 더하기
+                          // Handle near-zero diff values as exactly zero
+                          const normalizedDiff = Math.abs(diff) < 0.005 ? 0 : diff;
+                          totalSpent += spent;
+                          totalBudget += budgetAmount;
+                          // Prepare detail list for tooltip: date, payee, amount
+                          const txnsForCat = monthlyTransactions
+                            .filter(tx => {
+                              if (tx.category_id === id) return true;
+                              const cat = categories.find(c => c.id === tx.category_id);
+                              return cat?.is_reimbursement && cat.reimbursement_target_category_id === id;
+                            })
+                            .sort((a, b) => a.date.localeCompare(b.date));
+                          return (
+                            <TableRow
+                              hover
+                              key={id}
+                              onMouseEnter={(e) => handleCategoryRowEnter(e, txnsForCat)}
+                              onMouseLeave={handleTooltipClose}
+                              sx={{ cursor: 'pointer' }}
+                            >
+                              <TableCell>{label}</TableCell>
+                              <TableCell align="right">
+                                {spent < 0 ? (
+                                  <Typography color="error.main">-{safeFormatCurrency(Math.abs(spent))}</Typography>
+                                ) : spent > 0 ? (
+                                  <Typography color="success.main">+{safeFormatCurrency(spent)}</Typography>
+                                ) : (
+                                  safeFormatCurrency(0)
+                                )}
+                              </TableCell>
+                              <TableCell align="right">{safeFormatCurrency(budgetAmount)}</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 'bold', color: normalizedDiff < 0 ? theme.palette.error.main : normalizedDiff === 0 ? theme.palette.text.primary : theme.palette.success.main }}>
+                                {safeFormatCurrency(normalizedDiff)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        });
                         
                         return rows;
                       })()}

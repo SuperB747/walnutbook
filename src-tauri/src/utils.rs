@@ -101,6 +101,22 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
+    // Migrate transactions table: add to_account_id if missing
+    {
+        let mut info_stmt = conn.prepare("PRAGMA table_info(transactions)").map_err(|e| e.to_string())?;
+        let existing: Vec<String> = info_stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .map(|r| r.unwrap_or_default())
+            .collect();
+        if !existing.contains(&"to_account_id".to_string()) {
+            conn.execute(
+                "ALTER TABLE transactions ADD COLUMN to_account_id INTEGER",
+                [],
+            ).map_err(|e| e.to_string())?;
+        }
+    }
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS budgets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -104,36 +104,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   }, [open, transaction]);
 
+  // Transfer 편집 시 toAccountId 항상 세팅
   useEffect(() => {
-    if (transaction) {
-      // 편집 창에서는 amount를 항상 양수로 표시
-      const displayAmount = transaction.amount ? Math.abs(transaction.amount) : undefined;
-      
-      // Transfer 거래의 경우 notes에서 자동 생성된 정보 제거
-      let cleanNotes = transaction.notes;
-      if (transaction.type === 'Transfer' && transaction.notes) {
-        // [To: 계좌명] 패턴 제거
-        cleanNotes = transaction.notes.replace(/\[To: [^\]]+\]/, '').trim();
-        // [From: 계좌ID] 패턴 제거
-        cleanNotes = cleanNotes.replace(/\[From: \d+\]/, '').trim();
-        // 빈 문자열이면 undefined로 설정
-        if (cleanNotes === '') {
-          cleanNotes = undefined;
-        }
-      }
-      
-      setFormData({
-        ...transaction,
-        date: transaction.date,
-        amount: displayAmount, // 항상 양수로 표시
-        category_id: transaction.category_id,
-        notes: cleanNotes,
-      });
-      setAmountInputValue(displayAmount?.toString() || '');
-      
-      // Transfer 거래의 경우 notes에서 "To Account" 정보 추출
-      if (transaction.type === 'Transfer' && transaction.notes) {
-        const toAccountMatch = transaction.notes.match(/\[To: (.+?)\]/);
+    if (transaction && transaction.type === 'Transfer') {
+      // 1. [TO_ACCOUNT_ID:x] 파싱
+      const toIdMatch = transaction.notes?.match(/\[TO_ACCOUNT_ID:(\d+)\]/);
+      if (toIdMatch) {
+        setToAccountId(Number(toIdMatch[1]));
+      } else {
+        // 2. [To: ...] 레거시 지원
+        const toAccountMatch = transaction.notes?.match(/\[To: (.+?)\]/);
         if (toAccountMatch) {
           const toAccountName = toAccountMatch[1];
           const toAccount = accounts.find(acc => acc.name === toAccountName);
@@ -142,8 +122,35 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           }
         }
       }
+    }
+  }, [transaction, accounts, open]);
+
+  useEffect(() => {
+    if (transaction) {
+      // 편집 창에서는 amount를 항상 양수로 표시
+      const displayAmount = transaction.amount ? Math.abs(transaction.amount) : undefined;
+      // Transfer 거래의 경우 notes에서 자동 생성된 정보 제거
+      let cleanNotes = transaction.notes;
+      if (transaction.type === 'Transfer' && transaction.notes) {
+        cleanNotes = transaction.notes.replace(/\[To: [^\]]+\]/, '').trim();
+        cleanNotes = cleanNotes.replace(/\[From: \d+\]/, '').trim();
+        if (cleanNotes === '') {
+          cleanNotes = undefined;
+        }
+      }
+      setFormData({
+        ...transaction,
+        date: transaction.date,
+        amount: displayAmount, // 항상 양수로 표시
+        category_id: transaction.category_id,
+        notes: cleanNotes,
+      });
+      setAmountInputValue(displayAmount?.toString() || '');
+      // Transfer 거래의 경우 to_account_id 사용
+      if (transaction.type === 'Transfer' && transaction.to_account_id) {
+        setToAccountId(transaction.to_account_id);
+      }
     } else {
-      // In continuous mode, preserve most fields and only reset amount and notes
       setFormData({
         ...preservedValues,
         amount: undefined,
@@ -258,6 +265,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       return;
     }
 
+    // Transfer 거래일 때 도착 계좌가 선택되지 않으면 에러
+    if (formData.type === 'Transfer' && !toAccountId) {
+      setSnackbar({ open: true, message: '도착 계좌를 선택하세요.', severity: 'error' });
+      return;
+    }
+
+    // Transfer 거래일 때 출발 계좌와 도착 계좌가 같으면 에러
+    if (formData.type === 'Transfer' && formData.account_id === toAccountId) {
+      setSnackbar({ open: true, message: '출발 계좌와 도착 계좌가 같을 수 없습니다.', severity: 'error' });
+      return;
+    }
+
     const finalTransaction = { ...formData };
     
     // Fix amount sign before saving based on transaction type and category
@@ -267,17 +286,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
     
     if (finalTransaction.type === 'Transfer') {
-      if (transaction) {
-        // Editing existing Transfer transaction
-        if (toAccountId) {
-          finalTransaction.notes = `[TO_ACCOUNT_ID:${toAccountId}]${finalTransaction.notes ? ' ' + finalTransaction.notes : ''}`;
-        }
-      } else {
-        // Creating new Transfer transaction
-        if (toAccountId) {
-          finalTransaction.notes = `[TO_ACCOUNT_ID:${toAccountId}]${finalTransaction.notes ? ' ' + finalTransaction.notes : ''}`;
-        }
+      // 출발/도착 계좌 이름으로 자동 Description 생성
+      const fromAccount = accounts.find(acc => acc.id === formData.account_id);
+      const toAccount = accounts.find(acc => acc.id === toAccountId);
+      if (fromAccount && toAccount) {
+        finalTransaction.payee = `[${fromAccount.name} → ${toAccount.name}]`;
       }
+      let userNote = formData.notes || '';
+      finalTransaction.notes = userNote;
+      finalTransaction.to_account_id = toAccountId;
     }
 
     try {

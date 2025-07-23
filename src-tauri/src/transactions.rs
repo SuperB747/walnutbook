@@ -27,7 +27,7 @@ pub fn get_transactions(app: AppHandle) -> Result<Vec<Transaction>, String> {
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     
     let mut stmt = conn
-        .prepare("SELECT t.id, t.date, t.account_id, t.type, t.category_id, t.amount, t.payee, t.notes, t.transfer_id, t.created_at FROM transactions t ORDER BY t.date DESC")
+        .prepare("SELECT t.id, t.date, t.account_id, t.type, t.category_id, t.amount, t.payee, t.notes, t.transfer_id, t.to_account_id, t.created_at FROM transactions t ORDER BY t.date DESC")
         .map_err(|e| e.to_string())?;
     
     let rows = stmt
@@ -47,7 +47,8 @@ pub fn get_transactions(app: AppHandle) -> Result<Vec<Transaction>, String> {
                 payee: row.get(6)?,
                 notes: row.get(7)?,
                 transfer_id: row.get(8)?,
-                created_at: row.get(9)?,
+                to_account_id: row.get(9).ok(),
+                created_at: row.get(10)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -71,6 +72,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let notes = transaction.notes.clone();
 
     if transaction_type == "Transfer" {
+        println!("[DEBUG] [create_transaction] called with transaction: {:?}", transaction);
         let tx = conn.transaction().map_err(|e| e.to_string())?;
         
         // Generate transfer_id if not provided
@@ -83,62 +85,57 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     .map_err(|e| e.to_string())?
             }
         };
+        println!("[DEBUG] [create_transaction] generated transfer_id: {}", transfer_id);
+
+        // Use to_account_id directly for arrival transaction
+        let to_id = transaction.to_account_id;
+        println!("[DEBUG] [create_transaction] parsed to_id: {:?}", to_id);
 
         // Create departure transaction
         let departure_amount = -amount.abs();
-        tx.execute(
-            "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        // notes에서 [TO_ACCOUNT_ID:x] 메타데이터 제거
+        let clean_notes = if let Some(notes_str) = &notes {
+            if let Some(end) = notes_str.find(']') {
+                notes_str[end+1..].trim().to_string()
+            } else {
+                notes_str.clone()
+            }
+        } else {
+            "".to_string()
+        };
+        println!("[DEBUG] [create_transaction] departure: account_id={}, amount={}, category_id={:?}, date={}, payee={}, notes='{}', type={}, transfer_id={}",
+            transaction.account_id, departure_amount, transaction.category_id, transaction.date, payee, clean_notes, transaction_type, transfer_id);
+        let dep_result = tx.execute(
+            "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id, to_account_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 transaction.account_id,
                 transaction.category_id,
                 departure_amount,
                 transaction.date,
                 payee,
-                &notes,
+                &clean_notes,
                 transaction_type,
-                transfer_id
+                transfer_id,
+                to_id // departure에만 저장
             ],
-        ).map_err(|e| e.to_string())?;
-
-        // Process notes to find target account
-        let to_id = if let Some(ref notes_str) = notes {
-            // Try new format first: [TO_ACCOUNT_ID:123]
-            if let Some(start) = notes_str.find("[TO_ACCOUNT_ID:") {
-                if let Some(end) = notes_str[start..].find(']') {
-                    let account_id_str = &notes_str[start + 14..start + end];
-                    match account_id_str.parse::<i64>() {
-                        Ok(account_id) => Some(account_id),
-                        Err(_) => None
-                    }
-                } else {
-                    None
-                }
-            } 
-            // Try legacy format: [To: Account Name]
-            else if let Some(start) = notes_str.find("[To:") {
-                if let Some(end) = notes_str[start..].find(']') {
-                    let extracted = notes_str[start + 4..start + end].trim();
-                    if !extracted.is_empty() {
-                        let mut stmt = tx.prepare("SELECT id FROM accounts WHERE name = ?1 LIMIT 1")
-                            .map_err(|e| e.to_string())?;
-                        stmt.query_row([extracted], |row| row.get::<_, i64>(0)).ok()
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        );
+        println!("[DEBUG] [create_transaction] departure insert result: {:?}", dep_result);
 
         // Create arrival transaction if target account found
         if let Some(to_id) = to_id {
             let arrival_amount = amount.abs();
-            tx.execute(
+            // notes에서 [TO_ACCOUNT_ID:x] 메타데이터 제거
+            let arrival_clean_notes = if let Some(notes_str) = &notes {
+                if let Some(end) = notes_str.find(']') {
+                    notes_str[end+1..].trim().to_string()
+                } else {
+                    notes_str.clone()
+                }
+            } else {
+                "".to_string()
+            };
+            println!("[DEBUG] [create_transaction] Creating arrival transaction: to_id={}, arrival_amount={}, transfer_id={:?}, notes='{}'", to_id, arrival_amount, transfer_id, arrival_clean_notes);
+            let result = tx.execute(
                 "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     to_id,
@@ -146,14 +143,18 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     arrival_amount,
                     transaction.date,
                     payee,
-                    &notes,
+                    &arrival_clean_notes,
                     transaction_type,
                     transfer_id
                 ],
-            ).map_err(|e| e.to_string())?;
+            );
+            println!("[DEBUG] Arrival transaction insert result: {:?}, to_id: {}, amount: {}", result, to_id, arrival_amount);
+        } else {
+            println!("[DEBUG] [create_transaction] No to_id found, arrival transaction not created");
         }
-
-        tx.commit().map_err(|e| e.to_string())?;
+        let commit_result = tx.commit();
+        println!("[DEBUG] Transaction committed: {:?}", commit_result);
+        commit_result.map_err(|e| e.to_string())?;
     } else {
         // Regular transaction
         conn.execute(
@@ -195,19 +196,29 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
         if let Some(transfer_id) = old_transfer_id {
             let tx = conn.transaction().map_err(|e| e.to_string())?;
             
-            // 같은 transfer_id를 가진 모든 거래의 notes 업데이트
+            // 같은 transfer_id를 가진 모든 거래의 notes, to_account_id 업데이트
+            let to_id = transaction.to_account_id;
             tx.execute(
-                "UPDATE transactions SET notes = ?1 WHERE transfer_id = ?2",
-                params![transaction.notes.clone().unwrap_or_default(), transfer_id]
+                "UPDATE transactions SET notes = ?1, to_account_id = ?2 WHERE transfer_id = ?3",
+                params![transaction.notes.clone().unwrap_or_default(), to_id, transfer_id]
             ).map_err(|e| e.to_string())?;
             
             tx.commit().map_err(|e| e.to_string())?;
             println!("[DEBUG] Transfer notes updated successfully");
         } else {
             // transfer_id가 없는 경우 해당 거래만 업데이트
+            let clean_notes = if let Some(notes_str) = &transaction.notes {
+                if let Some(end) = notes_str.find(']') {
+                    notes_str[end+1..].trim().to_string()
+                } else {
+                    notes_str.clone()
+                }
+            } else {
+                "".to_string()
+            };
             conn.execute(
                 "UPDATE transactions SET notes = ?1 WHERE id = ?2",
-                params![transaction.notes.clone().unwrap_or_default(), transaction.id]
+                params![clean_notes, transaction.id]
             ).map_err(|e| e.to_string())?;
         }
     }
@@ -234,7 +245,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
         println!("[DEBUG] Creating departure transaction: account_id={}, amount={}", transaction.account_id, departure_amount);
         
         tx.execute(
-            "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 transaction.date,
                 transaction.account_id,
@@ -243,7 +254,8 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 departure_amount,
                 transaction.payee,
                 transaction.notes.clone().unwrap_or_default(),
-                transfer_id
+                transfer_id,
+                transaction.to_account_id
             ],
         ).map_err(|e| e.to_string())?;
         
@@ -257,7 +269,8 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             if notes.contains("[TO_ACCOUNT_ID:") {
                 if let Some(start) = notes.find("[TO_ACCOUNT_ID:") {
                     if let Some(end) = notes[start..].find("]") {
-                        let account_id_str = &notes[start + 15..start + end];
+                        let account_id_str = &notes[start + 14..start + end].trim_start_matches(':');
+                        println!("[DEBUG] [update_transaction] notes: '{}', start: {}, end: {}, account_id_str: '{}'", notes, start, end, account_id_str);
                         if let Ok(account_id) = account_id_str.parse::<i64>() {
                             println!("[DEBUG] Found to_account_id from new format: {}", account_id);
                             Some(account_id)
@@ -537,12 +550,14 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
     let mut result = Vec::new();
     for id in imported_ids {
         let transaction = conn.query_row(
-            "SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, created_at FROM transactions WHERE id = ?1",
+            "SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id, created_at FROM transactions WHERE id = ?1",
             params![id],
             |row| Ok(Transaction {
                 id: row.get(0)?, date: row.get(1)?, account_id: row.get(2)?,
                 transaction_type: row.get(3)?, category_id: row.get(4)?, amount: row.get(5)?,
-                payee: row.get(6)?, notes: row.get(7)?, transfer_id: row.get(8)?, created_at: row.get(9)?,
+                payee: row.get(6)?, notes: row.get(7)?, transfer_id: row.get(8)?,
+                to_account_id: row.get(9).ok(),
+                created_at: row.get(10)?,
             }),
         ).map_err(|e| e.to_string())?;
         result.push(transaction);
@@ -567,12 +582,14 @@ pub fn bulk_update_transactions(app: AppHandle, updates: Vec<(i64, Value)>) -> R
         let path = get_db_path(&app);
         let conn = Connection::open(&path).map_err(|e| e.to_string())?;
         let existing: Transaction = conn.query_row(
-            "SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, created_at FROM transactions WHERE id = ?1",
+            "SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id, created_at FROM transactions WHERE id = ?1",
             params![id],
             |row| Ok(Transaction {
                 id: row.get(0)?, date: row.get(1)?, account_id: row.get(2)?,
                 transaction_type: row.get(3)?, category_id: row.get(4)?, amount: row.get(5)?,
-                payee: row.get(6)?, notes: row.get(7)?, transfer_id: row.get(8)?, created_at: row.get(9)?,
+                payee: row.get(6)?, notes: row.get(7)?, transfer_id: row.get(8)?,
+                to_account_id: row.get(9).ok(),
+                created_at: row.get(10)?,
             }),
         ).map_err(|e| e.to_string())?;
         
