@@ -66,8 +66,21 @@ export interface Reminder {
   payment_day: number;
   next_payment_date: string;
   is_checked: boolean;
-  notes?: string;
+  notes?: string[];
+  remind_days_before: number; // 추가
+  user_email: string;         // 추가
   created_at: string;
+  statement_date: string; // Statement date (yyyy-MM-dd)
+}
+
+export interface ReminderPaymentHistory {
+  id: number;
+  reminder_id: number;
+  paid_date: string;
+  is_paid: boolean;
+  created_at: string;
+  statement_date?: string | null;
+  note?: string | null;
 }
 
 // Reminder API helpers (to be implemented in the frontend)
@@ -76,3 +89,5 @@ export interface Reminder {
 // export async function updateReminder(reminder: Reminder): Promise<Reminder[]> { ... }
 // export async function deleteReminder(id: number): Promise<Reminder[]> { ... }
 // export async function checkReminder(id: number, next_payment_date: string): Promise<Reminder[]> { ... }
+// export async function addNoteToReminder(id: number, note: string): Promise<Reminder[]> { ... }
+// export async function deleteNoteFromReminder(id: number, noteIndex: number): Promise<Reminder[]> { ... }

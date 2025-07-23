@@ -34,7 +34,8 @@ import { Category, Account, RecurringItem } from '../db';
 import { invoke } from '@tauri-apps/api/core';
 import { formatCurrency, safeFormatCurrency, parseLocalDate, createLocalDate, formatLocalDate, getCurrentLocalDate, calculateNextTransactionDate, parseDayOfMonth } from '../utils';
 import { format, addDays, addWeeks, addMonths, isAfter, parse } from 'date-fns';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
 
@@ -808,7 +809,7 @@ const RecurringPage: React.FC = () => {
                     <DatePicker
                       label="Start Date"
                       value={startDate ? parse(startDate, 'yyyy-MM-dd', new Date()) : null}
-                      onChange={(newDate) => {
+                      onChange={(newDate: Date | null) => {
                         if (newDate) {
                           setStartDate(format(newDate, 'yyyy-MM-dd'));
                         }
@@ -837,7 +838,7 @@ const RecurringPage: React.FC = () => {
                     <DatePicker
                       label="Start Date"
                       value={startDate ? parse(startDate, 'yyyy-MM-dd', new Date()) : null}
-                      onChange={(newDate) => {
+                      onChange={(newDate: Date | null) => {
                         if (newDate) {
                           setStartDate(format(newDate, 'yyyy-MM-dd'));
                         }

@@ -141,6 +141,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             reminders::update_reminder,
             reminders::delete_reminder,
             reminders::check_reminder,
+            reminders::get_reminder_payment_history,
+            reminders::add_reminder_payment_history,
+            reminders::uncheck_reminder_payment_history,
+            reminders::delete_reminder_payment_history,
+            reminders::update_reminder_payment_history_note,
+            reminders::get_statement_balance,
         ])
         .run(context)
         .expect("error while running tauri application");

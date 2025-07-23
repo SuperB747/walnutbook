@@ -385,8 +385,73 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
         [],
     ).map_err(|e| e.to_string())?;
 
+    // Migrate reminders table: add remind_days_before, user_email, statement_date if missing
+    {
+        let mut info_stmt = conn.prepare("PRAGMA table_info(reminders)").map_err(|e| e.to_string())?;
+        let existing: Vec<String> = info_stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .map(|r| r.unwrap_or_default())
+            .collect();
+        if !existing.contains(&"remind_days_before".to_string()) {
+            conn.execute(
+                "ALTER TABLE reminders ADD COLUMN remind_days_before INTEGER NOT NULL DEFAULT 7",
+                [],
+            ).map_err(|e| e.to_string())?;
+        }
+        if !existing.contains(&"user_email".to_string()) {
+            conn.execute(
+                "ALTER TABLE reminders ADD COLUMN user_email TEXT NOT NULL DEFAULT ''",
+                [],
+            ).map_err(|e| e.to_string())?;
+        }
+        if !existing.contains(&"statement_date".to_string()) {
+            conn.execute(
+                "ALTER TABLE reminders ADD COLUMN statement_date TEXT NOT NULL DEFAULT ''",
+                [],
+            ).map_err(|e| e.to_string())?;
+        }
+    }
+    // reminder_payment_history 테이블에 statement_date, note 컬럼 추가
+    {
+        let mut info_stmt = conn.prepare("PRAGMA table_info(reminder_payment_history)").map_err(|e| e.to_string())?;
+        let existing: Vec<String> = info_stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .map(|r| r.unwrap_or_default())
+            .collect();
+        if !existing.contains(&"statement_date".to_string()) {
+            conn.execute(
+                "ALTER TABLE reminder_payment_history ADD COLUMN statement_date TEXT",
+                [],
+            ).map_err(|e| e.to_string())?;
+        }
+        if !existing.contains(&"note".to_string()) {
+            conn.execute(
+                "ALTER TABLE reminder_payment_history ADD COLUMN note TEXT",
+                [],
+            ).map_err(|e| e.to_string())?;
+        }
+    }
+
+    // notes 컬럼은 TEXT로 두고, Vec<String>을 JSON 문자열로 저장/불러오기 (마이그레이션 필요 없음)
+
     // Remove account_import_settings table if it exists (migration)
     conn.execute("DROP TABLE IF EXISTS account_import_settings", []).ok();
+
+    // Create reminder_payment_history table for payment history
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS reminder_payment_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reminder_id INTEGER NOT NULL,
+            paid_date TEXT NOT NULL,
+            is_paid BOOLEAN NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (reminder_id) REFERENCES reminders (id) ON DELETE CASCADE
+        )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
 
 
     Ok(())

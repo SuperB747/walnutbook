@@ -89,8 +89,22 @@ pub struct Reminder {
     pub payment_day: u8, // 1~31
     pub next_payment_date: String, // yyyy-MM-dd
     pub is_checked: bool,
-    pub notes: Option<String>,
+    pub notes: Option<Vec<String>>, // 여러 노트 저장
+    pub remind_days_before: i64, // 추가: 며칠 전에 리마인드
+    pub user_email: String,      // 추가: 이메일 주소
     pub created_at: String,
+    pub statement_date: String, // Statement date (yyyy-MM-dd)
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReminderPaymentHistory {
+    pub id: i64,
+    pub reminder_id: i64,
+    pub paid_date: String,
+    pub is_paid: bool,
+    pub created_at: String,
+    pub statement_date: Option<String>,
+    pub note: Option<String>,
 }
 
 fn default_repeat_type() -> String {

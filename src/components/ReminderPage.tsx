@@ -1,21 +1,35 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Container, Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Select, MenuItem, FormControl, InputLabel, Checkbox, IconButton, List, ListItem, ListItemText, ListItemSecondaryAction, Snackbar, Alert
+  TextField, Select, MenuItem, FormControl, InputLabel, Checkbox, IconButton, List, ListItem, ListItemText, ListItemSecondaryAction, Snackbar, Alert, Divider, Paper
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
-import { Reminder, Account } from '../db';
+import { Reminder, Account, ReminderPaymentHistory } from '../db';
+import dayjs, { Dayjs } from 'dayjs';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 
 function getNextMonthDate(current: string, day: number): string {
   const date = new Date(current);
   date.setMonth(date.getMonth() + 1);
   date.setDate(day);
-  // 보정: 2월 등에서 날짜 초과시 말일로
   if (date.getDate() !== day) {
     date.setDate(0);
   }
   return date.toISOString().slice(0, 10);
+}
+
+// Due in XX days 계산 함수
+function getDueInDays(nextDate: string): string {
+  const today = new Date();
+  const due = new Date(nextDate);
+  const diff = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (isNaN(diff)) return '';
+  if (diff === 0) return 'Due today';
+  if (diff > 0) return `Due in ${diff} days`;
+  return `Overdue by ${-diff} days`;
 }
 
 const ReminderPage: React.FC = () => {
@@ -23,8 +37,19 @@ const ReminderPage: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editReminder, setEditReminder] = useState<Reminder | null>(null);
-  const [form, setForm] = useState<{ account_id: number | ''; payment_day: number | ''; notes: string }>({ account_id: '', payment_day: '', notes: '' });
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [form, setForm] = useState<{ account_id: number | ''; payment_day: number | ''; notes: string; remind_days_before: number; user_email: string; date: Dayjs | null; statement_date: Dayjs | null }>({ account_id: '', payment_day: '', notes: '', remind_days_before: 7, user_email: '', date: null, statement_date: null });
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+  const [noteInput, setNoteInput] = useState('');
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [statementDatePickerOpen, setStatementDatePickerOpen] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<ReminderPaymentHistory[]>([]);
+  // Payment history 노트 입력 상태 관리
+  const [noteEdits, setNoteEdits] = useState<{ [id: number]: string }>({});
+  const [statementBalance, setStatementBalance] = useState<number | null>(null);
+
+  // 좌측 리스트에서 선택된 리마인더
+  const selectedReminder = reminders.find(r => r.id === selectedId) || reminders[0];
 
   const loadReminders = async () => {
     const data = await invoke<Reminder[]>('get_reminders');
@@ -36,13 +61,88 @@ const ReminderPage: React.FC = () => {
   };
   useEffect(() => { loadReminders(); loadAccounts(); }, []);
 
+  // payment history 불러오기
+  useEffect(() => {
+    if (!selectedReminder) return;
+    invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
+      reminder_id: selectedReminder.id,
+      reminderId: selectedReminder.id
+    })
+      .then(setPaymentHistory)
+      .catch(() => setPaymentHistory([]));
+  }, [selectedReminder]);
+
+  // Statement Balance 구간 계산 및 API 호출
+  useEffect(() => {
+    if (!selectedReminder) {
+      setStatementBalance(null);
+      return;
+    }
+    const today = dayjs().format('YYYY-MM-DD');
+    // paymentHistory에서 statement_date 없으면 paid_date 사용
+    const sortedHistory = [...paymentHistory]
+      .map(h => ({ ...h, _date: h.statement_date || h.paid_date }))
+      .filter(h => h._date)
+      .sort((a, b) => (a._date || '').localeCompare(b._date || ''));
+    let start_date = '1970-01-01';
+    let end_date = selectedReminder.statement_date
+      ? dayjs(selectedReminder.statement_date).add(1, 'day').format('YYYY-MM-DD')
+      : dayjs(today).add(1, 'day').format('YYYY-MM-DD');
+    if (sortedHistory.length > 0) {
+      start_date = dayjs(sortedHistory[0]._date).add(1, 'day').format('YYYY-MM-DD');
+    }
+    // 디버깅용 로그 추가
+    console.log('[StatementBalance Debug]');
+    console.log('selectedReminder:', selectedReminder);
+    console.log('paymentHistory:', paymentHistory);
+    console.log('sortedHistory:', sortedHistory);
+    console.log('start_date:', start_date);
+    console.log('end_date:', end_date);
+    console.log('get_statement_balance params:', {
+      account_id: selectedReminder.account_id,
+      start_date,
+      end_date
+    });
+    // 추가: 구간 내 실제 거래 내역 콘솔 출력
+    invoke('get_transactions').then((allTxns) => {
+      const txns = allTxns as any[];
+      const filteredTxns = (txns || []).filter(
+        (t: any) => t.account_id === selectedReminder.account_id &&
+          t.date >= start_date &&
+          t.date < end_date &&
+          t.type !== 'Transfer'
+      );
+      const sum = filteredTxns.reduce((acc: number, t: any) => acc + t.amount, 0);
+      console.log('[StatementBalance Debug] 구간 내 거래 내역:', filteredTxns);
+      console.log('[StatementBalance Debug] 구간 내 거래 합계:', sum);
+    });
+    invoke<number>('get_statement_balance', {
+      accountId: selectedReminder.account_id,
+      startDate: start_date,
+      endDate: end_date
+    })
+      .then(setStatementBalance)
+      .catch(e => {
+        console.error('get_statement_balance error', e);
+        setStatementBalance(null);
+      });
+  }, [selectedReminder, paymentHistory]);
+
   const handleOpenDialog = (reminder?: Reminder) => {
     if (reminder) {
       setEditReminder(reminder);
-      setForm({ account_id: reminder.account_id, payment_day: reminder.payment_day, notes: reminder.notes || '' });
+      setForm({
+        account_id: reminder.account_id,
+        payment_day: reminder.payment_day,
+        notes: '',
+        remind_days_before: reminder.remind_days_before ?? 7,
+        user_email: reminder.user_email ?? '',
+        date: dayjs(reminder.next_payment_date),
+        statement_date: reminder.statement_date ? dayjs(reminder.statement_date) : null,
+      });
     } else {
       setEditReminder(null);
-      setForm({ account_id: '', payment_day: '', notes: '' });
+      setForm({ account_id: '', payment_day: '', notes: '', remind_days_before: 7, user_email: '', date: null, statement_date: null });
     }
     setDialogOpen(true);
   };
@@ -50,21 +150,22 @@ const ReminderPage: React.FC = () => {
 
   const handleSave = async () => {
     const account = accounts.find(a => a.id === form.account_id);
-    if (!account || !form.payment_day) return;
-    const today = new Date();
-    let next_payment_date = new Date(today.getFullYear(), today.getMonth(), Number(form.payment_day));
-    if (next_payment_date < today) {
-      next_payment_date.setMonth(next_payment_date.getMonth() + 1);
-    }
+    if (!account || !form.date || !form.statement_date) return;
+    const payment_day = form.date.date();
+    const next_payment_date = form.date.format('YYYY-MM-DD');
+    const statement_date = form.statement_date.format('YYYY-MM-DD');
     const reminder: Reminder = {
       id: editReminder ? editReminder.id : 0,
       account_id: account.id,
       account_name: account.name,
-      payment_day: Number(form.payment_day),
-      next_payment_date: next_payment_date.toISOString().slice(0, 10),
+      payment_day,
+      next_payment_date,
       is_checked: false,
-      notes: form.notes,
+      notes: editReminder?.notes ?? [],
+      remind_days_before: form.remind_days_before,
+      user_email: form.user_email,
       created_at: editReminder ? editReminder.created_at : '',
+      statement_date,
     };
     try {
       if (editReminder) {
@@ -83,49 +184,273 @@ const ReminderPage: React.FC = () => {
 
   const handleDelete = async (id: number) => {
     await invoke('delete_reminder', { id });
+    setSelectedId(null);
     loadReminders();
   };
 
   const handleCheck = async (reminder: Reminder) => {
-    const nextDate = getNextMonthDate(reminder.next_payment_date, reminder.payment_day);
-    await invoke('check_reminder', { id: reminder.id, next_payment_date: nextDate });
+    const nextPaymentDate = dayjs(reminder.next_payment_date).add(30, 'day').format('YYYY-MM-DD');
+    const nextStatementDate = dayjs(reminder.statement_date).add(30, 'day').format('YYYY-MM-DD');
+    const args = { id: reminder.id, nextPaymentDate, nextStatementDate };
+    console.log('check_reminder invoke args:', args);
+    await invoke('check_reminder', args);
+    // payment history 자동 등록 (statement_date도 함께 전달)
+    const paymentArgs = {
+      reminder_id: reminder.id,
+      paid_date: reminder.next_payment_date,
+      statement_date: reminder.statement_date, // statement_date 추가
+      reminderId: reminder.id,
+      paidDate: reminder.next_payment_date,
+      statementDate: reminder.statement_date
+    };
+    console.log('add_reminder_payment_history args:', paymentArgs);
+    await invoke('add_reminder_payment_history', paymentArgs);
     loadReminders();
   };
 
+  const handleUncheckPayment = async (historyId: number) => {
+    await invoke('uncheck_reminder_payment_history', { id: historyId });
+    if (selectedReminder) {
+      const updated = await invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
+        reminder_id: selectedReminder.id,
+        reminderId: selectedReminder.id
+      });
+      setPaymentHistory(updated);
+    }
+  };
+
+  // 노트 추가/삭제
+  const handleAddNote = async () => {
+    if (!selectedReminder || !noteInput.trim()) return;
+    await invoke('add_note_to_reminder', { id: selectedReminder.id, note: noteInput.trim() });
+    setNoteInput('');
+    loadReminders();
+  };
+  const handleDeleteNote = async (idx: number) => {
+    if (!selectedReminder) return;
+    await invoke('delete_note_from_reminder', { id: selectedReminder.id, note_index: idx });
+    loadReminders();
+  };
+
+  // Payment history 삭제 핸들러
+  const handleDeletePaymentHistory = async (historyId: number) => {
+    await invoke('delete_reminder_payment_history', {
+      id: historyId
+    });
+    if (selectedReminder) {
+      const updated = await invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
+        reminder_id: selectedReminder.id,
+        reminderId: selectedReminder.id
+      });
+      setPaymentHistory(updated);
+      loadReminders();
+    }
+  };
+
+  // Payment history 노트 입력 핸들러
+  const handleNoteChange = (id: number, value: string) => {
+    setNoteEdits(edits => ({ ...edits, [id]: value }));
+  };
+
+  // Payment history 노트 저장 핸들러
+  const handleNoteSave = async (id: number) => {
+    const note = noteEdits[id] ?? '';
+    await invoke('update_reminder_payment_history_note', { id, note });
+    if (selectedReminder) {
+      const updated = await invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
+        reminder_id: selectedReminder.id,
+        reminderId: selectedReminder.id
+      });
+      setPaymentHistory(updated);
+    }
+  };
+
+  // 미완료 → 완료 순, 날짜 오름차순, 체크 시 아래로
+  const sortedReminders = [...reminders].sort((a, b) => {
+    if (a.is_checked !== b.is_checked) return a.is_checked ? 1 : -1;
+    return a.next_payment_date.localeCompare(b.next_payment_date);
+  });
+
   return (
-    <Container maxWidth="sm">
-      <Box sx={{ py: 4 }}>
-        <Typography variant="h4" gutterBottom>Credit Card Payment Reminders</Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-          Add your credit cards and payment days. Check off when paid to see the next due date. Sorted by next payment.
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()} sx={{ mb: 2 }}>
-          Add Reminder
-        </Button>
-        <List>
-          {reminders.sort((a, b) => a.next_payment_date.localeCompare(b.next_payment_date)).map(reminder => (
-            <ListItem key={reminder.id} sx={{ bgcolor: reminder.is_checked ? '#e0f7fa' : undefined, borderRadius: 2, mb: 1 }}>
-              <Checkbox
-                checked={reminder.is_checked}
-                onChange={() => handleCheck(reminder)}
-                icon={<CheckIcon />}
-                checkedIcon={<CheckIcon />}
-                sx={{ mr: 2 }}
-              />
-              <ListItemText
-                primary={<>
-                  <b>{reminder.account_name}</b> - Payment Day: {reminder.payment_day}
-                  <span style={{ marginLeft: 12, color: '#1976d2' }}>Next: {reminder.next_payment_date}</span>
-                </>}
-                secondary={reminder.notes}
-              />
-              <ListItemSecondaryAction>
-                <IconButton edge="end" onClick={() => handleOpenDialog(reminder)}><EditIcon /></IconButton>
-                <IconButton edge="end" onClick={() => handleDelete(reminder.id)}><DeleteIcon /></IconButton>
-              </ListItemSecondaryAction>
-            </ListItem>
-          ))}
-        </List>
+    <Container maxWidth="lg">
+      <Box sx={{ display: 'flex', gap: 3, py: 4 }}>
+        {/* 좌측: 리스트 */}
+        <Paper sx={{ minWidth: 400, maxWidth: 520, flex: '0 0 440px', p: 2, bgcolor: '#fafbfc', borderRadius: 3, boxShadow: 2 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>Reminders</Typography>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()} sx={{ mb: 2, width: '100%' }}>
+            Add Reminder
+          </Button>
+          <List>
+            {sortedReminders.map(reminder => (
+              <ListItem
+                key={reminder.id}
+                button
+                selected={selectedId === reminder.id || (!selectedId && sortedReminders[0]?.id === reminder.id)}
+                onClick={() => setSelectedId(reminder.id)}
+                sx={{ borderRadius: 2, mb: 0.5, py: 0.5, px: 1, minHeight: 36 }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}>
+                    <Typography variant="body1" sx={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>{reminder.account_name}</Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: getDueInDays(reminder.next_payment_date).includes('Overdue') ? '#d32f2f' : '#1976d2',
+                        fontWeight: 500,
+                        ml: 'auto',
+                        textAlign: 'right',
+                        minWidth: 100,
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {getDueInDays(reminder.next_payment_date)}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      aria-label="edit"
+                      color="default"
+                      onClick={e => { e.stopPropagation(); handleOpenDialog(reminder); }}
+                      sx={{
+                        color: '#1976d2',
+                        background: 'transparent',
+                        transition: 'background 0.2s',
+                        '&:hover': {
+                          background: 'rgba(25, 118, 210, 0.08)',
+                          color: '#1976d2'
+                        },
+                        '& svg': { color: '#1976d2 !important' }
+                      }}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      aria-label="delete"
+                      color="default"
+                      onClick={e => { e.stopPropagation(); handleDelete(reminder.id); }}
+                      sx={{
+                        color: '#d32f2f',
+                        background: 'transparent',
+                        transition: 'background 0.2s',
+                        '&:hover': {
+                          background: 'rgba(211, 47, 47, 0.08)',
+                          color: '#d32f2f'
+                        },
+                        '& svg': { color: '#d32f2f !important' }
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Box>
+              </ListItem>
+            ))}
+          </List>
+        </Paper>
+        {/* 우측: 상세/노트 */}
+        <Paper sx={{ flex: 1, p: 3, minHeight: 500, borderRadius: 3, boxShadow: 2 }}>
+          {selectedReminder ? (
+            <>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {selectedReminder.account_name}
+                  {accounts.find(a => a.id === selectedReminder.account_id)?.description && (
+                    <>
+                      <span style={{ margin: '0 4px', color: '#888' }}>-</span>
+                      <Typography component="span" variant="body2" sx={{ color: 'text.secondary', fontWeight: 400, fontSize: 16 }}>
+                        {accounts.find(a => a.id === selectedReminder.account_id)?.description}
+                      </Typography>
+                    </>
+                  )}
+                </Typography>
+                <Typography variant="subtitle1" sx={{ mt: 1, fontWeight: 500 }}>
+                  Statement Date: {selectedReminder.statement_date}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1, color: statementBalance !== null ? (statementBalance < 0 ? '#d32f2f' : '#1976d2') : '#888', fontWeight: 600 }}>
+                  Statement Balance: {statementBalance !== null ? `${statementBalance < 0 ? '-' : ''}$${Math.abs(statementBalance).toFixed(2)}` : '--'}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+                  Next Due Date: {selectedReminder.next_payment_date}
+                </Typography>
+              </Box>
+              <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Remind: {selectedReminder.remind_days_before} days before
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Email: {selectedReminder.user_email}
+                </Typography>
+              </Box>
+              <Divider sx={{ my: 2 }} />
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Checkbox
+                  checked={selectedReminder.is_checked}
+                  onChange={() => handleCheck(selectedReminder)}
+                  icon={<CheckIcon />}
+                  checkedIcon={<CheckIcon />}
+                  sx={{ mr: 1 }}
+                />
+                <Typography variant="body1">Mark as Paid (when checked, moves to next payment date)</Typography>
+              </Box>
+              <Divider sx={{ my: 2 }} />
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>Recent Payment History (6 months)</Typography>
+                <List dense>
+                  {paymentHistory.length === 0 && <ListItem><ListItemText primary="No payment history." /></ListItem>}
+                  {paymentHistory.map(h => (
+                    <ListItem key={h.id} sx={{ bgcolor: h.is_paid ? '#e0ffe0' : '#ffe0e0', borderRadius: 1, mb: 0.5, display: 'flex', alignItems: 'center', gap: 2, py: 0.5 }}
+                      secondaryAction={
+                        <IconButton
+                          edge="end"
+                          aria-label="delete"
+                          onClick={() => handleDeletePaymentHistory(h.id)}
+                          sx={{
+                            color: '#d32f2f',
+                            background: 'transparent',
+                            transition: 'background 0.2s',
+                            '&:hover': {
+                              background: 'rgba(211, 47, 47, 0.08)',
+                              color: '#d32f2f'
+                            },
+                            '& svg': { color: '#d32f2f !important' }
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      }
+                    >
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Typography variant="body2" sx={{ minWidth: 120, fontWeight: 500 }}>
+                              Statement Date: {h.statement_date || h.paid_date}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: h.is_paid ? '#388e3c' : '#d32f2f', fontWeight: 700, minWidth: 40 }}>
+                              {h.is_paid ? 'PAID' : 'UNPAID'}
+                            </Typography>
+                            {/* Note inline edit */}
+                            <NoteInlineEdit
+                              value={noteEdits[h.id] !== undefined ? noteEdits[h.id] : h.note || ''}
+                              onChange={v => handleNoteChange(h.id, v)}
+                              onSave={() => handleNoteSave(h.id)}
+                            />
+                          </Box>
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+            </>
+          ) : (
+            <Typography variant="body1" color="text.secondary">Select a reminder from the list.</Typography>
+          )}
+        </Paper>
+        {/* Dialog for add/edit */}
         <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="xs" fullWidth>
           <DialogTitle>{editReminder ? 'Edit Reminder' : 'Add Reminder'}</DialogTitle>
           <DialogContent>
@@ -141,22 +466,64 @@ const ReminderPage: React.FC = () => {
                 ))}
               </Select>
             </FormControl>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <DatePicker
+                label="Statement Date"
+                value={form.statement_date}
+                onChange={(statement_date: Dayjs | null) => setForm(f => ({ ...f, statement_date }))}
+                open={statementDatePickerOpen}
+                onOpen={() => setStatementDatePickerOpen(true)}
+                onClose={() => setStatementDatePickerOpen(false)}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    required: true,
+                    sx: { mb: 2 },
+                    InputLabelProps: { shrink: true },
+                    onClick: () => setStatementDatePickerOpen(true),
+                    inputProps: { readOnly: true },
+                  }
+                }}
+                openTo="day"
+                disableFuture={false}
+              />
+              <DatePicker
+                label="Payment Due Date"
+                value={form.date}
+                onChange={(date: Dayjs | null) => setForm(f => ({ ...f, date }))}
+                open={datePickerOpen}
+                onOpen={() => setDatePickerOpen(true)}
+                onClose={() => setDatePickerOpen(false)}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    required: true,
+                    sx: { mb: 2 },
+                    InputLabelProps: { shrink: true },
+                    onClick: () => setDatePickerOpen(true),
+                    inputProps: { readOnly: true },
+                  }
+                }}
+                openTo="day"
+                disableFuture={false}
+              />
+            </LocalizationProvider>
             <TextField
-              label="Payment Day (1~31)"
+              label="Remind how many days before?"
               type="number"
               fullWidth
-              value={form.payment_day}
-              onChange={e => setForm(f => ({ ...f, payment_day: Number(e.target.value) }))}
+              value={form.remind_days_before}
+              onChange={e => setForm(f => ({ ...f, remind_days_before: Number(e.target.value) }))}
               inputProps={{ min: 1, max: 31 }}
               sx={{ mb: 2 }}
             />
             <TextField
-              label="Notes"
+              label="Email to receive reminder"
+              type="email"
               fullWidth
-              value={form.notes}
-              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              multiline
-              rows={2}
+              value={form.user_email}
+              onChange={e => setForm(f => ({ ...f, user_email: e.target.value }))}
+              sx={{ mb: 2 }}
             />
           </DialogContent>
           <DialogActions>
@@ -173,6 +540,40 @@ const ReminderPage: React.FC = () => {
         </Snackbar>
       </Box>
     </Container>
+  );
+};
+
+// NoteInlineEdit: 클릭 시 인풋, 포커스아웃/엔터 시 자동 저장
+const NoteInlineEdit: React.FC<{ value: string; onChange: (v: string) => void; onSave: () => void }> = ({ value, onChange, onSave }) => {
+  const [editing, setEditing] = useState(false);
+  const [localValue, setLocalValue] = useState(value);
+  useEffect(() => { setLocalValue(value); }, [value]);
+  const handleBlur = () => { setEditing(false); if (localValue !== value) onSave(); };
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { setEditing(false); if (localValue !== value) onSave(); }
+    if (e.key === 'Escape') { setEditing(false); setLocalValue(value); }
+  };
+  return editing ? (
+    <TextField
+      size="small"
+      value={localValue}
+      autoFocus
+      onChange={e => { setLocalValue(e.target.value); onChange(e.target.value); }}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      sx={{ minWidth: 120, maxWidth: 200 }}
+      inputProps={{ style: { fontSize: 14, padding: 4 } }}
+      variant="standard"
+    />
+  ) : (
+    <Typography
+      variant="body2"
+      sx={{ minWidth: 120, maxWidth: 200, cursor: 'pointer', color: value ? 'inherit' : '#aaa', borderBottom: '1px dashed #ccc' }}
+      onClick={() => setEditing(true)}
+      title={value || 'Add a note'}
+    >
+      {value || 'Add a note'}
+    </Typography>
   );
 };
 

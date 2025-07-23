@@ -20,7 +20,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { Transaction, Account, TransactionType, Category } from '../db';
 import { format, parse } from 'date-fns';
 import { getCurrentLocalDate, formatLocalDate } from '../utils';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
 export interface TransactionFormProps {
@@ -397,7 +398,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   <DatePicker
                     label="Date"
                     value={formData.date ? parse(formData.date, 'yyyy-MM-dd', new Date()) : null}
-                    onChange={(newDate) => {
+                    onChange={(newDate: Date | null) => {
                       if (newDate) {
                         setFormData(prev => ({ ...prev, date: format(newDate, 'yyyy-MM-dd') }));
                         setErrors(prev => ({ ...prev, date: '' }));
