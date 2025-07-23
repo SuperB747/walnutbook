@@ -72,7 +72,6 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     let notes = transaction.notes.clone();
 
     if transaction_type == "Transfer" {
-        println!("[DEBUG] [create_transaction] called with transaction: {:?}", transaction);
         let tx = conn.transaction().map_err(|e| e.to_string())?;
         
         // Generate transfer_id if not provided
@@ -85,11 +84,9 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     .map_err(|e| e.to_string())?
             }
         };
-        println!("[DEBUG] [create_transaction] generated transfer_id: {}", transfer_id);
 
         // Use to_account_id directly for arrival transaction
         let to_id = transaction.to_account_id;
-        println!("[DEBUG] [create_transaction] parsed to_id: {:?}", to_id);
 
         // Create departure transaction
         let departure_amount = -amount.abs();
@@ -103,9 +100,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
         } else {
             "".to_string()
         };
-        println!("[DEBUG] [create_transaction] departure: account_id={}, amount={}, category_id={:?}, date={}, payee={}, notes='{}', type={}, transfer_id={}",
-            transaction.account_id, departure_amount, transaction.category_id, transaction.date, payee, clean_notes, transaction_type, transfer_id);
-        let dep_result = tx.execute(
+        tx.execute(
             "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id, to_account_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 transaction.account_id,
@@ -118,8 +113,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 transfer_id,
                 to_id // departure에만 저장
             ],
-        );
-        println!("[DEBUG] [create_transaction] departure insert result: {:?}", dep_result);
+        ).map_err(|e| e.to_string())?;
 
         // Create arrival transaction if target account found
         if let Some(to_id) = to_id {
@@ -134,8 +128,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             } else {
                 "".to_string()
             };
-            println!("[DEBUG] [create_transaction] Creating arrival transaction: to_id={}, arrival_amount={}, transfer_id={:?}, notes='{}'", to_id, arrival_amount, transfer_id, arrival_clean_notes);
-            let result = tx.execute(
+            tx.execute(
                 "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     to_id,
@@ -147,13 +140,11 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     transaction_type,
                     transfer_id
                 ],
-            );
-            println!("[DEBUG] Arrival transaction insert result: {:?}, to_id: {}, amount: {}", result, to_id, arrival_amount);
-        } else {
-            println!("[DEBUG] [create_transaction] No to_id found, arrival transaction not created");
+            ).map_err(|e| {
+                e.to_string()
+            })?;
         }
         let commit_result = tx.commit();
-        println!("[DEBUG] Transaction committed: {:?}", commit_result);
         commit_result.map_err(|e| e.to_string())?;
     } else {
         // Regular transaction
@@ -190,7 +181,6 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     
     // Transfer 거래의 notes만 수정하는 경우 특별 처리
     if old_type == "Transfer" && transaction.transaction_type == "Transfer" {
-        println!("[DEBUG] Updating Transfer transaction notes only");
         
         // Transfer 거래의 경우 양쪽 거래 모두 업데이트
         if let Some(transfer_id) = old_transfer_id {
@@ -204,7 +194,6 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             ).map_err(|e| e.to_string())?;
             
             tx.commit().map_err(|e| e.to_string())?;
-            println!("[DEBUG] Transfer notes updated successfully");
         } else {
             // transfer_id가 없는 경우 해당 거래만 업데이트
             let clean_notes = if let Some(notes_str) = &transaction.notes {
@@ -224,8 +213,6 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     }
     // Transfer로 변경하는 경우 특별 처리
     else if old_type != "Transfer" && transaction.transaction_type == "Transfer" {
-        println!("[DEBUG] Converting transaction {} from {} to Transfer", transaction.id, old_type);
-        
         let tx = conn.transaction().map_err(|e| e.to_string())?;
         
         // 기존 거래 삭제
@@ -238,12 +225,8 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             |r| r.get::<_, i64>(0)
         ).map_err(|e| e.to_string())?;
         
-        println!("[DEBUG] Generated transfer_id: {}", transfer_id);
-        
         // 출발 계좌 트랜잭션 (음수)
         let departure_amount = -transaction.amount.abs();
-        println!("[DEBUG] Creating departure transaction: account_id={}, amount={}", transaction.account_id, departure_amount);
-        
         tx.execute(
             "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
@@ -259,31 +242,24 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             ],
         ).map_err(|e| e.to_string())?;
         
-        println!("[DEBUG] Departure transaction inserted successfully");
-        
-        // 도착 계좌 ID 추출 (notes에서)
-        let to_account_id = if let Some(notes) = &transaction.notes {
-            println!("[DEBUG] Processing notes: {}", notes);
-            
+        // 도착 계좌 ID 추출 (to_account_id 우선 사용)
+        let to_account_id = if let Some(to_id) = transaction.to_account_id {
+            Some(to_id)
+        } else if let Some(notes) = &transaction.notes {
             // 새로운 형식: [TO_ACCOUNT_ID:계좌ID] 패턴 확인
             if notes.contains("[TO_ACCOUNT_ID:") {
                 if let Some(start) = notes.find("[TO_ACCOUNT_ID:") {
                     if let Some(end) = notes[start..].find("]") {
                         let account_id_str = &notes[start + 14..start + end].trim_start_matches(':');
-                        println!("[DEBUG] [update_transaction] notes: '{}', start: {}, end: {}, account_id_str: '{}'", notes, start, end, account_id_str);
                         if let Ok(account_id) = account_id_str.parse::<i64>() {
-                            println!("[DEBUG] Found to_account_id from new format: {}", account_id);
                             Some(account_id)
                         } else {
-                            println!("[DEBUG] Failed to parse account_id from: {}", account_id_str);
                             None
                         }
                     } else {
-                        println!("[DEBUG] No closing bracket found in new format");
                         None
                     }
                 } else {
-                    println!("[DEBUG] No '[TO_ACCOUNT_ID:' pattern found");
                     None
                 }
             }
@@ -293,43 +269,33 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 let account_name = if let Some(start) = notes.find("[To:") {
                     if let Some(end) = notes[start..].find("]") {
                         let extracted = &notes[start + 4..start + end].trim();
-                        println!("[DEBUG] Extracted account name: '{}'", extracted);
                         extracted.to_string()
                     } else {
-                        println!("[DEBUG] No closing bracket found");
                         String::new()
                     }
                 } else {
-                    println!("[DEBUG] No '[To:' pattern found");
                     String::new()
                 };
-                
                 if !account_name.is_empty() {
                     let to_account_id: Option<i64> = tx.query_row(
                         "SELECT id FROM accounts WHERE name = ?1",
                         params![account_name],
                         |r| r.get(0)
                     ).ok();
-                    
-                    println!("[DEBUG] Found to_account_id from legacy format: {:?}", to_account_id);
                     to_account_id
                 } else {
-                    println!("[DEBUG] Empty account name extracted");
                     None
                 }
             } else {
-                println!("[DEBUG] No transfer pattern found in notes");
                 None
             }
         } else {
-            println!("[DEBUG] No notes provided");
             None
         };
         
         // 도착 계좌 트랜잭션 (양수)
         if let Some(to_id) = to_account_id {
             let arrival_amount = transaction.amount.abs();
-            println!("[DEBUG] Creating arrival transaction: account_id={}, amount={}", to_id, arrival_amount);
             
             // Notes에서 임시 정보 제거하고 사용자 입력만 유지
             let clean_notes = if let Some(notes) = &transaction.notes {
@@ -364,17 +330,14 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     transfer_id
                 ],
             ).map_err(|e| {
-                println!("[DEBUG] Failed to insert arrival transaction: {}", e);
                 e.to_string()
             })?;
             
-            println!("[DEBUG] Arrival transaction inserted successfully");
         } else {
             println!("[DEBUG] No to_account_id found, skipping arrival transaction");
         }
         
         tx.commit().map_err(|e| e.to_string())?;
-        println!("[DEBUG] Transfer conversion completed successfully");
     }
     // Transfer 거래는 다른 타입으로 변경할 수 없음
     else if old_type == "Transfer" && transaction.transaction_type != "Transfer" {
@@ -426,12 +389,9 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
         ).ok();
         
         if let Some(transfer_id) = transfer_id {
-            println!("[DEBUG] Deleting transfer with transfer_id: {}", transfer_id);
             // Delete both transactions with the same transfer_id
             let deleted_count = tx.execute("DELETE FROM transactions WHERE transfer_id = ?1", params![transfer_id]).map_err(|e| e.to_string())?;
-            println!("[DEBUG] Deleted {} transactions with transfer_id {}", deleted_count, transfer_id);
         } else {
-            println!("[DEBUG] No transfer_id found, using legacy transfer deletion logic");
             // Legacy transfer handling (for old transfers without transfer_id)
             let other_transaction = if old_amount < 0.0 {
                 tx.query_row(
@@ -451,7 +411,6 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
             tx.execute("DELETE FROM transactions WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
             if let Some(other_id) = other_transaction {
                 tx.execute("DELETE FROM transactions WHERE id = ?1", params![other_id]).map_err(|e| e.to_string())?;
-                println!("[DEBUG] Deleted legacy transfer pair: {} and {}", id, other_id);
             } else {
                 println!("[DEBUG] Deleted single legacy transfer: {}", id);
             }
@@ -511,21 +470,17 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
     
     // Import new transactions
     for t in transactions {
-        println!("[IMPORT] Checking transaction: date={}, amount={}, payee={}, type={}", t.date, t.amount, t.payee, t.transaction_type);
         let cents = (t.amount * 100.0).round() as i64;
         let key = (t.date.clone(), cents, t.payee.clone());
         if existing_keys.contains(&key) {
-            println!("[IMPORT] Duplicate detected, skipping: {:?}", key);
             duplicate_count += 1;
             continue;
         }
         let transfer_key = (t.date.clone(), cents);
         if transfer_keys.contains(&transfer_key) {
-            println!("[IMPORT] Duplicate transfer detected, skipping: {:?}", transfer_key);
             duplicate_count += 1;
             continue;
         }
-        println!("[IMPORT] Inserting transaction: date={}, amount={}, payee={}, type={}", t.date, t.amount, t.payee, t.transaction_type);
         tx.execute(
             "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
