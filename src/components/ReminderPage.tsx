@@ -38,7 +38,7 @@ const ReminderPage: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editReminder, setEditReminder] = useState<Reminder | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [form, setForm] = useState<{ account_id: number | ''; payment_day: number | ''; notes: string; remind_days_before: number; user_email: string; date: Dayjs | null; statement_date: Dayjs | null }>({ account_id: '', payment_day: '', notes: '', remind_days_before: 7, user_email: '', date: null, statement_date: null });
+  const [form, setForm] = useState<{ account_id: number | ''; payment_day: number | ''; notes: string; remind_days_before: number; date: Dayjs | null; statement_date: Dayjs | null }>({ account_id: '', payment_day: '', notes: '', remind_days_before: 7, date: null, statement_date: null });
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [noteInput, setNoteInput] = useState('');
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -64,12 +64,22 @@ const ReminderPage: React.FC = () => {
   // payment history 불러오기
   useEffect(() => {
     if (!selectedReminder) return;
+    console.log('Loading payment history for reminder:', selectedReminder.id);
     invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
       reminder_id: selectedReminder.id,
       reminderId: selectedReminder.id
     })
-      .then(setPaymentHistory)
-      .catch(() => setPaymentHistory([]));
+      .then(history => {
+        console.log('Payment history loaded:', history);
+        setPaymentHistory(history);
+      })
+      .catch(error => {
+        console.error('Failed to load payment history:', error);
+        setPaymentHistory([]);
+      });
+    
+    // Clear note edits when reminder changes
+    setNoteEdits({});
   }, [selectedReminder]);
 
   // Statement Balance 구간 계산 및 API 호출
@@ -136,13 +146,13 @@ const ReminderPage: React.FC = () => {
         payment_day: reminder.payment_day,
         notes: '',
         remind_days_before: reminder.remind_days_before ?? 7,
-        user_email: reminder.user_email ?? '',
+
         date: dayjs(reminder.next_payment_date),
         statement_date: reminder.statement_date ? dayjs(reminder.statement_date) : null,
       });
     } else {
       setEditReminder(null);
-      setForm({ account_id: '', payment_day: '', notes: '', remind_days_before: 7, user_email: '', date: null, statement_date: null });
+      setForm({ account_id: '', payment_day: '', notes: '', remind_days_before: 7, date: null, statement_date: null });
     }
     setDialogOpen(true);
   };
@@ -163,7 +173,7 @@ const ReminderPage: React.FC = () => {
       is_checked: false,
       notes: editReminder?.notes ?? [],
       remind_days_before: form.remind_days_before,
-      user_email: form.user_email,
+
       created_at: editReminder ? editReminder.created_at : '',
       statement_date,
     };
@@ -249,19 +259,47 @@ const ReminderPage: React.FC = () => {
 
   // Payment history 노트 입력 핸들러
   const handleNoteChange = (id: number, value: string) => {
-    setNoteEdits(edits => ({ ...edits, [id]: value }));
+    console.log('handleNoteChange called:', { id, value });
+    setNoteEdits(edits => {
+      const newEdits = { ...edits, [id]: value };
+      console.log('Updated noteEdits:', newEdits);
+      return newEdits;
+    });
   };
 
   // Payment history 노트 저장 핸들러
   const handleNoteSave = async (id: number) => {
-    const note = noteEdits[id] ?? '';
-    await invoke('update_reminder_payment_history_note', { id, note });
-    if (selectedReminder) {
-      const updated = await invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
-        reminder_id: selectedReminder.id,
-        reminderId: selectedReminder.id
-      });
-      setPaymentHistory(updated);
+    try {
+      const note = noteEdits[id] ?? '';
+      console.log('Saving note for payment history:', { id, note });
+      
+      // 실제 저장
+      await invoke('update_reminder_payment_history_note', { id, note });
+      console.log('Note saved successfully');
+      
+      // 성공 메시지 표시
+      setSnackbar({ open: true, message: 'Note saved successfully', severity: 'success' });
+      
+      // Refresh payment history after saving
+      if (selectedReminder) {
+        console.log('Refreshing payment history...');
+        const updated = await invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
+          reminder_id: selectedReminder.id,
+          reminderId: selectedReminder.id
+        });
+        console.log('Updated payment history:', updated);
+        setPaymentHistory(updated);
+        
+        // Clear the edit state for this note
+        setNoteEdits(edits => {
+          const newEdits = { ...edits };
+          delete newEdits[id];
+          return newEdits;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save note:', error);
+      setSnackbar({ open: true, message: 'Failed to save note', severity: 'error' });
     }
   };
 
@@ -356,17 +394,39 @@ const ReminderPage: React.FC = () => {
           {selectedReminder ? (
             <>
               <Box sx={{ mb: 2 }}>
-                <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {selectedReminder.account_name}
-                  {accounts.find(a => a.id === selectedReminder.account_id)?.description && (
-                    <>
-                      <span style={{ margin: '0 4px', color: '#888' }}>-</span>
-                      <Typography component="span" variant="body2" sx={{ color: 'text.secondary', fontWeight: 400, fontSize: 16 }}>
-                        {accounts.find(a => a.id === selectedReminder.account_id)?.description}
-                      </Typography>
-                    </>
-                  )}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                  <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {selectedReminder.account_name}
+                    {accounts.find(a => a.id === selectedReminder.account_id)?.description && (
+                      <>
+                        <span style={{ margin: '0 4px', color: '#888' }}>-</span>
+                        <Typography component="span" variant="body2" sx={{ color: 'text.secondary', fontWeight: 400, fontSize: 16 }}>
+                          {accounts.find(a => a.id === selectedReminder.account_id)?.description}
+                        </Typography>
+                      </>
+                    )}
+                  </Typography>
+                                     <Button
+                     variant="outlined"
+                     onClick={() => handleCheck(selectedReminder)}
+                     sx={{
+                       minWidth: 80,
+                       height: 32,
+                       textTransform: 'none',
+                       fontWeight: 600,
+                       fontSize: '0.875rem',
+                       borderColor: '#4caf50',
+                       color: '#4caf50',
+                       '&:hover': {
+                         borderColor: '#388e3c',
+                         color: '#388e3c',
+                         bgcolor: 'rgba(76, 175, 80, 0.04)'
+                       }
+                     }}
+                   >
+                     PAID
+                   </Button>
+                </Box>
                 <Typography variant="subtitle1" sx={{ mt: 1, fontWeight: 500 }}>
                   Statement Date: {selectedReminder.statement_date}
                 </Typography>
@@ -376,25 +436,6 @@ const ReminderPage: React.FC = () => {
                 <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
                   Next Due Date: {selectedReminder.next_payment_date}
                 </Typography>
-              </Box>
-              <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Remind: {selectedReminder.remind_days_before} days before
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Email: {selectedReminder.user_email}
-                </Typography>
-              </Box>
-              <Divider sx={{ my: 2 }} />
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <Checkbox
-                  checked={selectedReminder.is_checked}
-                  onChange={() => handleCheck(selectedReminder)}
-                  icon={<CheckIcon />}
-                  checkedIcon={<CheckIcon />}
-                  sx={{ mr: 1 }}
-                />
-                <Typography variant="body1">Mark as Paid (when checked, moves to next payment date)</Typography>
               </Box>
               <Divider sx={{ my: 2 }} />
               <Box sx={{ mb: 2 }}>
@@ -435,8 +476,14 @@ const ReminderPage: React.FC = () => {
                             {/* Note inline edit */}
                             <NoteInlineEdit
                               value={noteEdits[h.id] !== undefined ? noteEdits[h.id] : h.note || ''}
-                              onChange={v => handleNoteChange(h.id, v)}
-                              onSave={() => handleNoteSave(h.id)}
+                              onChange={v => {
+                                console.log('Note change for history item:', { id: h.id, value: v, currentNote: h.note });
+                                handleNoteChange(h.id, v);
+                              }}
+                              onSave={() => {
+                                console.log('Note save triggered for history item:', { id: h.id, noteEdits: noteEdits[h.id] });
+                                handleNoteSave(h.id);
+                              }}
                             />
                           </Box>
                         }
@@ -517,14 +564,7 @@ const ReminderPage: React.FC = () => {
               inputProps={{ min: 1, max: 31 }}
               sx={{ mb: 2 }}
             />
-            <TextField
-              label="Email to receive reminder"
-              type="email"
-              fullWidth
-              value={form.user_email}
-              onChange={e => setForm(f => ({ ...f, user_email: e.target.value }))}
-              sx={{ mb: 2 }}
-            />
+
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseDialog}>Cancel</Button>
@@ -547,18 +587,54 @@ const ReminderPage: React.FC = () => {
 const NoteInlineEdit: React.FC<{ value: string; onChange: (v: string) => void; onSave: () => void }> = ({ value, onChange, onSave }) => {
   const [editing, setEditing] = useState(false);
   const [localValue, setLocalValue] = useState(value);
-  useEffect(() => { setLocalValue(value); }, [value]);
-  const handleBlur = () => { setEditing(false); if (localValue !== value) onSave(); };
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') { setEditing(false); if (localValue !== value) onSave(); }
-    if (e.key === 'Escape') { setEditing(false); setLocalValue(value); }
+  
+  useEffect(() => { 
+    setLocalValue(value); 
+  }, [value]);
+  
+  const handleBlur = () => { 
+    console.log('NoteInlineEdit handleBlur:', { localValue, value, editing });
+    setEditing(false); 
+    // 항상 저장 시도 (값이 변경되었는지 상관없이)
+    console.log('Saving note on blur...');
+    onSave(); 
   };
+  
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { 
+      console.log('NoteInlineEdit Enter pressed');
+      setEditing(false); 
+      // 항상 저장 시도 (값이 변경되었는지 상관없이)
+      console.log('Saving note on Enter...');
+      onSave(); 
+    }
+    if (e.key === 'Escape') { 
+      console.log('NoteInlineEdit Escape pressed');
+      setEditing(false); 
+      setLocalValue(value); 
+    }
+  };
+  
+  const handleClick = () => {
+    console.log('NoteInlineEdit clicked, starting edit mode');
+    setEditing(true);
+  };
+  
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    console.log('NoteInlineEdit onChange:', { newValue, localValue });
+    setLocalValue(newValue); 
+    onChange(newValue); 
+  };
+  
+  console.log('NoteInlineEdit render:', { value, localValue, editing });
+  
   return editing ? (
     <TextField
       size="small"
       value={localValue}
       autoFocus
-      onChange={e => { setLocalValue(e.target.value); onChange(e.target.value); }}
+      onChange={handleChange}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       sx={{ minWidth: 120, maxWidth: 200 }}
@@ -568,8 +644,17 @@ const NoteInlineEdit: React.FC<{ value: string; onChange: (v: string) => void; o
   ) : (
     <Typography
       variant="body2"
-      sx={{ minWidth: 120, maxWidth: 200, cursor: 'pointer', color: value ? 'inherit' : '#aaa', borderBottom: '1px dashed #ccc' }}
-      onClick={() => setEditing(true)}
+      sx={{ 
+        minWidth: 120, 
+        maxWidth: 200, 
+        cursor: 'pointer', 
+        color: value ? 'inherit' : '#aaa', 
+        borderBottom: '1px dashed #ccc',
+        '&:hover': {
+          borderBottom: '1px solid #666'
+        }
+      }}
+      onClick={handleClick}
       title={value || 'Add a note'}
     >
       {value || 'Add a note'}

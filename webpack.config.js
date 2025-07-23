@@ -59,15 +59,7 @@ const commonConfig = {
   }
 };
 
-const mainConfig = {
-  ...commonConfig,
-  target: 'electron-main',
-  entry: './src/index.ts',
-  output: {
-    filename: 'index.js',
-    path: path.resolve(__dirname, 'build'),
-  },
-};
+
 
 const rendererConfig = {
   externalsPresets: { node: false },
@@ -155,15 +147,7 @@ const rendererConfig = {
   }
 };
 
-const preloadConfig = {
-  ...commonConfig,
-  target: 'electron-preload',
-  entry: './src/preload.ts',
-  output: {
-    filename: 'preload.js',
-    path: path.resolve(__dirname, 'build'),
-  },
-};
+
 
 // Only compile renderer config when running webpack-dev-server to reduce memory usage
 if (process.env.WEBPACK_SERVE) {

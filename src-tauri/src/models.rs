@@ -91,7 +91,7 @@ pub struct Reminder {
     pub is_checked: bool,
     pub notes: Option<Vec<String>>, // 여러 노트 저장
     pub remind_days_before: i64, // 추가: 며칠 전에 리마인드
-    pub user_email: String,      // 추가: 이메일 주소
+
     pub created_at: String,
     pub statement_date: String, // Statement date (yyyy-MM-dd)
 }

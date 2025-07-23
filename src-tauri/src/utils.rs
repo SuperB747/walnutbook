@@ -399,12 +399,7 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
                 [],
             ).map_err(|e| e.to_string())?;
         }
-        if !existing.contains(&"user_email".to_string()) {
-            conn.execute(
-                "ALTER TABLE reminders ADD COLUMN user_email TEXT NOT NULL DEFAULT ''",
-                [],
-            ).map_err(|e| e.to_string())?;
-        }
+
         if !existing.contains(&"statement_date".to_string()) {
             conn.execute(
                 "ALTER TABLE reminders ADD COLUMN statement_date TEXT NOT NULL DEFAULT ''",

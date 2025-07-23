@@ -68,7 +68,7 @@ export interface Reminder {
   is_checked: boolean;
   notes?: string[];
   remind_days_before: number; // 추가
-  user_email: string;         // 추가
+
   created_at: string;
   statement_date: string; // Statement date (yyyy-MM-dd)
 }

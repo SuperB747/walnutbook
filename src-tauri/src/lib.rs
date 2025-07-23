@@ -8,6 +8,7 @@ mod recurring;
 mod backup;
 mod reminders;
 
+
 use std::sync::Mutex;
 use rusqlite::Connection;
 use tauri::Manager;
@@ -147,6 +148,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             reminders::delete_reminder_payment_history,
             reminders::update_reminder_payment_history_note,
             reminders::get_statement_balance,
+
         ])
         .run(context)
         .expect("error while running tauri application");
