@@ -81,6 +81,18 @@ pub struct RecurringItem {
     pub interval_unit: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Reminder {
+    pub id: i64,
+    pub account_id: i64,
+    pub account_name: String,
+    pub payment_day: u8, // 1~31
+    pub next_payment_date: String, // yyyy-MM-dd
+    pub is_checked: bool,
+    pub notes: Option<String>,
+    pub created_at: String,
+}
+
 fn default_repeat_type() -> String {
     "monthly_date".to_string()
 }

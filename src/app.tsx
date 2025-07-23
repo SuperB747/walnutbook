@@ -32,6 +32,7 @@ import BulkTransactionEdit from './components/BulkTransactionEdit';
 import ImportExportDialog from './components/ImportExportDialog';
 import BackupRestoreDialog from './components/BackupRestoreDialog';
 import ReportsPage from './components/ReportsPage';
+import ReminderPage from './components/ReminderPage';
 
 import { Account, Transaction, Category } from './db';
 import logo from './logo.png';
@@ -432,10 +433,12 @@ export const App: React.FC = () => {
         return 2;
       case '/recurring':
         return 3;
-      case '/reports':
+      case '/reminders':
         return 4;
+      case '/reports':
+        return 5;
       default:
-        return 4; // Default to Reports tab
+        return 5; // Default to Reports tab
     }
   };
 
@@ -605,6 +608,7 @@ export const App: React.FC = () => {
                   <Tab label="Transactions" component={Link} to="/transactions" />
                   <Tab label="Budgets" component={Link} to="/budgets" />
                   <Tab label="Recurring" component={Link} to="/recurring" />
+                  <Tab label="Reminders" component={Link} to="/reminders" />
                   <Tab label="Reports" component={Link} to="/reports" />
                 </Tabs>
               </Box>
@@ -618,6 +622,7 @@ export const App: React.FC = () => {
               <Route path="/transactions" element={<TransactionsPage />} />
               <Route path="/budgets" element={<BudgetsPage />} />
               <Route path="/recurring" element={<RecurringPage />} />
+              <Route path="/reminders" element={<ReminderPage />} />
               <Route path="/reports" element={<ReportsPage />} />
             </Routes>
           </Box>

@@ -369,6 +369,22 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
+    // Create reminders table if it doesn't exist
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            account_name TEXT NOT NULL,
+            payment_day INTEGER NOT NULL,
+            next_payment_date TEXT NOT NULL,
+            is_checked BOOLEAN NOT NULL DEFAULT 0,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
+        )",
+        [],
+    ).map_err(|e| e.to_string())?;
+
     // Remove account_import_settings table if it exists (migration)
     conn.execute("DROP TABLE IF EXISTS account_import_settings", []).ok();
 

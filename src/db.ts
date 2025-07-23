@@ -58,3 +58,21 @@ export interface RecurringItem {
   interval_value?: number;
   interval_unit?: 'day' | 'week' | 'month';
 }
+
+export interface Reminder {
+  id: number;
+  account_id: number;
+  account_name: string;
+  payment_day: number;
+  next_payment_date: string;
+  is_checked: boolean;
+  notes?: string;
+  created_at: string;
+}
+
+// Reminder API helpers (to be implemented in the frontend)
+// export async function getReminders(): Promise<Reminder[]> { ... }
+// export async function addReminder(reminder: Reminder): Promise<Reminder[]> { ... }
+// export async function updateReminder(reminder: Reminder): Promise<Reminder[]> { ... }
+// export async function deleteReminder(id: number): Promise<Reminder[]> { ... }
+// export async function checkReminder(id: number, next_payment_date: string): Promise<Reminder[]> { ... }

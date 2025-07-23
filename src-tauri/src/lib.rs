@@ -6,6 +6,7 @@ mod categories;
 mod budgets;
 mod recurring;
 mod backup;
+mod reminders;
 
 use std::sync::Mutex;
 use rusqlite::Connection;
@@ -135,6 +136,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             home_dir,
             get_onedrive_path,
             reset_database,
+            reminders::get_reminders,
+            reminders::add_reminder,
+            reminders::update_reminder,
+            reminders::delete_reminder,
+            reminders::check_reminder,
         ])
         .run(context)
         .expect("error while running tauri application");
