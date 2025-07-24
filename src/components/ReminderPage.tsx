@@ -50,6 +50,9 @@ const ReminderPage: React.FC = () => {
 
   // 좌측 리스트에서 선택된 리마인더
   const selectedReminder = reminders.find(r => r.id === selectedId) || reminders[0];
+  console.log('[Frontend] selectedId:', selectedId);
+  console.log('[Frontend] reminders:', reminders);
+  console.log('[Frontend] selectedReminder:', selectedReminder);
 
   const loadReminders = async () => {
     const data = await invoke<Reminder[]>('get_reminders');
@@ -94,12 +97,19 @@ const ReminderPage: React.FC = () => {
       .map(h => ({ ...h, _date: h.statement_date || h.paid_date }))
       .filter(h => h._date)
       .sort((a, b) => (a._date || '').localeCompare(b._date || ''));
+    
+    // Statement Balance 계산: 이전 statement_date부터 현재 statement_date까지
     let start_date = '1970-01-01';
     let end_date = selectedReminder.statement_date
       ? dayjs(selectedReminder.statement_date).add(1, 'day').format('YYYY-MM-DD')
       : dayjs(today).add(1, 'day').format('YYYY-MM-DD');
+    
+    // 가장 최근 payment history의 statement_date를 시작점으로 사용
     if (sortedHistory.length > 0) {
-      start_date = dayjs(sortedHistory[0]._date).add(1, 'day').format('YYYY-MM-DD');
+      const lastStatementDate = sortedHistory[sortedHistory.length - 1]._date;
+      if (lastStatementDate) {
+        start_date = dayjs(lastStatementDate).add(1, 'day').format('YYYY-MM-DD');
+      }
     }
     // 디버깅용 로그 추가
     console.log('[StatementBalance Debug]');
@@ -108,10 +118,11 @@ const ReminderPage: React.FC = () => {
     console.log('sortedHistory:', sortedHistory);
     console.log('start_date:', start_date);
     console.log('end_date:', end_date);
+    console.log('Period:', `${start_date} to ${end_date}`);
     console.log('get_statement_balance params:', {
-      account_id: selectedReminder.account_id,
-      start_date,
-      end_date
+      accountId: selectedReminder.account_id,
+      startDate: start_date,
+      endDate: end_date
     });
     // 추가: 구간 내 실제 거래 내역 콘솔 출력
     invoke('get_transactions').then((allTxns) => {
@@ -127,11 +138,15 @@ const ReminderPage: React.FC = () => {
       console.log('[StatementBalance Debug] 구간 내 거래 합계:', sum);
     });
     invoke<number>('get_statement_balance', {
-      account_id: selectedReminder.account_id,
-      start_date,
-      end_date
+      accountId: selectedReminder.account_id,
+      startDate: start_date,
+      endDate: end_date
     })
-      .then(setStatementBalance)
+      .then(result => {
+        console.log('[Frontend] get_statement_balance result:', result);
+        console.log('[Frontend] Setting statementBalance to:', result);
+        setStatementBalance(result);
+      })
       .catch(e => {
         console.error('get_statement_balance error', e);
         setStatementBalance(null);
@@ -431,7 +446,10 @@ const ReminderPage: React.FC = () => {
                   Statement Date: {selectedReminder.statement_date}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 1, color: statementBalance !== null ? (statementBalance < 0 ? '#d32f2f' : '#1976d2') : '#888', fontWeight: 600 }}>
-                  Statement Balance: {statementBalance !== null ? `${statementBalance < 0 ? '-' : ''}$${Math.abs(statementBalance).toFixed(2)}` : '--'}
+                  Statement Balance: {(() => {
+                    console.log('[Frontend] Rendering statementBalance:', statementBalance);
+                    return statementBalance !== null ? `${statementBalance < 0 ? '-' : ''}$${Math.abs(statementBalance).toFixed(2)}` : '--';
+                  })()}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
                   Next Due Date: {selectedReminder.next_payment_date}
