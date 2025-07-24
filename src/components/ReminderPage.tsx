@@ -295,8 +295,8 @@ const ReminderPage: React.FC = () => {
   };
 
   // 미완료 → 완료 순, 날짜 오름차순, 체크 시 아래로
+  // Due date 오름차순(가까운 순)으로만 정렬
   const sortedReminders = [...reminders].sort((a, b) => {
-    if (a.is_checked !== b.is_checked) return a.is_checked ? 1 : -1;
     return a.next_payment_date.localeCompare(b.next_payment_date);
   });
 
