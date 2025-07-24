@@ -480,14 +480,6 @@ pub fn get_onedrive_attachments_dir() -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn get_attachments_dir(app: &AppHandle) -> PathBuf {
-    let db_path = get_db_path(app);
-    let dir = db_path.parent().unwrap().join("attachments");
-    fs::create_dir_all(&dir).expect("Failed to create attachments dir");
-    dir
-}
-
-#[tauri::command]
 pub fn reset_database(app: AppHandle) -> Result<(), String> {
     let path = get_db_path(&app);
     // Delete existing database file, ignore error if not present

@@ -4,10 +4,8 @@ use serde_json::Value;
 use std::collections::HashSet;
 use tauri::AppHandle;
 use serde::Serialize;
-use std::fs;
-use std::io::Write;
 use open;
-use crate::utils::{get_db_path, get_attachments_dir, get_onedrive_attachments_dir};
+use crate::utils::{get_db_path, get_onedrive_attachments_dir};
 
 use crate::models::Transaction;
 
@@ -578,8 +576,9 @@ pub fn bulk_update_transactions(app: AppHandle, updates: Vec<(i64, Value)>) -> R
 } 
 
 #[tauri::command]
-pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: String, transaction_id: Option<i64>) -> Result<String, String> {
-    use base64::decode;
+pub fn save_transaction_attachment(_app: AppHandle, file_name: String, base64: String, transaction_id: Option<i64>) -> Result<String, String> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
     let attachments_dir = get_onedrive_attachments_dir()?;
     let file_name = if let Some(id) = transaction_id {
         format!("txn_{}_{}", id, file_name)
@@ -587,13 +586,13 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
         file_name
     };
     let dest_path = attachments_dir.join(&file_name);
-    let bytes = decode(&base64).map_err(|e| format!("base64 디코딩 실패: {}", e))?;
+    let bytes = STANDARD.decode(&base64).map_err(|e| format!("base64 디코딩 실패: {}", e))?;
     std::fs::write(&dest_path, bytes).map_err(|e| format!("파일 저장 실패: {}", e))?;
     Ok(dest_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-pub fn delete_transaction_attachment(app: AppHandle, attachment_path: String) -> Result<(), String> {
+pub fn delete_transaction_attachment(_app: AppHandle, attachment_path: String) -> Result<(), String> {
     let attachments_dir = get_onedrive_attachments_dir()?;
     let file_name = std::path::Path::new(&attachment_path).file_name().unwrap();
     let file_path = attachments_dir.join(file_name);
@@ -604,7 +603,7 @@ pub fn delete_transaction_attachment(app: AppHandle, attachment_path: String) ->
 }
 
 #[tauri::command]
-pub fn open_transaction_attachment(app: AppHandle, attachment_path: String) -> Result<(), String> {
+pub fn open_transaction_attachment(_app: AppHandle, attachment_path: String) -> Result<(), String> {
     let attachments_dir = get_onedrive_attachments_dir()?;
     let file_name = std::path::Path::new(&attachment_path).file_name().unwrap();
     let file_path = attachments_dir.join(file_name);

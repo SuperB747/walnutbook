@@ -1,10 +1,9 @@
 use rusqlite::Connection;
 use std::fs;
-use std::path::Path;
 use tauri::AppHandle;
 use chrono::Local;
 
-use crate::utils::{get_db_path, get_onedrive_path, get_onedrive_backups_dir};
+use crate::utils::{get_db_path, get_onedrive_backups_dir};
 
 #[derive(serde::Serialize)]
 pub struct BackupInfo {
