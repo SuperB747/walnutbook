@@ -260,14 +260,6 @@ const ReportsPage: React.FC = () => {
         const monthlyOccurrences = calculateMonthlyOccurrences(item, selectedMonth);
         
         monthlyOccurrences.forEach(occurrence => {
-          console.log('Creating occurrence:', { 
-            itemId: item.id, 
-            itemName: item.name, 
-            occurrenceCount: occurrence.occurrenceCount, 
-            occurrenceId: occurrence.occurrenceId, 
-            date: occurrence.date 
-          });
-          
           result.push({
             ...item,
             occurrenceDate: parseLocalDate(occurrence.date),

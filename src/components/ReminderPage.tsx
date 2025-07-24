@@ -50,9 +50,6 @@ const ReminderPage: React.FC = () => {
 
   // 좌측 리스트에서 선택된 리마인더
   const selectedReminder = reminders.find(r => r.id === selectedId) || reminders[0];
-  console.log('[Frontend] selectedId:', selectedId);
-  console.log('[Frontend] reminders:', reminders);
-  console.log('[Frontend] selectedReminder:', selectedReminder);
 
   const loadReminders = async () => {
     const data = await invoke<Reminder[]>('get_reminders');
@@ -67,13 +64,11 @@ const ReminderPage: React.FC = () => {
   // payment history 불러오기
   useEffect(() => {
     if (!selectedReminder) return;
-    console.log('Loading payment history for reminder:', selectedReminder.id);
     invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
       reminder_id: selectedReminder.id,
       reminderId: selectedReminder.id
     })
       .then(history => {
-        console.log('Payment history loaded:', history);
         setPaymentHistory(history);
       })
       .catch(error => {
@@ -112,39 +107,12 @@ const ReminderPage: React.FC = () => {
       }
     }
     // 디버깅용 로그 추가
-    console.log('[StatementBalance Debug]');
-    console.log('selectedReminder:', selectedReminder);
-    console.log('paymentHistory:', paymentHistory);
-    console.log('sortedHistory:', sortedHistory);
-    console.log('start_date:', start_date);
-    console.log('end_date:', end_date);
-    console.log('Period:', `${start_date} to ${end_date}`);
-    console.log('get_statement_balance params:', {
-      accountId: selectedReminder.account_id,
-      startDate: start_date,
-      endDate: end_date
-    });
-    // 추가: 구간 내 실제 거래 내역 콘솔 출력
-    invoke('get_transactions').then((allTxns) => {
-      const txns = allTxns as any[];
-      const filteredTxns = (txns || []).filter(
-        (t: any) => t.account_id === selectedReminder.account_id &&
-          t.date >= start_date &&
-          t.date < end_date &&
-          t.type !== 'Transfer'
-      );
-      const sum = filteredTxns.reduce((acc: number, t: any) => acc + t.amount, 0);
-      console.log('[StatementBalance Debug] 구간 내 거래 내역:', filteredTxns);
-      console.log('[StatementBalance Debug] 구간 내 거래 합계:', sum);
-    });
     invoke<number>('get_statement_balance', {
       accountId: selectedReminder.account_id,
       startDate: start_date,
       endDate: end_date
     })
       .then(result => {
-        console.log('[Frontend] get_statement_balance result:', result);
-        console.log('[Frontend] Setting statementBalance to:', result);
         setStatementBalance(result);
       })
       .catch(e => {
@@ -288,10 +256,8 @@ const ReminderPage: React.FC = () => {
 
   // Payment history 노트 입력 핸들러
   const handleNoteChange = (id: number, value: string) => {
-    console.log('handleNoteChange called:', { id, value });
     setNoteEdits(edits => {
       const newEdits = { ...edits, [id]: value };
-      console.log('Updated noteEdits:', newEdits);
       return newEdits;
     });
   };
@@ -300,23 +266,19 @@ const ReminderPage: React.FC = () => {
   const handleNoteSave = async (id: number) => {
     try {
       const note = noteEdits[id] ?? '';
-      console.log('Saving note for payment history:', { id, note });
       
       // 실제 저장
       await invoke('update_reminder_payment_history_note', { id, note });
-      console.log('Note saved successfully');
       
       // 성공 메시지 표시
       setSnackbar({ open: true, message: 'Note saved successfully', severity: 'success' });
       
       // Refresh payment history after saving
       if (selectedReminder) {
-        console.log('Refreshing payment history...');
         const updated = await invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
           reminder_id: selectedReminder.id,
           reminderId: selectedReminder.id
         });
-        console.log('Updated payment history:', updated);
         setPaymentHistory(updated);
         
         // Clear the edit state for this note
@@ -461,7 +423,6 @@ const ReminderPage: React.FC = () => {
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 1, color: statementBalance !== null ? (statementBalance < 0 ? '#d32f2f' : '#1976d2') : '#888', fontWeight: 600 }}>
                   Statement Balance: {(() => {
-                    console.log('[Frontend] Rendering statementBalance:', statementBalance);
                     return statementBalance !== null ? `${statementBalance < 0 ? '-' : ''}$${Math.abs(statementBalance).toFixed(2)}` : '--';
                   })()}
                 </Typography>
@@ -509,11 +470,9 @@ const ReminderPage: React.FC = () => {
                             <NoteInlineEdit
                               value={noteEdits[h.id] !== undefined ? noteEdits[h.id] : h.note || ''}
                               onChange={v => {
-                                console.log('Note change for history item:', { id: h.id, value: v, currentNote: h.note });
                                 handleNoteChange(h.id, v);
                               }}
                               onSave={() => {
-                                console.log('Note save triggered for history item:', { id: h.id, noteEdits: noteEdits[h.id] });
                                 handleNoteSave(h.id);
                               }}
                             />
@@ -625,41 +584,32 @@ const NoteInlineEdit: React.FC<{ value: string; onChange: (v: string) => void; o
   }, [value]);
   
   const handleBlur = () => { 
-    console.log('NoteInlineEdit handleBlur:', { localValue, value, editing });
     setEditing(false); 
     // 항상 저장 시도 (값이 변경되었는지 상관없이)
-    console.log('Saving note on blur...');
     onSave(); 
   };
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') { 
-      console.log('NoteInlineEdit Enter pressed');
       setEditing(false); 
       // 항상 저장 시도 (값이 변경되었는지 상관없이)
-      console.log('Saving note on Enter...');
       onSave(); 
     }
     if (e.key === 'Escape') { 
-      console.log('NoteInlineEdit Escape pressed');
       setEditing(false); 
       setLocalValue(value); 
     }
   };
   
   const handleClick = () => {
-    console.log('NoteInlineEdit clicked, starting edit mode');
     setEditing(true);
   };
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    console.log('NoteInlineEdit onChange:', { newValue, localValue });
     setLocalValue(newValue); 
     onChange(newValue); 
   };
-  
-  console.log('NoteInlineEdit render:', { value, localValue, editing });
   
   return editing ? (
     <TextField

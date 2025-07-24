@@ -227,16 +227,9 @@ pub fn update_reminder_payment_history_note(app: AppHandle, id: i64, note: Strin
 pub fn get_statement_balance(app: AppHandle, accountId: i64, startDate: String, endDate: String) -> Result<f64, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
-    
-    println!("[Rust] get_statement_balance called with: accountId={}, startDate={}, endDate={}", accountId, startDate, endDate);
-    
     let mut stmt = conn.prepare(
         "SELECT SUM(amount) FROM transactions WHERE account_id = ?1 AND date >= ?2 AND date < ?3 AND type != 'Transfer'"
     ).map_err(|e| e.to_string())?;
-    
     let sum: f64 = stmt.query_row(params![accountId, startDate, endDate], |row| row.get(0)).unwrap_or(0.0);
-    
-    println!("[Rust] get_statement_balance result: {}", sum);
-    
     Ok(sum)
 } 
