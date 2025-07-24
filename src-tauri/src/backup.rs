@@ -4,7 +4,7 @@ use std::path::Path;
 use tauri::AppHandle;
 use chrono::Local;
 
-use crate::utils::{get_db_path, get_onedrive_path};
+use crate::utils::{get_db_path, get_onedrive_path, get_onedrive_backups_dir};
 
 #[derive(serde::Serialize)]
 pub struct BackupInfo {
@@ -65,34 +65,23 @@ pub fn backup_database(app: AppHandle, save_path: String) -> Result<BackupInfo, 
 
 #[tauri::command]
 pub fn manual_backup_to_onedrive(app: AppHandle) -> Result<BackupInfo, String> {
-    let onedrive_path = get_onedrive_path()?;
-    let backup_folder = format!("{}/WalnutBook_Backups", onedrive_path);
-    
-    // Create backup folder if it doesn't exist
-    fs::create_dir_all(&backup_folder).map_err(|e| e.to_string())?;
-    
+    let backup_folder = get_onedrive_backups_dir()?;
+    // Create backup folder if it doesn't exist (already done in util)
     let timestamp = Local::now().format("%Y%m%d_%H%M%S");
     let backup_filename = format!("walnutbook_backup_{}.db", timestamp);
-    let backup_path = format!("{}/{}", backup_folder, backup_filename);
-    
+    let backup_path = backup_folder.join(&backup_filename);
     // Clean old backups (keep only last 10)
     cleanup_old_backups(&backup_folder, 10)?;
-    
-    backup_database(app, backup_path)
+    backup_database(app, backup_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub fn get_backup_history() -> Result<Vec<BackupInfo>, String> {
-    let onedrive_path = get_onedrive_path()?;
-    let backup_folder = format!("{}/WalnutBook_Backups", onedrive_path);
-    
-    if !Path::new(&backup_folder).exists() {
+    let backup_folder = get_onedrive_backups_dir()?;
+    if !backup_folder.exists() {
         return Ok(vec![]);
     }
-    
     let mut backups = Vec::new();
-    
-    // Check main backup folder for backups
     if let Ok(entries) = fs::read_dir(&backup_folder) {
         for entry in entries {
             if let Ok(entry) = entry {
@@ -102,13 +91,10 @@ pub fn get_backup_history() -> Result<Vec<BackupInfo>, String> {
                         if let Ok(metadata) = fs::metadata(&path) {
                             if let Some(filename) = path.file_name() {
                                 if let Some(filename_str) = filename.to_str() {
-                                    // Extract timestamp from filename
                                     if filename_str.starts_with("walnutbook_backup_") {
                                         let timestamp = filename_str
                                             .replace("walnutbook_backup_", "")
                                             .replace(".db", "");
-                                        
-                                        // If timestamp is duplicated (contains underscore twice), take only the first part
                                         let timestamp = if timestamp.matches('_').count() >= 2 {
                                             let parts: Vec<&str> = timestamp.split('_').collect();
                                             if parts.len() >= 6 {
@@ -119,7 +105,6 @@ pub fn get_backup_history() -> Result<Vec<BackupInfo>, String> {
                                         } else {
                                             timestamp
                                         };
-                                        
                                         backups.push(BackupInfo {
                                             timestamp,
                                             file_size: metadata.len(),
@@ -135,17 +120,13 @@ pub fn get_backup_history() -> Result<Vec<BackupInfo>, String> {
             }
         }
     }
-    
-    // Sort by timestamp (newest first) and limit to 10
     backups.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     backups.truncate(10);
-    
     Ok(backups)
 }
 
-fn cleanup_old_backups(backup_folder: &str, keep_count: usize) -> Result<(), String> {
+fn cleanup_old_backups(backup_folder: &std::path::Path, keep_count: usize) -> Result<(), String> {
     let mut backups = Vec::new();
-    
     if let Ok(entries) = fs::read_dir(backup_folder) {
         for entry in entries {
             if let Ok(entry) = entry {
@@ -168,17 +149,12 @@ fn cleanup_old_backups(backup_folder: &str, keep_count: usize) -> Result<(), Str
             }
         }
     }
-    
-    // Sort by modification time (oldest first)
     backups.sort_by(|a, b| a.1.cmp(&b.1));
-    
-    // Remove old backups
     if backups.len() > keep_count {
         for (path, _) in backups.iter().take(backups.len() - keep_count) {
             let _ = fs::remove_file(path);
         }
     }
-    
     Ok(())
 }
 
@@ -263,31 +239,24 @@ pub fn import_database(app: AppHandle, data: Vec<u8>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn delete_backup_from_history(timestamp: String) -> Result<(), String> {
-    let onedrive_path = get_onedrive_path()?;
-    let backup_folder = format!("{}/WalnutBook_Backups", onedrive_path);
+    let backup_folder = get_onedrive_backups_dir()?;
     let backup_filename = format!("walnutbook_backup_{}.db", timestamp);
-    let backup_path = format!("{}/{}", backup_folder, backup_filename);
-    
-    if Path::new(&backup_path).exists() {
+    let backup_path = backup_folder.join(&backup_filename);
+    if backup_path.exists() {
         fs::remove_file(&backup_path).map_err(|e| e.to_string())?;
     }
-    
     Ok(())
 }
 
 #[tauri::command]
 pub fn restore_backup_from_history(app: AppHandle, timestamp: String) -> Result<(), String> {
-    let onedrive_path = get_onedrive_path()?;
-    let backup_folder = format!("{}/WalnutBook_Backups", onedrive_path);
+    let backup_folder = get_onedrive_backups_dir()?;
     let backup_filename = format!("walnutbook_backup_{}.db", timestamp);
-    let backup_path = format!("{}/{}", backup_folder, backup_filename);
-    
-    if !Path::new(&backup_path).exists() {
+    let backup_path = backup_folder.join(&backup_filename);
+    if !backup_path.exists() {
         return Err("Backup file not found".to_string());
     }
-    
-    // Use the existing restore function
-    restore_database_from_path(app, backup_path)
+    restore_database_from_path(app, backup_path.to_string_lossy().to_string())
 }
 
 fn restore_database_from_path(app: AppHandle, file_path: String) -> Result<(), String> {

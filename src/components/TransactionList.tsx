@@ -9,6 +9,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { parse } from 'date-fns';
 import { getCategoryName, formatCurrency, fixAmountSign } from '../utils';
+import { invoke } from '@tauri-apps/api/core';
 
 export interface TransactionListProps {
   transactions: Transaction[];
@@ -311,6 +312,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
               <TableCell align="left" sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap' }}>Date</TableCell>
               <TableCell align="left" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}>Account</TableCell>
               <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Description</TableCell>
+              <TableCell align="center" sx={{ width: 40, minWidth: 40, p: 0 }}></TableCell> {/* Clip icon column */}
               <TableCell align="center" sx={{ width: 180, minWidth: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>Category</TableCell>
               <TableCell align="center" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap', pr: 4 }}>Amount</TableCell>
               <TableCell align="center" sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap' }}>Type</TableCell>
@@ -320,7 +322,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           <TableBody>
             {filteredTransactions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={9} align="center">
                   <Typography variant="body1" color="text.secondary" sx={{ py: 2 }}>No transactions found</Typography>
                 </TableCell>
               </TableRow>
@@ -372,18 +374,34 @@ const TransactionList: React.FC<TransactionListProps> = ({
                         } 
                       }} autoFocus sx={{ width: '100%', fontSize: '0.9rem', p: 0, '& .MuiInputBase-input': { fontSize: '0.9rem !important', lineHeight: '1.2', padding: '0 !important' }, '& .MuiInputBase-root': { fontSize: '0.9rem !important' } }} />
                     ) : (
-                      <Typography noWrap sx={{ fontSize: '0.9rem' }}>
-                        {getDisplayPayee(transaction)}
-                        {getDisplayNotes(transaction) && (
-                          <Typography component="span" sx={(theme) => ({
-                            fontSize: '0.9rem',
-                            color: theme.palette.mode === 'light' ? '#0288d1' : '#FFA500',
-                            fontWeight: 500
-                          })}>
-                            {' '}[{getDisplayNotes(transaction)}]
-                          </Typography>
-                        )}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                        <Typography noWrap sx={{ fontSize: '0.9rem' }}>
+                          {getDisplayPayee(transaction)}
+                          {getDisplayNotes(transaction) && (
+                            <Typography component="span" sx={(theme) => ({
+                              fontSize: '0.9rem',
+                              color: theme.palette.mode === 'light' ? '#0288d1' : '#FFA500',
+                              fontWeight: 500
+                            })}>
+                              {' '}[{getDisplayNotes(transaction)}]
+                            </Typography>
+                          )}
+                        </Typography>
+                      </Box>
+                    )}
+                  </TableCell>
+                  <TableCell align="center" sx={{ width: 40, minWidth: 40, p: 0 }}>
+                    {transaction.attachment_path && (
+                      <IconButton size="small" title="View PDF" onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await invoke('open_transaction_attachment', { attachmentPath: transaction.attachment_path });
+                        } catch (err) {
+                          alert('PDF 열기 실패: ' + err);
+                        }
+                      }} sx={{ backgroundColor: 'transparent', p: 0.5 }}>
+                        <span role="img" aria-label="attachment">📎</span>
+                      </IconButton>
                     )}
                   </TableCell>
                   <TableCell align="center" sx={{ width: 180, minWidth: 180, whiteSpace: 'nowrap', px: 1, fontSize: '0.9rem' }}>

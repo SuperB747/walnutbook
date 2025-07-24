@@ -14,6 +14,8 @@ export interface Transaction {
   transfer_id?: number;
   to_account_id?: number;
   created_at: string;
+  // PDF 첨부 경로
+  attachment_path?: string;
 }
 
 export interface Account {

@@ -115,6 +115,13 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
                 [],
             ).map_err(|e| e.to_string())?;
         }
+        // attachment_path 컬럼 추가
+        if !existing.contains(&"attachment_path".to_string()) {
+            conn.execute(
+                "ALTER TABLE transactions ADD COLUMN attachment_path TEXT",
+                [],
+            ).map_err(|e| e.to_string())?;
+        }
     }
 
     conn.execute(
@@ -446,6 +453,38 @@ pub fn get_onedrive_path() -> Result<String, String> {
         format!("{}/OneDrive", home)
     };
     Ok(onedrive_path)
+}
+
+#[tauri::command]
+pub fn get_onedrive_data_dir() -> Result<std::path::PathBuf, String> {
+    let onedrive_path = get_onedrive_path()?;
+    let data_dir = std::path::Path::new(&onedrive_path).join("WalnutBook_Data");
+    std::fs::create_dir_all(&data_dir).map_err(|e| format!("Failed to create WalnutBook_Data dir: {}", e))?;
+    Ok(data_dir)
+}
+
+#[tauri::command]
+pub fn get_onedrive_backups_dir() -> Result<std::path::PathBuf, String> {
+    let data_dir = get_onedrive_data_dir()?;
+    let backups_dir = data_dir.join("Backups");
+    std::fs::create_dir_all(&backups_dir).map_err(|e| format!("Failed to create Backups dir: {}", e))?;
+    Ok(backups_dir)
+}
+
+#[tauri::command]
+pub fn get_onedrive_attachments_dir() -> Result<std::path::PathBuf, String> {
+    let data_dir = get_onedrive_data_dir()?;
+    let attachments_dir = data_dir.join("Attachments");
+    std::fs::create_dir_all(&attachments_dir).map_err(|e| format!("Failed to create Attachments dir: {}", e))?;
+    Ok(attachments_dir)
+}
+
+#[tauri::command]
+pub fn get_attachments_dir(app: &AppHandle) -> PathBuf {
+    let db_path = get_db_path(app);
+    let dir = db_path.parent().unwrap().join("attachments");
+    fs::create_dir_all(&dir).expect("Failed to create attachments dir");
+    dir
 }
 
 #[tauri::command]

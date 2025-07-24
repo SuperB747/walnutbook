@@ -39,6 +39,16 @@ interface SnackbarState {
   severity: 'success' | 'error' | 'info' | 'warning';
 }
 
+// PDF 파일을 base64로 변환하는 함수
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 const TransactionForm: React.FC<TransactionFormProps> = ({
   open,
   onClose,
@@ -659,6 +669,69 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     }
                   }}
                 />
+              </Grid>
+              {/* PDF 첨부 UI */}
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                  >
+                    {formData.attachment_path ? 'Replace PDF' : 'Attach PDF'}
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      hidden
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const base64 = await fileToBase64(file);
+                          const base64Data = base64.split(',')[1];
+                          const result = await invoke<string>('save_transaction_attachment', {
+                            fileName: file.name,
+                            base64: base64Data,
+                            transactionId: transaction?.id || null
+                          });
+                          setFormData(prev => ({ ...prev, attachment_path: result }));
+                        } catch (err) {
+                          setSnackbar({ open: true, message: 'PDF 첨부 실패: ' + err, severity: 'error' });
+                        }
+                      }}
+                    />
+                  </Button>
+                  {formData.attachment_path && (
+                    <>
+                      <Button
+                        variant="text"
+                        color="error"
+                        onClick={async () => {
+                          try {
+                            await invoke('delete_transaction_attachment', {
+                              attachmentPath: formData.attachment_path
+                            });
+                            setFormData(prev => ({ ...prev, attachment_path: undefined }));
+                          } catch (err) {
+                            setSnackbar({ open: true, message: 'PDF 삭제 실패: ' + err, severity: 'error' });
+                          }
+                        }}
+                      >
+                        Delete PDF
+                      </Button>
+                      <Button
+                        variant="text"
+                        onClick={async () => {
+                          // PDF 미리보기(새 창)
+                          await invoke('open_transaction_attachment', {
+                            attachmentPath: formData.attachment_path
+                          });
+                        }}
+                      >
+                        View PDF
+                      </Button>
+                    </>
+                  )}
+                </Box>
               </Grid>
             </Grid>
           </Box>

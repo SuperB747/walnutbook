@@ -4,9 +4,12 @@ use serde_json::Value;
 use std::collections::HashSet;
 use tauri::AppHandle;
 use serde::Serialize;
+use std::fs;
+use std::io::Write;
+use open;
+use crate::utils::{get_db_path, get_attachments_dir, get_onedrive_attachments_dir};
 
 use crate::models::Transaction;
-use crate::utils::get_db_path;
 
 #[derive(Debug)]
 enum TransactionKey {
@@ -27,7 +30,7 @@ pub fn get_transactions(app: AppHandle) -> Result<Vec<Transaction>, String> {
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     
     let mut stmt = conn
-        .prepare("SELECT t.id, t.date, t.account_id, t.type, t.category_id, t.amount, t.payee, t.notes, t.transfer_id, t.to_account_id, t.created_at FROM transactions t ORDER BY t.date DESC")
+        .prepare("SELECT t.id, t.date, t.account_id, t.type, t.category_id, t.amount, t.payee, t.notes, t.transfer_id, t.to_account_id, t.created_at, t.attachment_path FROM transactions t ORDER BY t.date DESC")
         .map_err(|e| e.to_string())?;
     
     let rows = stmt
@@ -49,6 +52,7 @@ pub fn get_transactions(app: AppHandle) -> Result<Vec<Transaction>, String> {
                 transfer_id: row.get(8)?,
                 to_account_id: row.get(9).ok(),
                 created_at: row.get(10)?,
+                attachment_path: row.get(11).ok(),
             })
         })
         .map_err(|e| e.to_string())?;
@@ -101,7 +105,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             "".to_string()
         };
         tx.execute(
-            "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id, to_account_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id, to_account_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 transaction.account_id,
                 transaction.category_id,
@@ -111,7 +115,8 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 &clean_notes,
                 transaction_type,
                 transfer_id,
-                to_id // departure에만 저장
+                to_id, // departure에만 저장
+                transaction.attachment_path.clone()
             ],
         ).map_err(|e| e.to_string())?;
 
@@ -129,7 +134,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 "".to_string()
             };
             tx.execute(
-                "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     to_id,
                     transaction.category_id,
@@ -138,7 +143,8 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     payee,
                     &arrival_clean_notes,
                     transaction_type,
-                    transfer_id
+                    transfer_id,
+                    transaction.attachment_path.clone()
                 ],
             ).map_err(|e| {
                 e.to_string()
@@ -149,7 +155,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     } else {
         // Regular transaction
         conn.execute(
-            "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 transaction.account_id,
                 transaction.category_id,
@@ -157,7 +163,8 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 transaction.date,
                 payee,
                 notes,
-                transaction_type
+                transaction_type,
+                transaction.attachment_path.clone()
             ],
         ).map_err(|e| e.to_string())?;
     }
@@ -186,11 +193,11 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
         if let Some(transfer_id) = old_transfer_id {
             let tx = conn.transaction().map_err(|e| e.to_string())?;
             
-            // 같은 transfer_id를 가진 모든 거래의 notes, to_account_id 업데이트
+            // 같은 transfer_id를 가진 모든 거래의 notes, to_account_id, attachment_path 업데이트
             let to_id = transaction.to_account_id;
             tx.execute(
-                "UPDATE transactions SET notes = ?1, to_account_id = ?2 WHERE transfer_id = ?3",
-                params![transaction.notes.clone().unwrap_or_default(), to_id, transfer_id]
+                "UPDATE transactions SET notes = ?1, to_account_id = ?2, attachment_path = ?3 WHERE transfer_id = ?4",
+                params![transaction.notes.clone().unwrap_or_default(), to_id, transaction.attachment_path.clone(), transfer_id]
             ).map_err(|e| e.to_string())?;
             
             tx.commit().map_err(|e| e.to_string())?;
@@ -206,8 +213,8 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 "".to_string()
             };
             conn.execute(
-                "UPDATE transactions SET notes = ?1 WHERE id = ?2",
-                params![clean_notes, transaction.id]
+                "UPDATE transactions SET notes = ?1, attachment_path = ?2 WHERE id = ?3",
+                params![clean_notes, transaction.attachment_path.clone(), transaction.id]
             ).map_err(|e| e.to_string())?;
         }
     }
@@ -228,7 +235,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
         // 출발 계좌 트랜잭션 (음수)
         let departure_amount = -transaction.amount.abs();
         tx.execute(
-            "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 transaction.date,
                 transaction.account_id,
@@ -238,7 +245,8 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 transaction.payee,
                 transaction.notes.clone().unwrap_or_default(),
                 transfer_id,
-                transaction.to_account_id
+                transaction.to_account_id,
+                transaction.attachment_path.clone()
             ],
         ).map_err(|e| e.to_string())?;
         
@@ -318,7 +326,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             };
             
             tx.execute(
-                "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     transaction.date,
                     to_id,
@@ -327,7 +335,8 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     arrival_amount,
                     transaction.payee,
                     clean_notes,
-                    transfer_id
+                    transfer_id,
+                    transaction.attachment_path.clone()
                 ],
             ).map_err(|e| {
                 e.to_string()
@@ -346,7 +355,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
     // 일반 거래 업데이트
     else {
         conn.execute(
-            "UPDATE transactions SET date = ?1, account_id = ?2, type = ?3, category_id = ?4, amount = ?5, payee = ?6, notes = ?7 WHERE id = ?8",
+            "UPDATE transactions SET date = ?1, account_id = ?2, type = ?3, category_id = ?4, amount = ?5, payee = ?6, notes = ?7, attachment_path = ?8 WHERE id = ?9",
             params![
                 transaction.date,
                 transaction.account_id,
@@ -355,6 +364,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 transaction.amount,
                 transaction.payee,
                 transaction.notes.clone().unwrap_or_default(),
+                transaction.attachment_path.clone(),
                 transaction.id
             ],
         ).map_err(|e| e.to_string())?;
@@ -482,7 +492,7 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
             continue;
         }
         tx.execute(
-            "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 t.date,
                 t.account_id,
@@ -491,7 +501,8 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
                 t.amount,
                 t.payee,
                 t.notes.clone().unwrap_or_default(),
-                None::<i64>
+                None::<i64>,
+                t.attachment_path.clone()
             ],
         ).map_err(|e| e.to_string())?;
         // Don't add to sets to allow duplicates within the same import batch
@@ -505,7 +516,7 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
     let mut result = Vec::new();
     for id in imported_ids {
         let transaction = conn.query_row(
-            "SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id, created_at FROM transactions WHERE id = ?1",
+            "SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id, created_at, attachment_path FROM transactions WHERE id = ?1",
             params![id],
             |row| Ok(Transaction {
                 id: row.get(0)?, date: row.get(1)?, account_id: row.get(2)?,
@@ -513,6 +524,7 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
                 payee: row.get(6)?, notes: row.get(7)?, transfer_id: row.get(8)?,
                 to_account_id: row.get(9).ok(),
                 created_at: row.get(10)?,
+                attachment_path: row.get(11).ok(),
             }),
         ).map_err(|e| e.to_string())?;
         result.push(transaction);
@@ -537,7 +549,7 @@ pub fn bulk_update_transactions(app: AppHandle, updates: Vec<(i64, Value)>) -> R
         let path = get_db_path(&app);
         let conn = Connection::open(&path).map_err(|e| e.to_string())?;
         let existing: Transaction = conn.query_row(
-            "SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id, created_at FROM transactions WHERE id = ?1",
+            "SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id, created_at, attachment_path FROM transactions WHERE id = ?1",
             params![id],
             |row| Ok(Transaction {
                 id: row.get(0)?, date: row.get(1)?, account_id: row.get(2)?,
@@ -545,6 +557,7 @@ pub fn bulk_update_transactions(app: AppHandle, updates: Vec<(i64, Value)>) -> R
                 payee: row.get(6)?, notes: row.get(7)?, transfer_id: row.get(8)?,
                 to_account_id: row.get(9).ok(),
                 created_at: row.get(10)?,
+                attachment_path: row.get(11).ok(),
             }),
         ).map_err(|e| e.to_string())?;
         
@@ -562,4 +575,43 @@ pub fn bulk_update_transactions(app: AppHandle, updates: Vec<(i64, Value)>) -> R
         update_transaction(app.clone(), updated)?;
     }
     get_transactions(app)
+} 
+
+#[tauri::command]
+pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: String, transaction_id: Option<i64>) -> Result<String, String> {
+    use base64::decode;
+    let attachments_dir = get_onedrive_attachments_dir()?;
+    let file_name = if let Some(id) = transaction_id {
+        format!("txn_{}_{}", id, file_name)
+    } else {
+        file_name
+    };
+    let dest_path = attachments_dir.join(&file_name);
+    let bytes = decode(&base64).map_err(|e| format!("base64 디코딩 실패: {}", e))?;
+    std::fs::write(&dest_path, bytes).map_err(|e| format!("파일 저장 실패: {}", e))?;
+    Ok(dest_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn delete_transaction_attachment(app: AppHandle, attachment_path: String) -> Result<(), String> {
+    let attachments_dir = get_onedrive_attachments_dir()?;
+    let file_name = std::path::Path::new(&attachment_path).file_name().unwrap();
+    let file_path = attachments_dir.join(file_name);
+    if file_path.exists() {
+        std::fs::remove_file(&file_path).map_err(|e| format!("첨부 파일 삭제 실패: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_transaction_attachment(app: AppHandle, attachment_path: String) -> Result<(), String> {
+    let attachments_dir = get_onedrive_attachments_dir()?;
+    let file_name = std::path::Path::new(&attachment_path).file_name().unwrap();
+    let file_path = attachments_dir.join(file_name);
+    if file_path.exists() {
+        open::that(&file_path).map_err(|e| format!("PDF 열기 실패: {}", e))?;
+        Ok(())
+    } else {
+        Err("첨부 파일이 존재하지 않습니다.".to_string())
+    }
 } 

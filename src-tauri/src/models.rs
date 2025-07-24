@@ -27,6 +27,8 @@ pub struct Transaction {
     pub to_account_id: Option<i64>,
     #[serde(default)]
     pub created_at: String,
+    // PDF 첨부 경로
+    pub attachment_path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
