@@ -74,23 +74,25 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .build(),
                 )?;
             }
-            
-            // Get splash window and main window
+            // Get splash window only
             let splash_window = app.get_webview_window("splash").unwrap();
-            let main_window = app.get_webview_window("main").unwrap();
-            
-            // Ensure splash is visible and main is hidden
             splash_window.show().unwrap();
-            main_window.hide().unwrap();
-            
-            // After 3 seconds, hide splash and show main window
+            // Listen for splash close event, then show main window
+            // app_handle을 clone해서 'static으로 move
+            let app_handle = app.handle().clone();
+            splash_window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Destroyed = event {
+                    let main_window = app_handle.get_webview_window("main").unwrap();
+                    main_window.show().unwrap();
+                    main_window.set_focus().unwrap();
+                }
+            });
+            // Optionally, close splash after 3 seconds (or when ready)
+            let splash_window2 = splash_window.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(3));
-                splash_window.close().unwrap();
-                main_window.show().unwrap();
-                main_window.set_focus().unwrap();
+                splash_window2.close().unwrap();
             });
-            
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
