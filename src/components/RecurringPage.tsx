@@ -116,20 +116,13 @@ const RecurringPage: React.FC = () => {
     const result: Set<string> = new Set(); // Use Set to avoid duplicates
     const today = toMidnight(new Date());
     
-    console.log('Preview calculation:', {
-      startDate,
-      repeatType,
-      intervalUnit,
-      intervalValue,
-      today: format(today, 'yyyy-MM-dd')
-    });
     
     if (repeatType === 'monthly_date') {
       // 매월 n일들
       let base = startDate ? toMidnight(parse(startDate, 'yyyy-MM-dd', new Date())) : today;
-      console.log('formData.day_of_month:', formData.day_of_month, 'type:', typeof formData.day_of_month);
+      
       const days = formData.day_of_month || [1]; // Safety check
-      console.log('days after safety check:', days, 'type:', typeof days, 'isArray:', Array.isArray(days));
+      
       
       if (!Array.isArray(days)) {
         console.error('days is not an array, using fallback');
@@ -152,14 +145,14 @@ const RecurringPage: React.FC = () => {
       // 시작일 + 반복주기 - 단순한 계산
       if (startDate) {
         let currentDate = toMidnight(parse(startDate, 'yyyy-MM-dd', new Date()));
-        console.log('Start date parsed:', format(currentDate, 'yyyy-MM-dd'));
+        
         
         // 12개의 발생일 계산
         for (let i = 0; i < 12; i++) {
-          console.log(`Iteration ${i}: current date:`, format(currentDate, 'yyyy-MM-dd'));
+          
           
           result.add(format(currentDate, 'yyyy-MM-dd'));
-          console.log('Added to result:', format(currentDate, 'yyyy-MM-dd'));
+          
           
           // 다음 발생일 계산
           if (intervalUnit === 'day') {
@@ -187,7 +180,7 @@ const RecurringPage: React.FC = () => {
     }
     
     const sortedResult = Array.from(result).sort();
-    console.log('Final preview dates:', sortedResult);
+    
     return sortedResult;
   }, [startDate, repeatType, formData.day_of_month, intervalUnit, intervalValue]);
 
@@ -228,13 +221,11 @@ const RecurringPage: React.FC = () => {
       for (const month of monthsToCheck) {
         const checkedIds = await invoke<string[]>('get_recurring_checks', { month });
         checkedIds.forEach(id => allCheckedItems.add(id));
-        if (checkedIds.length > 0) {
-          console.log(`Month ${month} has checked items:`, checkedIds);
-        }
+        
       }
       
       setCheckedItems(allCheckedItems);
-      console.log('All checked items loaded:', Array.from(allCheckedItems));
+      
     } catch (error) {
       console.error('Failed to load checked items:', error);
     }
@@ -547,7 +538,7 @@ const RecurringPage: React.FC = () => {
         </Typography>
 
         <Box sx={{ mb: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0 }}>
+          <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0 }}>
             <Tabs
               value={activeTab}
               onChange={(_, newValue) => setActiveTab(newValue)}
@@ -638,7 +629,7 @@ const RecurringPage: React.FC = () => {
               {filteredItems.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>
-                    <Box>
+                    <Box component="span">
                       <Typography variant="body1">{item.name}</Typography>
                       {item.notes && (
                         <Typography variant="caption" color="text.secondary">
@@ -961,7 +952,7 @@ const RecurringPage: React.FC = () => {
               {/* Preview */}
               <Box sx={{ mt: 1 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Expected Occurrence Dates (Preview)</Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                <Box component="span" sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                   {previewDates.slice(0, 8).map(date => (
                     <Box key={date} sx={{ px: 1, py: 0.25, bgcolor: '#e3f2fd', borderRadius: 0.5, fontSize: 12 }}>
                       {date}

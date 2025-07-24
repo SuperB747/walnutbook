@@ -386,7 +386,7 @@ const ReminderPage: React.FC = () => {
             <>
               <Box sx={{ mb: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="h5" component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     {selectedReminder.account_name}
                     {accounts.find(a => a.id === selectedReminder.account_id)?.description && (
                       <>
@@ -459,7 +459,7 @@ const ReminderPage: React.FC = () => {
                     >
                       <ListItemText
                         primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                             <Typography variant="body2" sx={{ minWidth: 120, fontWeight: 500 }}>
                               Statement Date: {h.statement_date || h.paid_date}
                             </Typography>

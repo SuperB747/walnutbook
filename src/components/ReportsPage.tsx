@@ -1681,21 +1681,21 @@ const ReportsPage: React.FC = () => {
                                </ListItemIcon>
                                <ListItemText
                                  primary={
-                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                     <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                                   <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                     <Typography variant="body2" component="span" sx={{ fontWeight: 'medium' }}>
                                        {item.name}
                                      </Typography>
-                                     <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
+                                     <Typography variant="body2" component="span" color="success.main" sx={{ fontWeight: 'bold' }}>
                                        +{safeFormatCurrency(item.amount)}
                                      </Typography>
                                    </Box>
                                  }
                                  secondary={
-                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                     <Typography variant="caption" color="text.secondary">
+                                   <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                     <Typography variant="caption" component="span" color="text.secondary">
                                        {format(item.occurrenceDate, 'MMM dd')}
                                      </Typography>
-                                     <Typography variant="caption" color="text.secondary">
+                                     <Typography variant="caption" component="span" color="text.secondary">
                                        {categories.find(c => c.id === item.category_id)?.name || 'Unknown'}
                                      </Typography>
                                    </Box>
@@ -1746,21 +1746,21 @@ const ReportsPage: React.FC = () => {
                                </ListItemIcon>
                                <ListItemText
                                  primary={
-                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                     <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                                   <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                     <Typography variant="body2" component="span" sx={{ fontWeight: 'medium' }}>
                                        {item.name}
                                      </Typography>
-                                     <Typography variant="body2" color="error.main" sx={{ fontWeight: 'bold' }}>
+                                     <Typography variant="body2" component="span" color="error.main" sx={{ fontWeight: 'bold' }}>
                                        -{safeFormatCurrency(Math.abs(item.amount))}
                                      </Typography>
                                    </Box>
                                  }
                                  secondary={
-                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                     <Typography variant="caption" color="text.secondary">
+                                   <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                     <Typography variant="caption" component="span" color="text.secondary">
                                        {format(item.occurrenceDate, 'MMM dd')}
                                      </Typography>
-                                     <Typography variant="caption" color="text.secondary">
+                                     <Typography variant="caption" component="span" color="text.secondary">
                                        {categories.find(c => c.id === item.category_id)?.name || 'Unknown'}
                                      </Typography>
                                    </Box>
