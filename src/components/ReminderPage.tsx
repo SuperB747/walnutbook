@@ -214,19 +214,30 @@ const ReminderPage: React.FC = () => {
   };
 
   const handleCheck = async (reminder: Reminder) => {
+    if (!reminder.next_payment_date || !reminder.statement_date) {
+      setSnackbar({ open: true, message: 'Payment date 또는 statement date가 없습니다.', severity: 'error' });
+      return;
+    }
     const next_payment_date = dayjs(reminder.next_payment_date).add(30, 'day').format('YYYY-MM-DD');
     const next_statement_date = dayjs(reminder.statement_date).add(30, 'day').format('YYYY-MM-DD');
+    if (!dayjs(next_payment_date).isValid() || !dayjs(next_statement_date).isValid()) {
+      setSnackbar({ open: true, message: '날짜 형식이 올바르지 않습니다.', severity: 'error' });
+      return;
+    }
     // Explicitly use snake_case keys
     await invoke('check_reminder', {
       id: reminder.id,
-      next_payment_date: next_payment_date,
-      next_statement_date: next_statement_date,
+      nextPaymentDate: next_payment_date,
+      nextStatementDate: next_statement_date,
     });
     // payment history 자동 등록 (statement_date도 함께 전달)
     await invoke('add_reminder_payment_history', {
       reminder_id: reminder.id,
+      reminderId: reminder.id,
       paid_date: reminder.next_payment_date,
+      paidDate: reminder.next_payment_date,
       statement_date: reminder.statement_date,
+      statementDate: reminder.statement_date,
     });
     loadReminders();
   };
