@@ -223,6 +223,7 @@ pub fn update_reminder_payment_history_note(app: AppHandle, id: i64, note: Strin
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub fn get_statement_balance(app: AppHandle, accountId: i64, startDate: String, endDate: String) -> Result<f64, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
