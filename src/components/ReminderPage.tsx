@@ -79,8 +79,9 @@ const ReminderPage: React.FC = () => {
   // reminders가 바뀔 때, selectedId가 null이거나 현재 id가 리스트에 없으면 가장 위(가까운 Due Date)로 자동 선택
   useEffect(() => {
     if (reminders.length === 0) return;
+    const sorted = [...reminders].sort((a, b) => a.next_payment_date.localeCompare(b.next_payment_date));
     if (selectedId == null || !reminders.some(r => r.id === selectedId)) {
-      setSelectedId(reminders[0].id);
+      setSelectedId(sorted[0].id);
     }
   }, [reminders]);
 
