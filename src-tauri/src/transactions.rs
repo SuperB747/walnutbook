@@ -390,7 +390,7 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
         
         if let Some(transfer_id) = transfer_id {
             // Delete both transactions with the same transfer_id
-            let deleted_count = tx.execute("DELETE FROM transactions WHERE transfer_id = ?1", params![transfer_id]).map_err(|e| e.to_string())?;
+            let _deleted_count = tx.execute("DELETE FROM transactions WHERE transfer_id = ?1", params![transfer_id]).map_err(|e| e.to_string())?;
         } else {
             // Legacy transfer handling (for old transfers without transfer_id)
             let other_transaction = if old_amount < 0.0 {

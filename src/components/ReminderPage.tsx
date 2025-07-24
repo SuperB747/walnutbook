@@ -127,9 +127,9 @@ const ReminderPage: React.FC = () => {
       console.log('[StatementBalance Debug] 구간 내 거래 합계:', sum);
     });
     invoke<number>('get_statement_balance', {
-      accountId: selectedReminder.account_id,
-      startDate: start_date,
-      endDate: end_date
+      account_id: selectedReminder.account_id,
+      start_date,
+      end_date
     })
       .then(setStatementBalance)
       .catch(e => {
@@ -199,9 +199,9 @@ const ReminderPage: React.FC = () => {
   };
 
   const handleCheck = async (reminder: Reminder) => {
-    const nextPaymentDate = dayjs(reminder.next_payment_date).add(30, 'day').format('YYYY-MM-DD');
-    const nextStatementDate = dayjs(reminder.statement_date).add(30, 'day').format('YYYY-MM-DD');
-    const args = { id: reminder.id, nextPaymentDate, nextStatementDate };
+    const next_payment_date = dayjs(reminder.next_payment_date).add(30, 'day').format('YYYY-MM-DD');
+    const next_statement_date = dayjs(reminder.statement_date).add(30, 'day').format('YYYY-MM-DD');
+    const args = { id: reminder.id, next_payment_date, next_statement_date };
     console.log('check_reminder invoke args:', args);
     await invoke('check_reminder', args);
     // payment history 자동 등록 (statement_date도 함께 전달)

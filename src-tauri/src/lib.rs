@@ -148,6 +148,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             reminders::delete_reminder_payment_history,
             reminders::update_reminder_payment_history_note,
             reminders::get_statement_balance,
+            reminders::add_note_to_reminder,
+            reminders::delete_note_from_reminder,
 
         ])
         .run(context)

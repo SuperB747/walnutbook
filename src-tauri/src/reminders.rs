@@ -88,12 +88,12 @@ pub fn delete_reminder(app: AppHandle, id: i64) -> Result<Vec<Reminder>, String>
 }
 
 #[tauri::command]
-pub fn check_reminder(app: AppHandle, id: i64, nextPaymentDate: String, nextStatementDate: String) -> Result<Vec<Reminder>, String> {
+pub fn check_reminder(app: AppHandle, id: i64, next_payment_date: String, next_statement_date: String) -> Result<Vec<Reminder>, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE reminders SET is_checked = 1, next_payment_date = ?1, statement_date = ?2 WHERE id = ?3",
-        params![nextPaymentDate, nextStatementDate, id],
+        params![next_payment_date, next_statement_date, id],
     ).map_err(|e| e.to_string())?;
     get_reminders(app)
 }
@@ -223,12 +223,12 @@ pub fn update_reminder_payment_history_note(app: AppHandle, id: i64, note: Strin
 }
 
 #[tauri::command]
-pub fn get_statement_balance(app: AppHandle, account_id: i64, startDate: String, endDate: String) -> Result<f64, String> {
+pub fn get_statement_balance(app: AppHandle, account_id: i64, start_date: String, end_date: String) -> Result<f64, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare(
         "SELECT SUM(amount) FROM transactions WHERE account_id = ?1 AND date >= ?2 AND date < ?3 AND type != 'Transfer'"
     ).map_err(|e| e.to_string())?;
-    let sum: f64 = stmt.query_row(params![account_id, startDate, endDate], |row| row.get(0)).unwrap_or(0.0);
+    let sum: f64 = stmt.query_row(params![account_id, start_date, end_date], |row| row.get(0)).unwrap_or(0.0);
     Ok(sum)
 } 
