@@ -20,7 +20,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@tauri-apps/api": "^2.6.0",
+    "@tauri-apps/api": "^2.7.0",
     "@tauri-apps/cli": "^2.6.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/jest": "^29.5.11",
