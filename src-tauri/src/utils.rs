@@ -401,7 +401,7 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    // Migrate reminders table: add remind_days_before, user_email, statement_date if missing
+    // Migrate reminders table: add user_email, statement_date if missing
     {
         let mut info_stmt = conn.prepare("PRAGMA table_info(reminders)").map_err(|e| e.to_string())?;
         let existing: Vec<String> = info_stmt
@@ -409,13 +409,6 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
             .map_err(|e| e.to_string())?
             .map(|r| r.unwrap_or_default())
             .collect();
-        if !existing.contains(&"remind_days_before".to_string()) {
-            conn.execute(
-                "ALTER TABLE reminders ADD COLUMN remind_days_before INTEGER NOT NULL DEFAULT 7",
-                [],
-            ).map_err(|e| e.to_string())?;
-        }
-
         if !existing.contains(&"statement_date".to_string()) {
             conn.execute(
                 "ALTER TABLE reminders ADD COLUMN statement_date TEXT NOT NULL DEFAULT ''",

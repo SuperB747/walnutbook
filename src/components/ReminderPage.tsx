@@ -53,7 +53,7 @@ const ReminderPage: React.FC = () => {
       localStorage.removeItem('reminders_selected_id');
     }
   };
-  const [form, setForm] = useState<{ account_id: number | ''; payment_day: number | ''; notes: string; remind_days_before: number; date: Dayjs | null; statement_date: Dayjs | null }>({ account_id: '', payment_day: '', notes: '', remind_days_before: 7, date: null, statement_date: null });
+  const [form, setForm] = useState<{ account_id: number | ''; payment_day: number | ''; notes: string; date: Dayjs | null; statement_date: Dayjs | null }>({ account_id: '', payment_day: '', notes: '', date: null, statement_date: null });
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [noteInput, setNoteInput] = useState('');
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -152,14 +152,12 @@ const ReminderPage: React.FC = () => {
         account_id: reminder.account_id,
         payment_day: reminder.payment_day,
         notes: '',
-        remind_days_before: reminder.remind_days_before ?? 7,
-
         date: dayjs(reminder.next_payment_date),
         statement_date: reminder.statement_date ? dayjs(reminder.statement_date) : null,
       });
     } else {
       setEditReminder(null);
-      setForm({ account_id: '', payment_day: '', notes: '', remind_days_before: 7, date: null, statement_date: null });
+      setForm({ account_id: '', payment_day: '', notes: '', date: null, statement_date: null });
     }
     setDialogOpen(true);
   };
@@ -179,8 +177,6 @@ const ReminderPage: React.FC = () => {
       next_payment_date,
       is_checked: false,
       notes: editReminder?.notes ?? [],
-      remind_days_before: form.remind_days_before,
-
       created_at: editReminder ? editReminder.created_at : '',
       statement_date,
     };
@@ -570,16 +566,6 @@ const ReminderPage: React.FC = () => {
                 disableFuture={false}
               />
             </LocalizationProvider>
-            <TextField
-              label="Remind how many days before?"
-              type="number"
-              fullWidth
-              value={form.remind_days_before}
-              onChange={e => setForm(f => ({ ...f, remind_days_before: Number(e.target.value) }))}
-              inputProps={{ min: 1, max: 31 }}
-              sx={{ mb: 2 }}
-            />
-
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseDialog}>Cancel</Button>
@@ -609,19 +595,26 @@ const NoteInlineEdit: React.FC<{ value: string; onChange: (v: string) => void; o
   
   const handleBlur = () => { 
     setEditing(false); 
-    // 항상 저장 시도 (값이 변경되었는지 상관없이)
-    onSave(); 
+    // 값이 변경된 경우에만 저장
+    if (localValue !== value) {
+      onSave(); 
+    } else {
+      setLocalValue(value); // revert
+    }
   };
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') { 
       setEditing(false); 
-      // 항상 저장 시도 (값이 변경되었는지 상관없이)
-      onSave(); 
+      if (localValue !== value) {
+        onSave(); 
+      } else {
+        setLocalValue(value);
+      }
     }
     if (e.key === 'Escape') { 
       setEditing(false); 
-      setLocalValue(value); 
+      setLocalValue(value); // revert
     }
   };
   

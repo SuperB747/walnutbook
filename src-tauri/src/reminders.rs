@@ -9,7 +9,7 @@ use crate::models::ReminderPaymentHistory;
 pub fn get_reminders(app: AppHandle) -> Result<Vec<Reminder>, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare("SELECT id, account_id, account_name, payment_day, next_payment_date, is_checked, notes, remind_days_before, created_at, statement_date FROM reminders ORDER BY is_checked ASC, next_payment_date ASC").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, account_id, account_name, payment_day, next_payment_date, is_checked, notes, created_at, statement_date FROM reminders ORDER BY is_checked ASC, next_payment_date ASC").map_err(|e| e.to_string())?;
     let rows = stmt.query_map([], |row| {
         let notes_str: Option<String> = row.get(6)?;
         let notes: Option<Vec<String>> = match notes_str {
@@ -24,9 +24,8 @@ pub fn get_reminders(app: AppHandle) -> Result<Vec<Reminder>, String> {
             next_payment_date: row.get(4)?,
             is_checked: row.get(5)?,
             notes,
-            remind_days_before: row.get(7)?,
-            created_at: row.get(8)?,
-            statement_date: row.get(9)?,
+            created_at: row.get(7)?,
+            statement_date: row.get(8)?,
         })
     }).map_err(|e| e.to_string())?;
     let mut reminders = Vec::new();
@@ -42,7 +41,7 @@ pub fn add_reminder(app: AppHandle, reminder: Reminder) -> Result<Vec<Reminder>,
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     let notes_json = reminder.notes.as_ref().map(|n| serde_json::to_string(n).unwrap_or_default());
     conn.execute(
-        "INSERT INTO reminders (account_id, account_name, payment_day, next_payment_date, is_checked, notes, remind_days_before, statement_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO reminders (account_id, account_name, payment_day, next_payment_date, is_checked, notes, statement_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             reminder.account_id,
             reminder.account_name,
@@ -50,7 +49,6 @@ pub fn add_reminder(app: AppHandle, reminder: Reminder) -> Result<Vec<Reminder>,
             reminder.next_payment_date,
             reminder.is_checked,
             notes_json,
-            reminder.remind_days_before,
             reminder.statement_date,
         ],
     ).map_err(|e| e.to_string())?;
@@ -63,7 +61,7 @@ pub fn update_reminder(app: AppHandle, reminder: Reminder) -> Result<Vec<Reminde
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     let notes_json = reminder.notes.as_ref().map(|n| serde_json::to_string(n).unwrap_or_default());
     conn.execute(
-        "UPDATE reminders SET account_id = ?1, account_name = ?2, payment_day = ?3, next_payment_date = ?4, is_checked = ?5, notes = ?6, remind_days_before = ?7, statement_date = ?8 WHERE id = ?9",
+        "UPDATE reminders SET account_id = ?1, account_name = ?2, payment_day = ?3, next_payment_date = ?4, is_checked = ?5, notes = ?6, statement_date = ?7 WHERE id = ?8",
         params![
             reminder.account_id,
             reminder.account_name,
@@ -71,7 +69,6 @@ pub fn update_reminder(app: AppHandle, reminder: Reminder) -> Result<Vec<Reminde
             reminder.next_payment_date,
             reminder.is_checked,
             notes_json,
-            reminder.remind_days_before,
             reminder.statement_date,
             reminder.id,
         ],
