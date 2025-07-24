@@ -1,85 +1,125 @@
 #!/usr/bin/env python3
-"""
-Simple WalnutBook Icon Generator
-"""
-
-from PIL import Image, ImageDraw, ImageFont
 import os
-import shutil
+from PIL import Image, ImageDraw, ImageFont
+import subprocess
 
-def create_walnut_icon():
-    """Create a beautiful walnut-themed icon"""
-    
-    # Create a 512x512 image
-    img = Image.new('RGBA', (512, 512), (0, 0, 0, 0))
+def create_simple_icon(size, output_path):
+    """간단한 아이콘 생성"""
+    # 새로운 이미지 생성
+    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # Create gradient background (brown tones)
-    for y in range(512):
-        # Brown gradient from dark to light
-        r = int(139 + (y / 512) * 20)  # 139-159
-        g = int(69 + (y / 512) * 30)   # 69-99
-        b = int(19 + (y / 512) * 20)   # 19-39
-        draw.rectangle([0, y, 512, y+1], fill=(r, g, b, 255))
+    # 배경 원 그리기 (walnut 브라운 색상)
+    background_color = (139, 69, 19, 255)  # Saddle Brown
+    draw.ellipse([size*0.1, size*0.1, size*0.9, size*0.9], fill=background_color)
     
-    # Draw walnut shell (ellipse)
-    draw.ellipse([136, 120, 376, 280], fill=(139, 69, 19), outline=(101, 67, 33), width=3)
-    draw.ellipse([156, 140, 356, 260], fill=(160, 82, 45))
+    # 중앙에 walnut 그리기
+    walnut_color = (160, 82, 45, 255)  # Saddle Brown
+    draw.ellipse([size*0.3, size*0.3, size*0.7, size*0.7], fill=walnut_color)
     
-    # Draw book (rounded rectangle)
-    book_color = (46, 139, 87)  # Sea green
-    draw.rounded_rectangle([200, 280, 312, 360], radius=8, fill=book_color, outline=(27, 77, 62), width=2)
-    
-    # Draw book pages (white rectangle)
-    draw.rounded_rectangle([210, 290, 302, 350], radius=4, fill=(255, 255, 255, 230))
-    
-    # Draw lines on book (simplified text lines)
-    for i in range(5):
-        y = 300 + i * 10
-        draw.line([220, y, 290, y], fill=(51, 51, 51), width=1)
-    
-    # Draw dollar sign
+    # 텍스트 추가
     try:
-        font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 20)
+        font_size = max(size // 6, 8)
+        font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", font_size)
     except:
         font = ImageFont.load_default()
     
-    draw.text((256, 305), "$", fill=(46, 139, 87), font=font, anchor="mm")
+    text = "W"
+    text_color = (255, 255, 255, 255)
     
-    return img
+    # 텍스트 중앙 정렬
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    x = (size - text_width) // 2
+    y = (size - text_height) // 2
+    
+    draw.text((x, y), text, fill=text_color, font=font)
+    
+    # 파일 저장
+    img.save(output_path, 'PNG')
+    print(f"Created {output_path} ({size}x{size})")
 
-def main():
-    print("🌰 Creating WalnutBook icons...")
+def create_iconset():
+    """macOS iconset 생성"""
+    iconset_dir = "src-tauri/icons/icon.iconset"
+    os.makedirs(iconset_dir, exist_ok=True)
     
-    # Create the main icon
-    img = create_walnut_icon()
+    # macOS에서 필요한 아이콘 크기들
+    sizes = [
+        (16, "icon_16x16.png"),
+        (32, "icon_16x16@2x.png"),
+        (32, "icon_32x32.png"),
+        (64, "icon_32x32@2x.png"),
+        (128, "icon_128x128.png"),
+        (256, "icon_128x128@2x.png"),
+        (256, "icon_256x256.png"),
+        (512, "icon_256x256@2x.png"),
+        (512, "icon_512x512.png"),
+        (1024, "icon_512x512@2x.png")
+    ]
     
-    # Save different sizes
-    sizes = [32, 128, 256, 512]
+    for size, filename in sizes:
+        output_path = os.path.join(iconset_dir, filename)
+        create_simple_icon(size, output_path)
     
-    for size in sizes:
-        resized = img.resize((size, size), Image.Resampling.LANCZOS)
-        filename = f"walnut_icon_{size}x{size}.png"
-        resized.save(filename, "PNG")
-        print(f"✅ Created {filename}")
+    print("All icons created in iconset directory")
+
+def create_icns():
+    """macOS .icns 파일 생성"""
+    iconset_dir = "src-tauri/icons/icon.iconset"
+    icns_path = "src-tauri/icons/icon.icns"
     
-    # Save the main icon
-    img.save("walnut_icon.png", "PNG")
-    print("✅ Created walnut_icon.png")
+    # iconutil 명령어로 .icns 파일 생성
+    cmd = ["iconutil", "-c", "icns", iconset_dir, "-o", icns_path]
+    try:
+        subprocess.run(cmd, check=True)
+        print(f"Created {icns_path}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error creating .icns file: {e}")
+    except FileNotFoundError:
+        print("iconutil not found. Make sure you're on macOS.")
+
+def create_ico():
+    """Windows .ico 파일 생성 - RGB 모드로"""
+    # 256x256 크기로 .ico 파일 생성 (RGB 모드)
+    img = Image.new('RGB', (256, 256), (139, 69, 19))
+    draw = ImageDraw.Draw(img)
     
-    # Copy to Tauri icons directory
-    icon_dir = "src-tauri/icons"
-    if os.path.exists(icon_dir):
-        shutil.copy("walnut_icon.png", f"{icon_dir}/icon.png")
-        shutil.copy("walnut_icon_128x128.png", f"{icon_dir}/128x128.png")
-        shutil.copy("walnut_icon_32x32.png", f"{icon_dir}/32x32.png")
-        print("✅ Copied icons to src-tauri/icons/")
-        
-        # Also copy to other sizes
-        shutil.copy("walnut_icon_128x128.png", f"{icon_dir}/128x128@2x.png")
-        print("✅ Updated all icon files")
-    else:
-        print("❌ Icon directory not found")
+    # 배경 원 그리기
+    background_color = (139, 69, 19)
+    draw.ellipse([256*0.1, 256*0.1, 256*0.9, 256*0.9], fill=background_color)
+    
+    # 중앙에 walnut 그리기
+    walnut_color = (160, 82, 45)
+    draw.ellipse([256*0.3, 256*0.3, 256*0.7, 256*0.7], fill=walnut_color)
+    
+    # 텍스트 추가
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 42)
+    except:
+        font = ImageFont.load_default()
+    
+    text = "W"
+    text_color = (255, 255, 255)
+    
+    # 텍스트 중앙 정렬
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    x = (256 - text_width) // 2
+    y = (256 - text_height) // 2
+    
+    draw.text((x, y), text, fill=text_color, font=font)
+    
+    # ICO 파일로 저장
+    ico_path = "src-tauri/icons/icon.ico"
+    img.save(ico_path, 'ICO')
+    print(f"Created {ico_path}")
 
 if __name__ == "__main__":
-    main() 
+    print("Creating simple high-resolution icons...")
+    create_iconset()
+    create_icns()
+    create_ico()
+    print("Icon creation complete!") 

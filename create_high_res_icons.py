@@ -1,83 +1,95 @@
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+#!/usr/bin/env python3
 import os
+from PIL import Image, ImageDraw, ImageFont
+import subprocess
 
 def create_high_res_icon(size, output_path):
-    """Create a high-resolution icon with a splash-style WB logo"""
-    # Transparent background
+    """고해상도 아이콘 생성"""
+    # 새로운 이미지 생성 (RGBA 모드로 투명도 지원)
     img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
-    # White circle with shadow
-    logo_size = int(size * 0.75)
-    logo_x = (size - logo_size) // 2
-    logo_y = (size - logo_size) // 2
-    shadow_offset = size // 32
-    shadow_radius = size // 16
-
-    # Draw shadow (blurred ellipse)
-    shadow = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    shadow_draw = ImageDraw.Draw(shadow)
-    shadow_draw.ellipse([
-        logo_x + shadow_offset,
-        logo_y + shadow_offset,
-        logo_x + logo_size + shadow_offset,
-        logo_y + logo_size + shadow_offset
-    ], fill=(0, 0, 0, 80))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=shadow_radius))
-    img = Image.alpha_composite(img, shadow)
-    draw = ImageDraw.Draw(img)
-
-    # Draw white circle
-    draw.ellipse([
-        logo_x, logo_y, logo_x + logo_size, logo_y + logo_size
-    ], fill=(255, 255, 255, 255))
-
-    # WB text in the center with gradient
+    
+    # 배경 원 그리기 (walnut 브라운 색상)
+    background_color = (139, 69, 19, 255)  # Saddle Brown
+    draw.ellipse([size*0.1, size*0.1, size*0.9, size*0.9], fill=background_color)
+    
+    # 중앙에 walnut 그리기
+    walnut_color = (160, 82, 45, 255)  # Saddle Brown
+    draw.ellipse([size*0.3, size*0.3, size*0.7, size*0.7], fill=walnut_color)
+    
+    # 텍스트 추가 (크기에 따라 폰트 크기 조정)
     try:
-        font_size = int(logo_size * 0.55)
-        font = ImageFont.truetype("arialbd.ttf", font_size)
+        font_size = max(size // 8, 12)
+        font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", font_size)
     except:
         font = ImageFont.load_default()
-    text = "WB"
+    
+    text = "W"
+    text_color = (255, 255, 255, 255)
+    
+    # 텍스트 중앙 정렬
     bbox = draw.textbbox((0, 0), text, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
-    text_x = (size - text_width) // 2
-    text_y = (size - text_height) // 2
-
-    # Create gradient for text
-    gradient = Image.new('RGBA', (text_width, text_height), (0, 0, 0, 0))
-    grad_draw = ImageDraw.Draw(gradient)
-    for y in range(text_height):
-        ratio = y / text_height
-        r = int(102 * (1 - ratio) + 118 * ratio)
-        g = int(126 * (1 - ratio) + 75 * ratio)
-        b = int(234 * (1 - ratio) + 162 * ratio)
-        grad_draw.line([(0, y), (text_width, y)], fill=(r, g, b, 255))
-
-    # Mask for text
-    mask = Image.new('L', (text_width, text_height), 0)
-    mask_draw = ImageDraw.Draw(mask)
-    mask_draw.text((0, 0), text, font=font, fill=255)
-    img.paste(gradient, (text_x, text_y), mask)
-
+    x = (size - text_width) // 2
+    y = (size - text_height) // 2
+    
+    draw.text((x, y), text, fill=text_color, font=font)
+    
+    # 파일 저장
     img.save(output_path, 'PNG')
     print(f"Created {output_path} ({size}x{size})")
 
-def main():
-    icons_dir = "src-tauri/icons"
-    os.makedirs(icons_dir, exist_ok=True)
-    sizes = [16, 32, 44, 71, 89, 107, 128, 142, 150, 256, 284, 310, 512]
-    for size in sizes:
-        output_path = os.path.join(icons_dir, f"{size}x{size}.png")
+def create_iconset():
+    """macOS iconset 생성"""
+    iconset_dir = "src-tauri/icons/icon.iconset"
+    os.makedirs(iconset_dir, exist_ok=True)
+    
+    # macOS에서 필요한 아이콘 크기들
+    sizes = [
+        (16, "icon_16x16.png"),
+        (32, "icon_16x16@2x.png"),
+        (32, "icon_32x32.png"),
+        (64, "icon_32x32@2x.png"),
+        (128, "icon_128x128.png"),
+        (256, "icon_128x128@2x.png"),
+        (256, "icon_256x256.png"),
+        (512, "icon_256x256@2x.png"),
+        (512, "icon_512x512.png"),
+        (1024, "icon_512x512@2x.png")
+    ]
+    
+    for size, filename in sizes:
+        output_path = os.path.join(iconset_dir, filename)
         create_high_res_icon(size, output_path)
-    # Main icon
-    main_icon_path = os.path.join(icons_dir, "icon.png")
-    create_high_res_icon(512, main_icon_path)
-    # StoreLogo
-    store_logo_path = os.path.join(icons_dir, "StoreLogo.png")
-    create_high_res_icon(512, store_logo_path)
-    print("\nAll splash-style high-resolution icons created!")
+    
+    print("All icons created in iconset directory")
+
+def create_icns():
+    """macOS .icns 파일 생성"""
+    iconset_dir = "src-tauri/icons/icon.iconset"
+    icns_path = "src-tauri/icons/icon.icns"
+    
+    # iconutil 명령어로 .icns 파일 생성
+    cmd = ["iconutil", "-c", "icns", iconset_dir, "-o", icns_path]
+    try:
+        subprocess.run(cmd, check=True)
+        print(f"Created {icns_path}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error creating .icns file: {e}")
+    except FileNotFoundError:
+        print("iconutil not found. Make sure you're on macOS.")
+
+def create_ico():
+    """Windows .ico 파일 생성"""
+    # 256x256 크기로 .ico 파일 생성
+    ico_path = "src-tauri/icons/icon.ico"
+    create_high_res_icon(256, ico_path)
+    print(f"Created {ico_path}")
 
 if __name__ == "__main__":
-    main() 
+    print("Creating high-resolution icons...")
+    create_iconset()
+    create_icns()
+    create_ico()
+    print("Icon creation complete!") 
