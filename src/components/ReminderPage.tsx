@@ -37,7 +37,22 @@ const ReminderPage: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editReminder, setEditReminder] = useState<Reminder | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  // localStorage에서 마지막으로 본 Account id를 불러오고, 없으면 null
+  const getInitialSelectedId = () => {
+    const saved = localStorage.getItem('reminders_selected_id');
+    if (saved && !isNaN(Number(saved))) return Number(saved);
+    return null;
+  };
+  const [selectedId, setSelectedIdRaw] = useState<number | null>(getInitialSelectedId);
+  // setSelectedId를 래핑해서 localStorage에도 저장
+  const setSelectedId = (id: number | null) => {
+    setSelectedIdRaw(id);
+    if (id != null) {
+      localStorage.setItem('reminders_selected_id', String(id));
+    } else {
+      localStorage.removeItem('reminders_selected_id');
+    }
+  };
   const [form, setForm] = useState<{ account_id: number | ''; payment_day: number | ''; notes: string; remind_days_before: number; date: Dayjs | null; statement_date: Dayjs | null }>({ account_id: '', payment_day: '', notes: '', remind_days_before: 7, date: null, statement_date: null });
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [noteInput, setNoteInput] = useState('');
@@ -60,6 +75,14 @@ const ReminderPage: React.FC = () => {
     setAccounts(Array.isArray(data) ? data.filter(a => a.type === 'Credit') : []);
   };
   useEffect(() => { loadReminders(); loadAccounts(); }, []);
+
+  // reminders가 바뀔 때, selectedId가 null이거나 현재 id가 리스트에 없으면 가장 위(가까운 Due Date)로 자동 선택
+  useEffect(() => {
+    if (reminders.length === 0) return;
+    if (selectedId == null || !reminders.some(r => r.id === selectedId)) {
+      setSelectedId(reminders[0].id);
+    }
+  }, [reminders]);
 
   // payment history 불러오기
   useEffect(() => {

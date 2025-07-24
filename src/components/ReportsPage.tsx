@@ -131,13 +131,21 @@ const ReportsPage: React.FC = () => {
     n = n.replace(/\[(To|From):\s*[^\]]+\]/, '').trim();
     return n || null;
   };
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => format(currentDate, 'yyyy-MM'));
+  // localStorage에서 마지막으로 본 달을 불러오고, 없으면 현재 달을 기본값으로 사용
+  const getInitialMonth = () => {
+    const saved = localStorage.getItem('reports_selected_month');
+    if (saved && /^\d{4}-\d{2}$/.test(saved)) return saved;
+    return format(new Date(), 'yyyy-MM');
+  };
+  const [selectedMonth, setSelectedMonth] = useState<string>(getInitialMonth);
   // Year and month state for selector
-  const [year, setYear] = useState<string>(() => format(currentDate, 'yyyy'));
-  const [month, setMonth] = useState<string>(() => format(currentDate, 'MM'));
+  const [year, setYear] = useState<string>(() => selectedMonth.slice(0, 4));
+  const [month, setMonth] = useState<string>(() => selectedMonth.slice(5, 7));
   useEffect(() => {
     setYear(selectedMonth.slice(0, 4));
     setMonth(selectedMonth.slice(5, 7));
+    // localStorage에 저장
+    localStorage.setItem('reports_selected_month', selectedMonth);
   }, [selectedMonth]);
   const handleMonthSelect = (newYear: string, newMonth: string) => {
     setYear(newYear);
