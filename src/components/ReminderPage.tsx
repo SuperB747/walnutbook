@@ -284,24 +284,25 @@ const ReminderPage: React.FC = () => {
 
   // Payment history 노트 저장 핸들러
   const handleNoteSave = async (id: number) => {
+    // noteEdits[id]가 undefined면(수정 안 했으면) 저장하지 않음
+    if (noteEdits[id] === undefined) {
+      setNoteEdits(edits => {
+        const newEdits = { ...edits };
+        delete newEdits[id];
+        return newEdits;
+      });
+      return;
+    }
     try {
-      const note = noteEdits[id] ?? '';
-      
-      // 실제 저장
+      const note = noteEdits[id];
       await invoke('update_reminder_payment_history_note', { id, note });
-      
-      // 성공 메시지 표시
       setSnackbar({ open: true, message: 'Note saved successfully', severity: 'success' });
-      
-      // Refresh payment history after saving
       if (selectedReminder) {
         const updated = await invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
           reminder_id: selectedReminder.id,
           reminderId: selectedReminder.id
         });
         setPaymentHistory(updated);
-        
-        // Clear the edit state for this note
         setNoteEdits(edits => {
           const newEdits = { ...edits };
           delete newEdits[id];
@@ -595,26 +596,19 @@ const NoteInlineEdit: React.FC<{ value: string; onChange: (v: string) => void; o
   
   const handleBlur = () => { 
     setEditing(false); 
-    // 값이 변경된 경우에만 저장
-    if (localValue !== value) {
-      onSave(); 
-    } else {
-      setLocalValue(value); // revert
-    }
+    // 항상 저장 시도 (값이 변경되었는지 상관없이)
+    onSave(); 
   };
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') { 
       setEditing(false); 
-      if (localValue !== value) {
-        onSave(); 
-      } else {
-        setLocalValue(value);
-      }
+      // 항상 저장 시도 (값이 변경되었는지 상관없이)
+      onSave(); 
     }
     if (e.key === 'Escape') { 
       setEditing(false); 
-      setLocalValue(value); // revert
+      setLocalValue(value); 
     }
   };
   
