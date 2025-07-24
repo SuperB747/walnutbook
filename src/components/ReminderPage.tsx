@@ -231,6 +231,10 @@ const ReminderPage: React.FC = () => {
       nextStatementDate: next_statement_date,
     });
     // payment history 자동 등록 (statement_date도 함께 전달)
+    let note = '';
+    if (typeof statementBalance === 'number') {
+      note = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(Math.abs(statementBalance));
+    }
     await invoke('add_reminder_payment_history', {
       reminder_id: reminder.id,
       reminderId: reminder.id,
@@ -238,6 +242,7 @@ const ReminderPage: React.FC = () => {
       paidDate: reminder.next_payment_date,
       statement_date: reminder.statement_date,
       statementDate: reminder.statement_date,
+      note,
     });
     loadReminders();
   };

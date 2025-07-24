@@ -165,18 +165,18 @@ pub fn get_reminder_payment_history(app: AppHandle, reminder_id: i64) -> Result<
 }
 
 #[tauri::command]
-pub fn add_reminder_payment_history(app: AppHandle, reminder_id: i64, paid_date: String, statement_date: Option<String>) -> Result<(), String> {
+pub fn add_reminder_payment_history(app: AppHandle, reminder_id: i64, paid_date: String, statement_date: Option<String>, note: Option<String>) -> Result<(), String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     if let Some(statement_date) = statement_date {
         conn.execute(
-            "INSERT INTO reminder_payment_history (reminder_id, paid_date, is_paid, statement_date) VALUES (?1, ?2, 1, ?3)",
-            params![reminder_id, paid_date, statement_date],
+            "INSERT INTO reminder_payment_history (reminder_id, paid_date, is_paid, statement_date, note) VALUES (?1, ?2, 1, ?3, ?4)",
+            params![reminder_id, paid_date, statement_date, note],
         ).map_err(|e| e.to_string())?;
     } else {
         conn.execute(
-            "INSERT INTO reminder_payment_history (reminder_id, paid_date, is_paid) VALUES (?1, ?2, 1)",
-            params![reminder_id, paid_date],
+            "INSERT INTO reminder_payment_history (reminder_id, paid_date, is_paid, note) VALUES (?1, ?2, 1, ?3)",
+            params![reminder_id, paid_date, note],
         ).map_err(|e| e.to_string())?;
     }
     Ok(())
