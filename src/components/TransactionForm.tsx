@@ -23,6 +23,7 @@ import { getCurrentLocalDate, formatLocalDate } from '../utils';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import path from 'path-browserify';
 
 export interface TransactionFormProps {
   open: boolean;
@@ -672,64 +673,81 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               </Grid>
               {/* PDF 첨부 UI */}
               <Grid item xs={12}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Button
-                    variant="outlined"
-                    component="label"
-                  >
-                    {formData.attachment_path ? 'Replace PDF' : 'Attach PDF'}
-                    <input
-                      type="file"
-                      accept="application/pdf"
-                      hidden
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        try {
-                          const base64 = await fileToBase64(file);
-                          const base64Data = base64.split(',')[1];
-                          const result = await invoke<string>('save_transaction_attachment', {
-                            fileName: file.name,
-                            base64: base64Data,
-                            transactionId: transaction?.id || null
-                          });
-                          setFormData(prev => ({ ...prev, attachment_path: result }));
-                        } catch (err) {
-                          setSnackbar({ open: true, message: 'PDF 첨부 실패: ' + err, severity: 'error' });
-                        }
-                      }}
-                    />
-                  </Button>
-                  {formData.attachment_path && (
-                    <>
-                      <Button
-                        variant="text"
-                        color="error"
-                        onClick={async () => {
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Button
+                      variant="outlined"
+                      component="label"
+                    >
+                      {formData.attachment_path ? 'Replace PDF' : 'Attach PDF'}
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        hidden
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
                           try {
-                            await invoke('delete_transaction_attachment', {
-                              attachmentPath: formData.attachment_path
+                            if (formData.attachment_path) {
+                              await invoke('delete_transaction_attachment', {
+                                attachmentPath: formData.attachment_path
+                              });
+                            }
+                            const base64 = await fileToBase64(file);
+                            const base64Data = base64.split(',')[1];
+                            const result = await invoke<string>('save_transaction_attachment', {
+                              fileName: file.name,
+                              base64: base64Data,
+                              transactionId: transaction?.id || null
                             });
-                            setFormData(prev => ({ ...prev, attachment_path: undefined }));
+                            setFormData(prev => ({ ...prev, attachment_path: result }));
                           } catch (err) {
-                            setSnackbar({ open: true, message: 'PDF 삭제 실패: ' + err, severity: 'error' });
+                            setSnackbar({ open: true, message: 'PDF 첨부 실패: ' + err, severity: 'error' });
                           }
                         }}
-                      >
-                        Delete PDF
-                      </Button>
-                      <Button
-                        variant="text"
-                        onClick={async () => {
-                          // PDF 미리보기(새 창)
-                          await invoke('open_transaction_attachment', {
-                            attachmentPath: formData.attachment_path
-                          });
-                        }}
-                      >
-                        View PDF
-                      </Button>
-                    </>
+                      />
+                    </Button>
+                    {formData.attachment_path && (
+                      <>
+                        <Button
+                          variant="text"
+                          color="error"
+                          onClick={async () => {
+                            try {
+                              await invoke('delete_transaction_attachment', {
+                                attachmentPath: formData.attachment_path
+                              });
+                              setFormData(prev => ({ ...prev, attachment_path: undefined }));
+                            } catch (err) {
+                              setSnackbar({ open: true, message: 'PDF 삭제 실패: ' + err, severity: 'error' });
+                            }
+                          }}
+                        >
+                          Delete PDF
+                        </Button>
+                        <Button
+                          variant="text"
+                          onClick={async () => {
+                            // PDF 미리보기(새 창)
+                            await invoke('open_transaction_attachment', {
+                              attachmentPath: formData.attachment_path
+                            });
+                          }}
+                        >
+                          View PDF
+                        </Button>
+                      </>
+                    )}
+                  </Box>
+                  {formData.attachment_path && (
+                    <span style={{ fontSize: '0.95em', color: '#555', display: 'inline-block', marginTop: 2 }}>
+                      {(() => {
+                        const p = formData.attachment_path;
+                        if (!p) return null;
+                        const parts = p.split(/[\\/]/);
+                        return parts[parts.length - 1];
+                      })()}
+                    </span>
                   )}
                 </Box>
               </Grid>

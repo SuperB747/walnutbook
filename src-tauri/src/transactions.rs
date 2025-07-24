@@ -581,7 +581,7 @@ pub fn save_transaction_attachment(_app: AppHandle, file_name: String, base64: S
     use base64::Engine;
     let attachments_dir = get_onedrive_attachments_dir()?;
     let file_name = if let Some(id) = transaction_id {
-        format!("txn_{}_{}", id, file_name)
+        format!("TXN_{}_{}", id, file_name)
     } else {
         file_name
     };
