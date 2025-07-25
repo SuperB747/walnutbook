@@ -24,7 +24,8 @@ import {
   ListItemIcon,
   Divider,
   Snackbar,
-  Alert
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
@@ -82,6 +83,9 @@ const ReportsPage: React.FC = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
+  
+  // Loading state to ensure proper layout calculation
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
   
 
   const now = new Date();
@@ -195,6 +199,7 @@ const ReportsPage: React.FC = () => {
         setCategories(cats || []);
         setAccounts(accts || []);
         setRecurringItems(recurring || []);
+        setIsDataLoaded(true);
       } catch (error) {
         console.error('Failed to load report data:', error);
         console.error('Error details:', error);
@@ -203,6 +208,7 @@ const ReportsPage: React.FC = () => {
         setCategories([]);
         setAccounts([]);
         setRecurringItems([]);
+        setIsDataLoaded(true);
       }
     };
     loadData();
@@ -1158,9 +1164,24 @@ const ReportsPage: React.FC = () => {
     return -(rawExpenses - totalReimbursed);
   }, [yearlyTransactions, categories]);
 
-
-
-
+  // Monthly 탭이 활성화되거나 데이터가 로드된 직후 도넛 차트 강제 리사이즈
+  useEffect(() => {
+    if (activeTab === 0 && isDataLoaded) {
+      const chart = doughnutRef.current?.chart || doughnutRef.current;
+      if (chart && chart.resize) {
+        chart.resize();
+      }
+      window.dispatchEvent(new Event('resize'));
+      // 혹시 모를 레이아웃 문제를 위해 약간의 딜레이 후 한 번 더
+      setTimeout(() => {
+        const chart2 = doughnutRef.current?.chart || doughnutRef.current;
+        if (chart2 && chart2.resize) {
+          chart2.resize();
+        }
+        window.dispatchEvent(new Event('resize'));
+      }, 100);
+    }
+  }, [activeTab, isDataLoaded]);
 
   return (
     <Box p={3}>
@@ -1240,10 +1261,25 @@ const ReportsPage: React.FC = () => {
             ))}
           </Select>
         </Box>
-        <Grid container spacing={2} alignItems="stretch">
+        {!isDataLoaded && (
+          <Grid container spacing={2} alignItems="stretch">
             <Grid item xs={12}>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 25%', display: 'flex', flexDirection: 'column' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+                <CircularProgress />
+              </Box>
+            </Grid>
+          </Grid>
+        )}
+        <Grid container spacing={2} alignItems="stretch" sx={{ display: isDataLoaded ? 'flex' : 'none' }}>
+            <Grid item xs={12}>
+              <Box sx={{ 
+                display: 'flex', 
+                gap: 1, 
+                alignItems: 'stretch',
+                width: '100%',
+                overflow: 'hidden'
+              }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 30%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                   <Typography variant="h6" gutterBottom>Income vs Expense</Typography>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 2 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
@@ -1277,10 +1313,11 @@ const ReportsPage: React.FC = () => {
                           y: { beginAtZero: true, ticks: { color: theme.palette.text.secondary } }
                         }
                       }}
+                      style={{ width: '100%', height: '100%' }}
                     />
                   </Box>
                 </Paper>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 40%' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 40%', minWidth: 0 }}>
                   <Typography variant="h6" gutterBottom>Category Breakdown</Typography>
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'center' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mr: 2 }}>
@@ -1308,11 +1345,14 @@ const ReportsPage: React.FC = () => {
                         </Box>
                       ))}
                     </Box>
-                    <Box sx={{ mx: 2, height: 300, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <Box sx={{ mx: 2, height: 300, minWidth: 0, minHeight: 0, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                       <Doughnut
                         ref={doughnutRef}
                         data={monthlyDoughnutData}
                         options={{ ...doughnutOptions, maintainAspectRatio: false }}
+                        width={300}
+                        height={300}
+                        style={{ width: '100%', height: '100%' }}
                       />
                     </Box>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, ml: 2 }}>
@@ -1342,7 +1382,7 @@ const ReportsPage: React.FC = () => {
                     </Box>
                   </Box>
                 </Paper>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 35%', display: 'flex', flexDirection: 'column' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 30%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                   <Typography variant="h6" gutterBottom>Yearly Summary</Typography>
                   <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
                     <Bar
@@ -1368,6 +1408,7 @@ const ReportsPage: React.FC = () => {
                           }
                         }
                       }}
+                      style={{ width: '100%', height: '100%' }}
                     />
                   </Box>
                 </Paper>
@@ -1583,12 +1624,15 @@ const ReportsPage: React.FC = () => {
                      <Typography variant="subtitle2" color="error" sx={{ fontWeight: 'bold', mb: 0.5 }}>
                        Total Overusage: {safeFormatCurrency(-overBudgetCategories.reduce((sum, c) => sum + c.over, 0))}
                      </Typography>
-                     {overBudgetCategories.map(({ name, over }) => (
-                       <Box key={name} sx={{ display: 'flex', alignItems: 'center', color: 'error.main', gap: 0.5 }}>
-                         <WarningAmberIcon color="error" sx={{ fontSize: '1rem' }} />
-                         <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>{name}: {safeFormatCurrency(-over)}</Typography>
-                       </Box>
-                     ))}
+                     {overBudgetCategories
+                       .slice()
+                       .sort((a, b) => b.over - a.over)
+                       .map(({ name, over }) => (
+                         <Box key={name} sx={{ display: 'flex', alignItems: 'center', color: 'error.main', gap: 0.5 }}>
+                           <WarningAmberIcon color="error" sx={{ fontSize: '1rem' }} />
+                           <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>{name}: {safeFormatCurrency(-over)}</Typography>
+                         </Box>
+                       ))}
                    </Box>
                  ) : (
                    <Typography variant="body2">No budget overages</Typography>
@@ -1915,11 +1959,26 @@ const ReportsPage: React.FC = () => {
               ))}
             </Select>
           </Box>
-          <Grid container spacing={2} alignItems="stretch">
+          {!isDataLoaded && (
+            <Grid container spacing={2} alignItems="stretch">
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+                  <CircularProgress />
+                </Box>
+              </Grid>
+            </Grid>
+          )}
+          <Grid container spacing={2} alignItems="stretch" sx={{ display: isDataLoaded ? 'flex' : 'none' }}>
             <Grid item xs={12}>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
+              <Box sx={{ 
+                display: 'flex', 
+                gap: 1, 
+                alignItems: 'stretch',
+                width: '100%',
+                overflow: 'hidden'
+              }}>
                 {/* Income vs Expense */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 25%', display: 'flex', flexDirection: 'column' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 30%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                   <Typography variant="h6" gutterBottom>Income vs Expense</Typography>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 2 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
@@ -1942,11 +2001,12 @@ const ReportsPage: React.FC = () => {
                         }]
                       }}
                       options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: true } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } }}
+                      style={{ width: '100%', height: '100%' }}
                     />
                   </Box>
                 </Paper>
                 {/* Category Breakdown */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 40%' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 40%', minWidth: 0 }}>
                   <Typography variant="h6" gutterBottom>Category Breakdown</Typography>
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'center' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mr: 2 }}>
@@ -1974,11 +2034,14 @@ const ReportsPage: React.FC = () => {
                         </Box>
                       ))}
                     </Box>
-                    <Box sx={{ mx: 2, height: 300, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <Box sx={{ mx: 2, height: 300, minWidth: 0, minHeight: 0, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                       <Doughnut
                         ref={yearlyDoughnutRef}
                         data={yearlyDoughnutData}
                         options={{ ...doughnutOptions, maintainAspectRatio: false }}
+                        width={300}
+                        height={300}
+                        style={{ width: '100%', height: '100%' }}
                       />
                     </Box>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, ml: 2 }}>
@@ -2009,8 +2072,8 @@ const ReportsPage: React.FC = () => {
                   </Box>
                 </Paper>
                 {/* Monthly Trends */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 35%', display: 'flex', flexDirection: 'column' }}>
-                  <Typography variant="h6" gutterBottom>Monthly Trends</Typography>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 30%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <Typography variant="h6" gutterBottom>Yearly Summary</Typography>
                   <Box sx={{ flex: 1, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
                     <Bar
                       data={yearlyBarData}
@@ -2027,6 +2090,7 @@ const ReportsPage: React.FC = () => {
                           }
                         }
                       }}
+                      style={{ width: '100%', height: '100%' }}
                     />
                   </Box>
                 </Paper>
