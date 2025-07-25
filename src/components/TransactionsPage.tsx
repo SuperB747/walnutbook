@@ -72,6 +72,20 @@ const TransactionsPage: React.FC = () => {
   const openActionsMenu = (event: React.MouseEvent<HTMLElement>) => setActionsAnchorEl(event.currentTarget);
   const closeActionsMenu = () => setActionsAnchorEl(null);
 
+  // 1. Add filter and setFilter state to TransactionsPage:
+  const [filter, setFilter] = useState({
+    searchTerm: '',
+    types: [] as string[],
+    categories: [] as string[],
+    accounts: [] as number[],
+    currentMonth: false,
+    currentYear: false,
+    hasAttachment: false,
+  });
+
+  // 1. Add searchInput state:
+  const [searchInput, setSearchInput] = useState('');
+
   const loadAllData = async () => {
     try {
       const [transactionList, accountList, categoryList] = await Promise.all([
@@ -125,6 +139,14 @@ const TransactionsPage: React.FC = () => {
       setImportedIds([]);
     }
   }, [importedIds, importedDuplicateCount]);
+
+  // 2. Debounce effect for searchInput:
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setFilter((f) => ({ ...f, searchTerm: searchInput }));
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchInput]);
 
   const handleTransactionSave = async (transaction: Partial<Transaction>): Promise<void> => {
     try {
@@ -343,6 +365,15 @@ const TransactionsPage: React.FC = () => {
 
   const filteredByMonth = selectedMonth ? transactions.filter((t) => t.date && t.date.startsWith(selectedMonth)) : transactions;
 
+  // 2. Add isFilterActive logic:
+  const isFilterActive = filter.searchTerm !== '' ||
+    filter.types.length > 0 ||
+    filter.categories.length > 0 ||
+    filter.accounts.length > 0 ||
+    filter.hasAttachment ||
+    filter.currentMonth ||
+    filter.currentYear;
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -380,9 +411,13 @@ const TransactionsPage: React.FC = () => {
       />
 
       <TransactionList
-        transactions={filteredByMonth}
+        transactions={isFilterActive ? transactions : filteredByMonth}
         accounts={accounts}
         categories={categories}
+        filter={filter}
+        setFilter={setFilter}
+        searchInput={searchInput}
+        setSearchInput={setSearchInput}
         onEdit={(transaction) => {
           setSelectedTransaction(transaction);
           setFormOpen(true);

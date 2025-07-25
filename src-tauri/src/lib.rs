@@ -25,7 +25,8 @@ pub use accounts::{get_accounts, create_account, update_account, delete_account}
 // Re-export transaction functions
 pub use transactions::{
     get_transactions, create_transaction, update_transaction, delete_transaction,
-    bulk_update_transactions, import_transactions, save_transaction_attachment, delete_transaction_attachment, open_transaction_attachment
+    bulk_update_transactions, import_transactions, save_transaction_attachment, delete_transaction_attachment, open_transaction_attachment,
+    get_transaction_by_id, get_account_name_by_id
 };
 
 // Re-export category functions
@@ -60,8 +61,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let context = tauri::generate_context!();
     tauri::Builder::default()
         .setup(|app| {
-            // 앱 시작 시 첨부파일 경로 마이그레이션 자동 실행
-            let _ = crate::transactions::migrate_attachment_paths_to_relative(app.handle().clone());
             // Initialize SQLite database schema
             utils::init_db(&app.handle()).map_err(|e| e.to_string())?;
             // Create and manage database connection

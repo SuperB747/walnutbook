@@ -576,30 +576,146 @@ pub fn bulk_update_transactions(app: AppHandle, updates: Vec<(i64, Value)>) -> R
 } 
 
 #[tauri::command]
-pub fn save_transaction_attachment(_app: AppHandle, file_name: String, base64: String, transaction_id: Option<i64>) -> Result<String, String> {
+pub fn get_transaction_by_id(app: AppHandle, id: i64) -> Result<Option<Transaction>, String> {
+    let path = get_db_path(&app);
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn
+        .prepare("SELECT t.id, t.date, t.account_id, t.type, t.category_id, t.amount, t.payee, t.notes, t.transfer_id, t.to_account_id, t.created_at, t.attachment_path FROM transactions t WHERE t.id = ?1")
+        .map_err(|e| e.to_string())?;
+    
+    let result = stmt
+        .query_row(params![id], |row| {
+            let date: Option<String> = row.get(1)?;
+            let date = date.unwrap_or_else(|| {
+                Utc::now().format("%Y-%m-%d").to_string()
+            });
+            
+            Ok(Transaction {
+                id: row.get(0)?,
+                date,
+                account_id: row.get(2)?,
+                transaction_type: row.get(3)?,
+                category_id: row.get(4)?,
+                amount: row.get(5)?,
+                payee: row.get(6)?,
+                notes: row.get(7)?,
+                transfer_id: row.get(8)?,
+                to_account_id: row.get(9).ok(),
+                created_at: row.get(10)?,
+                attachment_path: row.get(11).ok(),
+            })
+        });
+    
+    match result {
+        Ok(transaction) => Ok(Some(transaction)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn get_account_name_by_id(app: AppHandle, account_id: i64) -> Result<String, String> {
+    let path = get_db_path(&app);
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn
+        .prepare("SELECT name FROM accounts WHERE id = ?1")
+        .map_err(|e| e.to_string())?;
+    
+    let account_name = stmt
+        .query_row(params![account_id], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    
+    Ok(account_name)
+}
+
+#[tauri::command]
+pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: String, transaction_id: Option<i64>) -> Result<String, String> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
+    use std::path::Path;
+    
     let attachments_dir = get_onedrive_attachments_dir()?;
-    let file_name = if let Some(id) = transaction_id {
-        format!("TXN_{}_{}", id, file_name)
+    
+    // 파일 확장자 추출
+    let extension = Path::new(&file_name)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("pdf");
+    
+    let new_file_name = if let Some(id) = transaction_id {
+        // Transaction 정보 가져오기
+        let transaction = get_transaction_by_id(app.clone(), id)?;
+        if let Some(txn) = transaction {
+            // 날짜를 YYYYMMDD 형식으로 변환
+            let date_parts: Vec<&str> = txn.date.split('-').collect();
+            let formatted_date = if date_parts.len() == 3 {
+                format!("{}{}{}", date_parts[0], date_parts[1], date_parts[2])
+            } else {
+                // 날짜 형식이 올바르지 않으면 현재 날짜 사용
+                chrono::Utc::now().format("%Y%m%d").to_string()
+            };
+            
+            // Description 생성 (payee 사용)
+            let description = txn.payee.trim();
+            
+            // 새 파일명 생성: YYYYMMDD-Description.확장자
+            format!("{}-{}.{}", formatted_date, description, extension)
+        } else {
+            // Transaction을 찾을 수 없는 경우 기존 방식 사용
+            format!("TXN_{}_{}", id, file_name)
+        }
     } else {
         file_name
     };
-    let dest_path = attachments_dir.join(&file_name);
+    
+    // Account 서브폴더 생성
+    let account_subfolder = if let Some(id) = transaction_id {
+        let transaction = get_transaction_by_id(app.clone(), id)?;
+        if let Some(txn) = transaction {
+            let account_name = get_account_name_by_id(app.clone(), txn.account_id)?;
+            // 특수문자 제거 및 안전한 폴더명 생성
+            let safe_account_name = account_name
+                .chars()
+                .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' { c } else { '_' })
+                .collect::<String>()
+                .trim()
+                .replace("  ", " ")
+                .replace(" ", "_");
+            safe_account_name
+        } else {
+            "Unknown".to_string()
+        }
+    } else {
+        "Unknown".to_string()
+    };
+    
+    // Account 서브폴더 경로 생성
+    let account_dir = attachments_dir.join(&account_subfolder);
+    std::fs::create_dir_all(&account_dir).map_err(|e| format!("서브폴더 생성 실패: {}", e))?;
+    
+    // 파일 저장
+    let dest_path = account_dir.join(&new_file_name);
     let bytes = STANDARD.decode(&base64).map_err(|e| format!("base64 디코딩 실패: {}", e))?;
     std::fs::write(&dest_path, bytes).map_err(|e| format!("파일 저장 실패: {}", e))?;
-    // Return only the relative path (e.g., 'Attachments/filename.pdf')
-    Ok(format!("Attachments/{}", file_name))
+    
+    // 상대 경로 반환: Attachments/AccountName/filename.pdf
+    Ok(format!("Attachments/{}/{}", account_subfolder, new_file_name))
 }
 
 #[tauri::command]
 pub fn delete_transaction_attachment(_app: AppHandle, attachment_path: String) -> Result<(), String> {
     let attachments_dir = get_onedrive_attachments_dir()?;
-    // attachment_path is now relative (e.g., 'Attachments/filename.pdf'), so get only the file name
-    let file_name = std::path::Path::new(&attachment_path).file_name().unwrap();
-    let file_path = attachments_dir.join(file_name);
-    if file_path.exists() {
-        std::fs::remove_file(&file_path).map_err(|e| format!("첨부 파일 삭제 실패: {}", e))?;
+    // attachment_path is now relative (e.g., 'Attachments/AccountName/filename.pdf')
+    let path_parts: Vec<&str> = attachment_path.split('/').collect();
+    if path_parts.len() >= 3 && path_parts[0] == "Attachments" {
+        let account_folder = path_parts[1];
+        let file_name = path_parts[2..].join("/");
+        let file_path = attachments_dir.join(account_folder).join(file_name);
+        if file_path.exists() {
+            std::fs::remove_file(&file_path).map_err(|e| format!("첨부 파일 삭제 실패: {}", e))?;
+        }
     }
     Ok(())
 }
@@ -607,43 +723,21 @@ pub fn delete_transaction_attachment(_app: AppHandle, attachment_path: String) -
 #[tauri::command]
 pub fn open_transaction_attachment(_app: AppHandle, attachment_path: String) -> Result<(), String> {
     let attachments_dir = get_onedrive_attachments_dir()?;
-    // attachment_path is now relative (e.g., 'Attachments/filename.pdf'), so get only the file name
-    let file_name = std::path::Path::new(&attachment_path).file_name().unwrap();
-    let file_path = attachments_dir.join(file_name);
-    if file_path.exists() {
-        open::that(&file_path).map_err(|e| format!("PDF 열기 실패: {}", e))?;
-        Ok(())
+    // attachment_path is now relative (e.g., 'Attachments/AccountName/filename.pdf')
+    let path_parts: Vec<&str> = attachment_path.split('/').collect();
+    if path_parts.len() >= 3 && path_parts[0] == "Attachments" {
+        let account_folder = path_parts[1];
+        let file_name = path_parts[2..].join("/");
+        let file_path = attachments_dir.join(account_folder).join(file_name);
+        if file_path.exists() {
+            open::that(&file_path).map_err(|e| format!("PDF 열기 실패: {}", e))?;
+            Ok(())
+        } else {
+            Err("첨부 파일이 존재하지 않습니다.".to_string())
+        }
     } else {
-        Err("첨부 파일이 존재하지 않습니다.".to_string())
+        Err("잘못된 첨부 파일 경로입니다.".to_string())
     }
 } 
 
-#[tauri::command]
-pub fn migrate_attachment_paths_to_relative(app: AppHandle) -> Result<usize, String> {
-    let path = get_db_path(&app);
-    let conn = Connection::open(&path).map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare("SELECT id, attachment_path FROM transactions WHERE attachment_path IS NOT NULL AND attachment_path != '' AND attachment_path NOT LIKE 'Attachments/%'").map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], |row| {
-        let id: i64 = row.get(0)?;
-        let full_path: String = row.get(1)?;
-        Ok((id, full_path))
-    }).map_err(|e| e.to_string())?;
-    let mut updated = 0;
-    for row in rows {
-        let (id, full_path) = row.map_err(|e| e.to_string())?;
-        // Extract file name (handles both / and \\)
-        let file_name = std::path::Path::new(&full_path)
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("");
-        if !file_name.is_empty() {
-            let rel_path = format!("Attachments/{}", file_name);
-            conn.execute(
-                "UPDATE transactions SET attachment_path = ?1 WHERE id = ?2",
-                params![rel_path, id],
-            ).map_err(|e| e.to_string())?;
-            updated += 1;
-        }
-    }
-    Ok(updated)
-} 
+ 
