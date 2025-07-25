@@ -1280,7 +1280,7 @@ const ReportsPage: React.FC = () => {
                     />
                   </Box>
                 </Paper>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 37.5%' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 40%' }}>
                   <Typography variant="h6" gutterBottom>Category Breakdown</Typography>
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'center' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mr: 2 }}>
@@ -1342,7 +1342,7 @@ const ReportsPage: React.FC = () => {
                     </Box>
                   </Box>
                 </Paper>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 37.5%', display: 'flex', flexDirection: 'column' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 35%', display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h6" gutterBottom>Yearly Summary</Typography>
                   <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
                     <Bar
@@ -1946,7 +1946,7 @@ const ReportsPage: React.FC = () => {
                   </Box>
                 </Paper>
                 {/* Category Breakdown */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 37.5%' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 40%' }}>
                   <Typography variant="h6" gutterBottom>Category Breakdown</Typography>
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'center' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mr: 2 }}>
@@ -2009,7 +2009,7 @@ const ReportsPage: React.FC = () => {
                   </Box>
                 </Paper>
                 {/* Monthly Trends */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 37.5%', display: 'flex', flexDirection: 'column' }}>
+                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 35%', display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h6" gutterBottom>Monthly Trends</Typography>
                   <Box sx={{ flex: 1, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
                     <Bar
