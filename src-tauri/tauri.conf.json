@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "WalnutBook",
   "version": "0.1.0",
-  "identifier": "com.walnutbook.app",
+  "identifier": "com.walnutbook",
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:3000",
