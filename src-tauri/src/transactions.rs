@@ -588,12 +588,14 @@ pub fn save_transaction_attachment(_app: AppHandle, file_name: String, base64: S
     let dest_path = attachments_dir.join(&file_name);
     let bytes = STANDARD.decode(&base64).map_err(|e| format!("base64 디코딩 실패: {}", e))?;
     std::fs::write(&dest_path, bytes).map_err(|e| format!("파일 저장 실패: {}", e))?;
-    Ok(dest_path.to_string_lossy().to_string())
+    // Return only the relative path (e.g., 'Attachments/filename.pdf')
+    Ok(format!("Attachments/{}", file_name))
 }
 
 #[tauri::command]
 pub fn delete_transaction_attachment(_app: AppHandle, attachment_path: String) -> Result<(), String> {
     let attachments_dir = get_onedrive_attachments_dir()?;
+    // attachment_path is now relative (e.g., 'Attachments/filename.pdf'), so get only the file name
     let file_name = std::path::Path::new(&attachment_path).file_name().unwrap();
     let file_path = attachments_dir.join(file_name);
     if file_path.exists() {
@@ -605,6 +607,7 @@ pub fn delete_transaction_attachment(_app: AppHandle, attachment_path: String) -
 #[tauri::command]
 pub fn open_transaction_attachment(_app: AppHandle, attachment_path: String) -> Result<(), String> {
     let attachments_dir = get_onedrive_attachments_dir()?;
+    // attachment_path is now relative (e.g., 'Attachments/filename.pdf'), so get only the file name
     let file_name = std::path::Path::new(&attachment_path).file_name().unwrap();
     let file_path = attachments_dir.join(file_name);
     if file_path.exists() {
@@ -613,4 +616,34 @@ pub fn open_transaction_attachment(_app: AppHandle, attachment_path: String) -> 
     } else {
         Err("첨부 파일이 존재하지 않습니다.".to_string())
     }
+} 
+
+#[tauri::command]
+pub fn migrate_attachment_paths_to_relative(app: AppHandle) -> Result<usize, String> {
+    let path = get_db_path(&app);
+    let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, attachment_path FROM transactions WHERE attachment_path IS NOT NULL AND attachment_path != '' AND attachment_path NOT LIKE 'Attachments/%'").map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| {
+        let id: i64 = row.get(0)?;
+        let full_path: String = row.get(1)?;
+        Ok((id, full_path))
+    }).map_err(|e| e.to_string())?;
+    let mut updated = 0;
+    for row in rows {
+        let (id, full_path) = row.map_err(|e| e.to_string())?;
+        // Extract file name (handles both / and \\)
+        let file_name = std::path::Path::new(&full_path)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("");
+        if !file_name.is_empty() {
+            let rel_path = format!("Attachments/{}", file_name);
+            conn.execute(
+                "UPDATE transactions SET attachment_path = ?1 WHERE id = ?2",
+                params![rel_path, id],
+            ).map_err(|e| e.to_string())?;
+            updated += 1;
+        }
+    }
+    Ok(updated)
 } 

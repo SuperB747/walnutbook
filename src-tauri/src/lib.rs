@@ -60,6 +60,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let context = tauri::generate_context!();
     tauri::Builder::default()
         .setup(|app| {
+            // 앱 시작 시 첨부파일 경로 마이그레이션 자동 실행
+            let _ = crate::transactions::migrate_attachment_paths_to_relative(app.handle().clone());
             // Initialize SQLite database schema
             utils::init_db(&app.handle()).map_err(|e| e.to_string())?;
             // Create and manage database connection

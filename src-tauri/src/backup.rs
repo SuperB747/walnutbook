@@ -11,6 +11,7 @@ pub struct BackupInfo {
     pub file_size: u64,
     pub version: String,
     pub is_compressed: bool,
+    pub file_path: String, // 추가
 }
 
 
@@ -57,6 +58,7 @@ pub fn backup_database(app: AppHandle, save_path: String) -> Result<BackupInfo, 
         file_size,
         version: "1.0".to_string(),
         is_compressed: false,
+        file_path: backup_path.clone(), // backup_path가 String이면 clone() 사용
     })
 }
 
@@ -109,6 +111,7 @@ pub fn get_backup_history() -> Result<Vec<BackupInfo>, String> {
                                             file_size: metadata.len(),
                                             version: "1.0".to_string(),
                                             is_compressed: false,
+                                            file_path: path.to_string_lossy().to_string(),
                                         });
                                     }
                                 }

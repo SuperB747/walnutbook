@@ -413,11 +413,10 @@ export const App: React.FC = () => {
 
   const handleBackup = async () => {
     try {
-      const backupInfo = await invoke<{ timestamp: string; file_size: number }>('manual_backup_to_onedrive');
-      
+      const backupInfo = await invoke<{ timestamp: string; file_size: number; file_path: string }>('manual_backup_to_onedrive');
       setSnackbar({
         open: true,
-        message: `Backup saved to OneDrive/WalnutBook_Backups: ${backupInfo.timestamp} (${(backupInfo.file_size / 1024).toFixed(1)} KB)`,
+        message: `Backup saved to: ${backupInfo.file_path} (${(backupInfo.file_size / 1024).toFixed(1)} KB)`,
         severity: 'success',
       });
     } catch (err) {

@@ -53,6 +53,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
     accounts: [] as number[],
     amountMin: '', // 추가: 최소 금액
     amountMax: '', // 추가: 최대 금액
+    hasAttachment: false, // 추가: 첨부파일 필터
   });
   const [selectedIds, setSelectedIds] = useState<number[]>(initialSelectedIds);
   
@@ -77,7 +78,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   // 필터링된 거래 내역
   const filteredTransactions = useMemo(() => {
     return transactions.filter(transaction => {
-      const { searchTerm, types, categories: catFilter, accounts: accFilter, amountMin, amountMax } = filter;
+      const { searchTerm, types, categories: catFilter, accounts: accFilter, amountMin, amountMax, hasAttachment } = filter;
       const searchMatch = (() => {
         if (searchTerm === '') return true;
         // 금액 숫자만 입력된 경우: 금액(절대값)에 해당 숫자가 포함되는지 확인
@@ -105,7 +106,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
       const amountMatch = 
         (amountMin === '' || absAmount >= parseFloat(amountMin)) &&
         (amountMax === '' || absAmount <= parseFloat(amountMax));
-      return searchMatch && typeMatch && categoryMatch && accountMatch && amountMatch;
+      // 첨부파일 필터
+      const attachmentMatch = !hasAttachment || (transaction.attachment_path && transaction.attachment_path.trim() !== '');
+      return searchMatch && typeMatch && categoryMatch && accountMatch && amountMatch && attachmentMatch;
     });
   }, [transactions, categories, filter]);
 
@@ -121,7 +124,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
       filter.categories.length > 0 ||
       filter.accounts.length > 0 ||
       filter.amountMin !== '' ||
-      filter.amountMax !== '';
+      filter.amountMax !== '' ||
+      filter.hasAttachment;
   }, [filter]);
 
   // 삭제 핸들러 통합
@@ -154,7 +158,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   };
 
   // 필터 초기화
-  const handleClearFilters = () => setFilter({ searchTerm: '', types: [], categories: [], accounts: [], amountMin: '', amountMax: '' });
+  const handleClearFilters = () => setFilter({ searchTerm: '', types: [], categories: [], accounts: [], amountMin: '', amountMax: '', hasAttachment: false });
 
   // 기타 유틸
   const getDisplayPayee = (transaction: Transaction) => {
@@ -225,6 +229,31 @@ const TransactionList: React.FC<TransactionListProps> = ({
           <InputLabel>Category</InputLabel>
           <Select multiple value={filter.categories} onChange={e => setFilter(f => ({ ...f, categories: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value }))} input={<OutlinedInput label="Category" />} renderValue={selected => <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, pr: 2 }}>{selected.map((value: string) => <Chip key={value} label={value} size="small" />)}</Box>} MenuProps={{ MenuListProps: { dense: true } }}>{uniqueCategories.sort().map(category => (<MenuItem key={category} value={category} dense><Checkbox checked={filter.categories.indexOf(category) > -1} size="small" /><ListItemText primary={category} /></MenuItem>))}</Select>
         </FormControl>
+        <Button
+          variant={filter.hasAttachment ? "contained" : "outlined"}
+          size="small"
+          onClick={() => setFilter(f => ({ ...f, hasAttachment: !f.hasAttachment }))}
+          sx={{
+            minWidth: 120,
+            height: 40,
+            borderColor: filter.hasAttachment ? 'primary.main' : 'rgba(35, 64, 117, 0.23)',
+            color: filter.hasAttachment ? 'primary.contrastText' : 'text.primary',
+            fontSize: '0.9375rem',
+            fontWeight: 400,
+            textTransform: 'none',
+            boxSizing: 'border-box',
+            ...(filter.hasAttachment && {
+              backgroundColor: 'primary.main',
+              '&:hover': { backgroundColor: 'primary.dark' },
+            }),
+            ...(!filter.hasAttachment && {
+              backgroundColor: 'background.paper',
+              '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.04)' },
+            })
+          }}
+        >
+          Attachment
+        </Button>
         <TextField
           label="Min Amount"
           size="small"
@@ -239,7 +268,14 @@ const TransactionList: React.FC<TransactionListProps> = ({
           onChange={e => setFilter(f => ({ ...f, amountMax: e.target.value }))}
           sx={{ width: 120 }}
         />
-        <Button variant="outlined" size="small" onClick={handleClearFilters} sx={{ minWidth: 100, height: 40 }}>Clear Filters</Button>
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={handleClearFilters}
+          sx={{ minWidth: 120, height: 40, fontSize: '0.9375rem', fontWeight: 400, textTransform: 'none', boxSizing: 'border-box' }}
+        >
+          Clear Filters
+        </Button>
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, p: 0.5 }}>
         <Button variant="outlined" disabled={selectedIds.length === 0 || isDeleting} onClick={e => openDeleteDialog('bulk')}>

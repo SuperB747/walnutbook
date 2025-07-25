@@ -445,10 +445,22 @@ pub fn home_dir() -> Result<String, String> {
 #[tauri::command]
 pub fn get_onedrive_path() -> Result<String, String> {
     let home = home_dir()?;
+    if cfg!(target_os = "macos") {
+        let mac_paths = [
+            format!("{}/OneDrive", home),
+            format!("{}/Library/CloudStorage/OneDrive-개인", home),
+            format!("{}/Library/CloudStorage/OneDrive", home),
+        ];
+        for path in &mac_paths {
+            if std::path::Path::new(path).exists() {
+                return Ok(path.clone());
+            }
+        }
+        return Err("OneDrive 폴더를 찾을 수 없습니다.".to_string());
+    }
+    // Windows 등 기존 로직 유지
     let onedrive_path = if cfg!(target_os = "windows") {
         format!("{}\\OneDrive", home)
-    } else if cfg!(target_os = "macos") {
-        format!("{}/OneDrive", home)
     } else {
         format!("{}/OneDrive", home)
     };
