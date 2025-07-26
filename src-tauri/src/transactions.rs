@@ -28,7 +28,7 @@ pub fn get_transactions(app: AppHandle) -> Result<Vec<Transaction>, String> {
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     
     let mut stmt = conn
-        .prepare("SELECT t.id, t.date, t.account_id, t.type, t.category_id, t.amount, t.payee, t.notes, t.transfer_id, t.to_account_id, t.created_at, t.attachment_path FROM transactions t ORDER BY t.date DESC")
+        .prepare("SELECT t.id, t.date, t.account_id, t.type, t.category_id, t.amount, t.payee, t.notes, t.transfer_id, t.to_account_id, t.created_at, t.attachment_path FROM transactions t WHERE t.notes NOT LIKE '%[TEMP]%' ORDER BY t.date DESC")
         .map_err(|e| e.to_string())?;
     
     let rows = stmt
@@ -132,7 +132,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 "".to_string()
             };
             tx.execute(
-                "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id, to_account_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     to_id,
                     transaction.category_id,
@@ -142,6 +142,7 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     &arrival_clean_notes,
                     transaction_type,
                     transfer_id,
+                    transaction.account_id, // arrival에 출발 계좌 저장
                     transaction.attachment_path.clone()
                 ],
             ).map_err(|e| {
@@ -249,82 +250,17 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
         ).map_err(|e| e.to_string())?;
         
         // 도착 계좌 ID 추출 (to_account_id 우선 사용)
-        let to_account_id = if let Some(to_id) = transaction.to_account_id {
-            Some(to_id)
-        } else if let Some(notes) = &transaction.notes {
-            // 새로운 형식: [TO_ACCOUNT_ID:계좌ID] 패턴 확인
-            if notes.contains("[TO_ACCOUNT_ID:") {
-                if let Some(start) = notes.find("[TO_ACCOUNT_ID:") {
-                    if let Some(end) = notes[start..].find("]") {
-                        let account_id_str = &notes[start + 14..start + end].trim_start_matches(':');
-                        if let Ok(account_id) = account_id_str.parse::<i64>() {
-                            Some(account_id)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
-            // 레거시 형식: [To: 계좌명] 패턴 확인
-            else if notes.contains("[To:") {
-                // [To: 계좌명] 패턴에서 계좌명만 추출
-                let account_name = if let Some(start) = notes.find("[To:") {
-                    if let Some(end) = notes[start..].find("]") {
-                        let extracted = &notes[start + 4..start + end].trim();
-                        extracted.to_string()
-                    } else {
-                        String::new()
-                    }
-                } else {
-                    String::new()
-                };
-                if !account_name.is_empty() {
-                    let to_account_id: Option<i64> = tx.query_row(
-                        "SELECT id FROM accounts WHERE name = ?1",
-                        params![account_name],
-                        |r| r.get(0)
-                    ).ok();
-                    to_account_id
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let to_account_id = transaction.to_account_id;
         
         // 도착 계좌 트랜잭션 (양수)
         if let Some(to_id) = to_account_id {
             let arrival_amount = transaction.amount.abs();
             
             // Notes에서 임시 정보 제거하고 사용자 입력만 유지
-            let clean_notes = if let Some(notes) = &transaction.notes {
-                if notes.contains("[TO_ACCOUNT_ID:") {
-                    if let Some(end) = notes.find("]") {
-                        let user_notes = &notes[end + 1..].trim();
-                        if user_notes.is_empty() {
-                            None
-                        } else {
-                            Some(user_notes.to_string())
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    Some(notes.clone())
-                }
-            } else {
-                None
-            };
+            let clean_notes = transaction.notes.clone();
             
             tx.execute(
-                "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                "INSERT INTO transactions (date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     transaction.date,
                     to_id,
@@ -334,12 +270,12 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                     transaction.payee,
                     clean_notes,
                     transfer_id,
+                    transaction.account_id, // arrival에 출발 계좌 저장
                     transaction.attachment_path.clone()
                 ],
             ).map_err(|e| {
                 e.to_string()
             })?;
-            
         } else {
             println!("[DEBUG] No to_account_id found, skipping arrival transaction");
         }
@@ -397,6 +333,23 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
         ).ok();
         
         if let Some(transfer_id) = transfer_id {
+            // Get all transactions with the same transfer_id to check for attachments
+            let mut stmt = tx.prepare("SELECT id, attachment_path FROM transactions WHERE transfer_id = ?1").map_err(|e| e.to_string())?;
+            let rows = stmt.query_map(params![transfer_id], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?))
+            }).map_err(|e| e.to_string())?;
+            
+            // Delete attachment files first
+            for row in rows {
+                let (_transaction_id, attachment_path) = row.map_err(|e| e.to_string())?;
+                if let Some(path) = attachment_path {
+                    if !path.is_empty() {
+                        // Delete the attachment file
+                        let _ = delete_transaction_attachment(app.clone(), path);
+                    }
+                }
+            }
+            
             // Delete both transactions with the same transfer_id
             let _deleted_count = tx.execute("DELETE FROM transactions WHERE transfer_id = ?1", params![transfer_id]).map_err(|e| e.to_string())?;
         } else {
@@ -415,6 +368,31 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
                 ).ok()
             };
             
+            // Delete attachment files first for both transactions
+            if let Some(attachment_path) = {
+                let mut stmt = tx.prepare("SELECT attachment_path FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
+                stmt.query_row(params![id], |row| row.get::<_, Option<String>>(0)).ok()
+            } {
+                if let Some(path) = attachment_path {
+                    if !path.is_empty() {
+                        let _ = delete_transaction_attachment(app.clone(), path);
+                    }
+                }
+            }
+            
+            if let Some(other_id) = other_transaction {
+                if let Some(attachment_path) = {
+                    let mut stmt = tx.prepare("SELECT attachment_path FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
+                    stmt.query_row(params![other_id], |row| row.get::<_, Option<String>>(0)).ok()
+                } {
+                    if let Some(path) = attachment_path {
+                        if !path.is_empty() {
+                            let _ = delete_transaction_attachment(app.clone(), path);
+                        }
+                    }
+                }
+            }
+            
             // Delete both transactions
             tx.execute("DELETE FROM transactions WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
             if let Some(other_id) = other_transaction {
@@ -426,6 +404,19 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
         
         tx.commit().map_err(|e| e.to_string())?;
     } else {
+        // For single transaction, delete attachment file first if it exists
+        if let Some(attachment_path) = {
+            let mut stmt = conn.prepare("SELECT attachment_path FROM transactions WHERE id = ?1").map_err(|e| e.to_string())?;
+            stmt.query_row(params![id], |row| row.get::<_, Option<String>>(0)).ok()
+        } {
+            if let Some(path) = attachment_path {
+                if !path.is_empty() {
+                    // Delete the attachment file
+                    let _ = delete_transaction_attachment(app.clone(), path);
+                }
+            }
+        }
+        
         // Delete single transaction
         conn.execute("DELETE FROM transactions WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     }
@@ -631,7 +622,8 @@ pub fn get_account_name_by_id(app: AppHandle, account_id: i64) -> Result<String,
 }
 
 #[tauri::command]
-pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: String, transaction_id: Option<i64>) -> Result<String, String> {
+pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: String, transaction_id: Option<i64>, 
+                                 transaction_data: Option<serde_json::Value>) -> Result<String, String> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
     use std::path::Path;
@@ -645,7 +637,7 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
         .unwrap_or("pdf");
     
     let new_file_name = if let Some(id) = transaction_id {
-        // Transaction 정보 가져오기
+        // 기존 트랜잭션: Transaction 정보 가져오기
         let transaction = get_transaction_by_id(app.clone(), id)?;
         if let Some(txn) = transaction {
             // 날짜를 YYYYMMDD 형식으로 변환
@@ -666,15 +658,79 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
             // Transaction을 찾을 수 없는 경우 기존 방식 사용
             format!("TXN_{}_{}", id, file_name)
         }
+    } else if let Some(ref data) = transaction_data {
+        // 새 트랜잭션: 전달받은 데이터 사용
+        let date = data.get("date").and_then(|v| v.as_str()).unwrap_or("");
+        let payee = data.get("payee").and_then(|v| v.as_str()).unwrap_or("");
+        
+        // 날짜를 YYYYMMDD 형식으로 변환
+        let date_parts: Vec<&str> = date.split('-').collect();
+        let formatted_date = if date_parts.len() == 3 {
+            format!("{}{}{}", date_parts[0], date_parts[1], date_parts[2])
+        } else {
+            // 날짜 형식이 올바르지 않으면 현재 날짜 사용
+            chrono::Utc::now().format("%Y%m%d").to_string()
+        };
+        
+        // Description 생성 (payee 사용)
+        let description = payee.trim();
+        
+        // 새 파일명 생성: YYYYMMDD-Description.확장자
+        format!("{}-{}.{}", formatted_date, description, extension)
     } else {
-        file_name
+        // 임시 파일명 생성 (fallback)
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
+        format!("TEMP_{}_{}", timestamp, file_name)
     };
     
     // Account 서브폴더 생성
     let account_subfolder = if let Some(id) = transaction_id {
+        // 기존 트랜잭션: DB에서 정보 가져오기
         let transaction = get_transaction_by_id(app.clone(), id)?;
         if let Some(txn) = transaction {
-            let account_name = get_account_name_by_id(app.clone(), txn.account_id)?;
+            println!("[DEBUG] Transaction ID: {}, Type: {}, Account ID: {}, To Account ID: {:?}", 
+                id, txn.transaction_type, txn.account_id, txn.to_account_id);
+            
+            // Transfer 거래인 경우 도착 계좌(to_account_id)를 사용, 그렇지 않으면 출발 계좌(account_id) 사용
+            let target_account_id = if txn.transaction_type == "Transfer" {
+                // Transfer 거래의 경우 도착 계좌(to_account_id)를 우선적으로 사용
+                if let Some(to_id) = txn.to_account_id {
+                    println!("[DEBUG] Transfer transaction, using to_account_id: {}", to_id);
+                    to_id
+                } else {
+                    // 같은 transfer_id를 가진 다른 트랜잭션에서 도착 계좌 찾기
+                    let path = get_db_path(&app);
+                    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+                    
+                    if let Some(transfer_id) = txn.transfer_id {
+                        println!("[DEBUG] Looking for arrival account in transfer_id: {}", transfer_id);
+                        // Transfer 거래에서 양수 금액(도착 거래)을 가진 거래의 account_id를 찾기
+                        let mut stmt = conn.prepare(
+                            "SELECT account_id FROM transactions WHERE transfer_id = ? AND amount > 0 LIMIT 1"
+                        ).map_err(|e| e.to_string())?;
+                        
+                        let mut rows = stmt.query(params![transfer_id]).map_err(|e| e.to_string())?;
+                        if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+                            let arrival_account_id: i64 = row.get(0).map_err(|e| e.to_string())?;
+                            println!("[DEBUG] Found arrival account_id: {}", arrival_account_id);
+                            arrival_account_id
+                        } else {
+                            println!("[DEBUG] No arrival transaction found, using current account_id: {}", txn.account_id);
+                            txn.account_id
+                        }
+                    } else {
+                        println!("[DEBUG] No transfer_id, using account_id: {}", txn.account_id);
+                        txn.account_id
+                    }
+                }
+            } else {
+                println!("[DEBUG] Non-transfer transaction, using account_id: {}", txn.account_id);
+                txn.account_id
+            };
+            
+            println!("[DEBUG] Final target_account_id: {}", target_account_id);
+            let account_name = get_account_name_by_id(app.clone(), target_account_id)?;
+            println!("[DEBUG] Account name: {}", account_name);
             // 특수문자 제거 및 안전한 폴더명 생성
             let safe_account_name = account_name
                 .chars()
@@ -683,25 +739,66 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
                 .trim()
                 .replace("  ", " ")
                 .replace(" ", "_");
+            println!("[DEBUG] Safe account name: {}", safe_account_name);
             safe_account_name
         } else {
             "Unknown".to_string()
         }
+    } else if let Some(ref data) = transaction_data {
+        // 새 트랜잭션: 전달받은 데이터 사용
+        let transaction_type = data.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        let account_id = data.get("account_id").and_then(|v| v.as_i64()).unwrap_or(0);
+        let to_account_id = data.get("to_account_id").and_then(|v| v.as_i64());
+        
+        println!("[DEBUG] New transaction - Type: {}, Account ID: {}, To Account ID: {:?}", 
+            transaction_type, account_id, to_account_id);
+        
+        // Transfer 거래인 경우 도착 계좌(to_account_id)를 사용, 그렇지 않으면 출발 계좌(account_id) 사용
+        let target_account_id = if transaction_type == "Transfer" {
+            if let Some(to_id) = to_account_id {
+                println!("[DEBUG] New Transfer transaction, using to_account_id: {}", to_id);
+                to_id
+            } else {
+                println!("[DEBUG] New Transfer transaction, no to_account_id, using account_id: {}", account_id);
+                account_id
+            }
+        } else {
+            println!("[DEBUG] New non-transfer transaction, using account_id: {}", account_id);
+            account_id
+        };
+        
+        println!("[DEBUG] Final target_account_id: {}", target_account_id);
+        let account_name = get_account_name_by_id(app.clone(), target_account_id)?;
+        println!("[DEBUG] Account name: {}", account_name);
+        // 특수문자 제거 및 안전한 폴더명 생성
+        let safe_account_name = account_name
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' { c } else { '_' })
+            .collect::<String>()
+            .trim()
+            .replace("  ", " ")
+            .replace(" ", "_");
+        println!("[DEBUG] Safe account name: {}", safe_account_name);
+        safe_account_name
     } else {
         "Unknown".to_string()
     };
     
     // Account 서브폴더 경로 생성
     let account_dir = attachments_dir.join(&account_subfolder);
+    println!("[DEBUG] Creating directory: {:?}", account_dir);
     std::fs::create_dir_all(&account_dir).map_err(|e| format!("서브폴더 생성 실패: {}", e))?;
     
     // 파일 저장
     let dest_path = account_dir.join(&new_file_name);
+    println!("[DEBUG] Saving file to: {:?}", dest_path);
     let bytes = STANDARD.decode(&base64).map_err(|e| format!("base64 디코딩 실패: {}", e))?;
     std::fs::write(&dest_path, bytes).map_err(|e| format!("파일 저장 실패: {}", e))?;
     
     // 상대 경로 반환: Attachments/AccountName/filename.pdf
-    Ok(format!("Attachments/{}/{}", account_subfolder, new_file_name))
+    let relative_path = format!("Attachments/{}/{}", account_subfolder, new_file_name);
+    println!("[DEBUG] Returning relative path: {}", relative_path);
+    Ok(relative_path)
 }
 
 #[tauri::command]
@@ -738,6 +835,198 @@ pub fn open_transaction_attachment(_app: AppHandle, attachment_path: String) -> 
     } else {
         Err("잘못된 첨부 파일 경로입니다.".to_string())
     }
+} 
+
+#[tauri::command]
+pub fn create_temp_transaction(app: AppHandle, transaction: Transaction) -> Result<i64, String> {
+    let path = get_db_path(&app);
+    let mut conn = Connection::open(&path).map_err(|e| e.to_string())?;
+    
+    // Create temporary transaction with a special flag
+    let transaction_type = transaction.transaction_type.to_string();
+    let amount = transaction.amount;
+    let payee = transaction.payee.to_string();
+    let notes = transaction.notes.clone();
+
+    if transaction_type == "Transfer" {
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        
+        // Generate transfer_id if not provided
+        let transfer_id = match transaction.transfer_id {
+            Some(id) => id,
+            None => {
+                let mut stmt = tx.prepare("SELECT COALESCE(MAX(transfer_id), 0) + 1 FROM transactions WHERE transfer_id IS NOT NULL")
+                    .map_err(|e| e.to_string())?;
+                stmt.query_row([], |row| row.get::<_, i64>(0))
+                    .map_err(|e| e.to_string())?
+            }
+        };
+
+        // Use to_account_id directly for arrival transaction
+        let to_id = transaction.to_account_id;
+
+        // Create departure transaction
+        let departure_amount = -amount.abs();
+        // notes에서 [TO_ACCOUNT_ID:x] 메타데이터 제거
+        let clean_notes = if let Some(notes_str) = &notes {
+            if let Some(end) = notes_str.find(']') {
+                notes_str[end+1..].trim().to_string()
+            } else {
+                notes_str.clone()
+            }
+        } else {
+            "".to_string()
+        };
+        
+        // Add temporary flag to notes
+        let temp_notes = format!("[TEMP] {}", clean_notes);
+        
+        tx.execute(
+            "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id, to_account_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                transaction.account_id,
+                transaction.category_id,
+                departure_amount,
+                transaction.date,
+                payee,
+                &temp_notes,
+                transaction_type,
+                transfer_id,
+                to_id, // departure에만 저장
+                transaction.attachment_path.clone()
+            ],
+        ).map_err(|e| e.to_string())?;
+
+        // Create arrival transaction if target account found
+        if let Some(to_id) = to_id {
+            let arrival_amount = amount.abs();
+            // notes에서 [TO_ACCOUNT_ID:x] 메타데이터 제거
+            let arrival_clean_notes = if let Some(notes_str) = &notes {
+                if let Some(end) = notes_str.find(']') {
+                    notes_str[end+1..].trim().to_string()
+                } else {
+                    notes_str.clone()
+                }
+            } else {
+                "".to_string()
+            };
+            
+            // Add temporary flag to notes
+            let arrival_temp_notes = format!("[TEMP] {}", arrival_clean_notes);
+            
+            tx.execute(
+                "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, transfer_id, to_account_id, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    to_id,
+                    transaction.category_id,
+                    arrival_amount,
+                    transaction.date,
+                    payee,
+                    &arrival_temp_notes,
+                    transaction_type,
+                    transfer_id,
+                    transaction.account_id, // arrival에 출발 계좌 저장
+                    transaction.attachment_path.clone()
+                ],
+            ).map_err(|e| {
+                e.to_string()
+            })?;
+        }
+        let commit_result = tx.commit();
+        commit_result.map_err(|e| e.to_string())?;
+        
+        // Get the last insert rowid from the connection after commit
+        Ok(conn.last_insert_rowid())
+    } else {
+        // Regular transaction
+        // Add temporary flag to notes
+        let temp_notes = format!("[TEMP] {}", notes.unwrap_or_default());
+        
+        conn.execute(
+            "INSERT INTO transactions (account_id, category_id, amount, date, payee, notes, type, attachment_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                transaction.account_id,
+                transaction.category_id,
+                amount,
+                transaction.date,
+                payee,
+                temp_notes,
+                transaction_type,
+                transaction.attachment_path.clone()
+            ],
+        ).map_err(|e| e.to_string())?;
+        
+        Ok(conn.last_insert_rowid())
+    }
+}
+
+#[tauri::command]
+pub fn delete_temp_transaction(app: AppHandle, id: i64) -> Result<(), String> {
+    let path = get_db_path(&app);
+    let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+    
+    // Check if this is a temporary transaction
+    let (is_temp, transfer_id) = {
+        let mut stmt = conn.prepare("SELECT notes, transfer_id FROM transactions WHERE id = ?1")
+            .map_err(|e| e.to_string())?;
+        let mut rows = stmt.query_map(params![id], |row| {
+            Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<i64>>(1)?))
+        }).map_err(|e| e.to_string())?;
+        let row = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
+        (row.0.map(|notes| notes.contains("[TEMP]")).unwrap_or(false), row.1)
+    };
+    
+    if !is_temp {
+        return Err("Not a temporary transaction".to_string());
+    }
+    
+    // Delete temporary transaction
+    if let Some(transfer_id) = transfer_id {
+        // Delete both sides of the transfer
+        conn.execute("DELETE FROM transactions WHERE transfer_id = ?1 AND notes LIKE '%[TEMP]%'", params![transfer_id])
+            .map_err(|e| e.to_string())?;
+    } else {
+        // Delete single transaction
+        conn.execute("DELETE FROM transactions WHERE id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_temp_transaction_to_permanent(app: AppHandle, id: i64) -> Result<(), String> {
+    let path = get_db_path(&app);
+    let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+    
+    // Remove [TEMP] flag from notes
+    let (notes, transfer_id) = {
+        let mut stmt = conn.prepare("SELECT notes, transfer_id FROM transactions WHERE id = ?1")
+            .map_err(|e| e.to_string())?;
+        let mut rows = stmt.query_map(params![id], |row| {
+            Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<i64>>(1)?))
+        }).map_err(|e| e.to_string())?;
+        let row = rows.next().ok_or("Transaction not found".to_string())?.map_err(|e| e.to_string())?;
+        (row.0, row.1)
+    };
+    
+    if let Some(transfer_id) = transfer_id {
+        // Update both sides of the transfer
+        let clean_notes = notes.map(|n| n.replace("[TEMP] ", "")).unwrap_or_default();
+        conn.execute(
+            "UPDATE transactions SET notes = ?1 WHERE transfer_id = ?2 AND notes LIKE '%[TEMP]%'",
+            params![clean_notes, transfer_id]
+        ).map_err(|e| e.to_string())?;
+    } else {
+        // Update single transaction
+        let clean_notes = notes.map(|n| n.replace("[TEMP] ", "")).unwrap_or_default();
+        conn.execute(
+            "UPDATE transactions SET notes = ?1 WHERE id = ?2",
+            params![clean_notes, id]
+        ).map_err(|e| e.to_string())?;
+    }
+    
+    Ok(())
 } 
 
  

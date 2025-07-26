@@ -89,6 +89,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     severity: 'success'
   });
 
+  // Add state for temporary transaction ID
+
+
   // Load all categories with type when dialog opens
   const loadCategoriesFull = async () => {
     try {
@@ -113,6 +116,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           }
         }, 100);
       }
+      // Reset temp transaction ID when dialog opens
+
     }
   }, [open, transaction]);
 
@@ -310,6 +315,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
 
     try {
+      // Always create new transaction (no temporary transaction handling)
       await onSave(finalTransaction);
       
       // If editing existing transaction, close the dialog
@@ -395,8 +401,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     setFormData(prev => ({ ...prev, amount }));
   };
 
+  const handleClose = async () => {
+    onClose();
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <form onSubmit={handleSubmit} noValidate>
         <DialogTitle>
           {transaction ? 'Edit Transaction' : 'Add New Transaction'}
@@ -688,6 +698,39 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           const file = e.target.files?.[0];
                           if (!file) return;
                           try {
+                            // If editing existing transaction, use its ID
+                            let transactionId = transaction?.id;
+                            
+                            // If creating new transaction, don't create temporary transaction
+                            // Just store the attachment path in memory
+                            if (!transaction) {
+                              // For PDF attachment, we need basic fields but not necessarily payee for Transfer transactions
+                              const basicErrors: Record<string, string> = {};
+                              if (!formData.date) basicErrors.date = 'Date is required';
+                              if (!formData.account_id) basicErrors.account_id = 'Account is required';
+                              if (!formData.type) basicErrors.type = 'Type is required';
+                              if (formData.amount === undefined || formData.amount === null) basicErrors.amount = 'Amount is required';
+                              
+                              // For Transfer transactions, also require to_account_id
+                              if (formData.type === 'Transfer' && !toAccountId) {
+                                basicErrors.to_account_id = 'Destination account is required';
+                              }
+                              
+                              // For non-Transfer transactions, require payee
+                              if (formData.type !== 'Transfer' && !formData.payee?.trim()) {
+                                basicErrors.payee = 'Description is required';
+                              }
+                              
+                              if (Object.keys(basicErrors).length > 0) {
+                                setErrors(basicErrors);
+                                setSnackbar({ open: true, message: 'Please fill in all required fields before attaching PDF', severity: 'error' });
+                                return;
+                              }
+                              
+                              // Don't create temporary transaction, just proceed with attachment
+                              transactionId = undefined;
+                            }
+                            
                             if (formData.attachment_path) {
                               await invoke('delete_transaction_attachment', {
                                 attachmentPath: formData.attachment_path
@@ -695,10 +738,31 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             }
                             const base64 = await fileToBase64(file);
                             const base64Data = base64.split(',')[1];
+                            // For new transactions, prepare the complete transaction data including to_account_id and auto-generated payee
+                            let transactionDataForBackend = null;
+                            if (!transaction) {
+                              let completeFormData = { ...formData };
+                              
+                              // For Transfer transactions, include to_account_id and auto-generated payee
+                              if (formData.type === 'Transfer' && toAccountId) {
+                                completeFormData.to_account_id = toAccountId;
+                                
+                                // Auto-generate payee (description) for Transfer transactions
+                                const fromAccount = accounts.find(acc => acc.id === formData.account_id);
+                                const toAccount = accounts.find(acc => acc.id === toAccountId);
+                                if (fromAccount && toAccount) {
+                                  completeFormData.payee = `[${fromAccount.name} → ${toAccount.name}]`;
+                                }
+                              }
+                              
+                              transactionDataForBackend = completeFormData;
+                            }
+                            
                             const result = await invoke<string>('save_transaction_attachment', {
                               fileName: file.name,
                               base64: base64Data,
-                              transactionId: transaction?.id || null
+                              transactionId: transactionId,
+                              transactionData: transactionDataForBackend
                             });
                             setFormData(prev => ({ ...prev, attachment_path: result }));
                           } catch (err) {
@@ -755,9 +819,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={handleClose}>Cancel</Button>
           {!transaction && (
-            <Button onClick={onClose} variant="outlined">
+            <Button onClick={handleClose} variant="outlined">
               Done
             </Button>
           )}

@@ -26,7 +26,7 @@ pub use accounts::{get_accounts, create_account, update_account, delete_account}
 pub use transactions::{
     get_transactions, create_transaction, update_transaction, delete_transaction,
     bulk_update_transactions, import_transactions, save_transaction_attachment, delete_transaction_attachment, open_transaction_attachment,
-    get_transaction_by_id, get_account_name_by_id
+    get_transaction_by_id, get_account_name_by_id, create_temp_transaction, delete_temp_transaction, update_temp_transaction_to_permanent
 };
 
 // Re-export category functions
@@ -95,6 +95,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             save_transaction_attachment,
             delete_transaction_attachment,
             open_transaction_attachment,
+            create_temp_transaction,
+            delete_temp_transaction,
+            update_temp_transaction_to_permanent,
             get_budgets,
             add_budget,
             update_budget,
