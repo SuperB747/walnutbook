@@ -182,8 +182,6 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
         
         // If day_of_month is INTEGER, we need to migrate it to TEXT
         if day_of_month_type == "INTEGER" {
-            println!("Migrating day_of_month from INTEGER to TEXT...");
-            
             // First, backup existing data
             let mut backup_stmt = conn.prepare("SELECT id, day_of_month FROM recurring_items").map_err(|e| e.to_string())?;
             let backup_data: Vec<(i64, i32)> = backup_stmt
@@ -220,17 +218,14 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
             // Copy data from old table to new table, converting day_of_month to JSON format
             let mut copy_stmt = conn.prepare("INSERT INTO recurring_items_new (id, name, amount, type, category_id, account_id, day_of_month, is_active, notes, created_at, repeat_type, start_date, interval_value, interval_unit) SELECT id, name, amount, type, category_id, account_id, ?, is_active, notes, created_at, repeat_type, start_date, interval_value, interval_unit FROM recurring_items").map_err(|e| e.to_string())?;
             
-            for (id, day_of_month) in backup_data {
+            for (_id, day_of_month) in backup_data {
                 let json_array = format!("[{}]", day_of_month);
                 copy_stmt.execute(rusqlite::params![json_array]).map_err(|e| e.to_string())?;
-                println!("Migrated recurring item {}: {} -> {}", id, day_of_month, json_array);
             }
             
             // Drop old table and rename new table
             conn.execute("DROP TABLE recurring_items", []).map_err(|e| e.to_string())?;
             conn.execute("ALTER TABLE recurring_items_new RENAME TO recurring_items", []).map_err(|e| e.to_string())?;
-            
-            println!("Successfully migrated day_of_month from INTEGER to TEXT");
         } else {
             // Add missing columns if they don't exist
             if !existing.contains(&"repeat_type".to_string()) {
@@ -288,7 +283,6 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
                     "UPDATE recurring_items SET day_of_month = ? WHERE id = ?",
                     rusqlite::params![json_array, id],
                 ).map_err(|e| e.to_string())?;
-                println!("Migrated recurring item {}: {} -> {}", id, day_of_month, json_array);
             } else if !day_of_month.starts_with('[') || !day_of_month.ends_with(']') {
                 // If it's not a valid JSON array, convert to default format
                 let json_array = "[1]".to_string();
@@ -296,7 +290,6 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
                     "UPDATE recurring_items SET day_of_month = ? WHERE id = ?",
                     rusqlite::params![json_array, id],
                 ).map_err(|e| e.to_string())?;
-                println!("Fixed invalid day_of_month format for item {}: {} -> {}", id, day_of_month, json_array);
             }
         }
     }
@@ -363,7 +356,6 @@ pub fn init_db(app: &AppHandle) -> Result<(), String> {
                         "DELETE FROM recurring_checks WHERE occurrence_id = ?",
                         rusqlite::params![old_occurrence_id],
                     ).map_err(|e| e.to_string())?;
-                    println!("Cleaned up old occurrence_id format: {}", old_occurrence_id);
                 }
             }
         }
@@ -444,35 +436,48 @@ pub fn home_dir() -> Result<String, String> {
 
 #[tauri::command]
 pub fn get_onedrive_path() -> Result<String, String> {
-    let home = home_dir()?;
+    let home = match home_dir() {
+        Ok(home_path) => home_path,
+        Err(e) => return Err(e)
+    };
+    
     if cfg!(target_os = "macos") {
         let mac_paths = [
             format!("{}/OneDrive", home),
             format!("{}/Library/CloudStorage/OneDrive-개인", home),
             format!("{}/Library/CloudStorage/OneDrive", home),
         ];
-        for path in &mac_paths {
+        for path in mac_paths.iter() {
             if std::path::Path::new(path).exists() {
                 return Ok(path.clone());
             }
         }
         return Err("OneDrive 폴더를 찾을 수 없습니다.".to_string());
     }
+    
     // Windows 등 기존 로직 유지
     let onedrive_path = if cfg!(target_os = "windows") {
         format!("{}\\OneDrive", home)
     } else {
         format!("{}/OneDrive", home)
     };
+    
     Ok(onedrive_path)
 }
 
 #[tauri::command]
 pub fn get_onedrive_data_dir() -> Result<std::path::PathBuf, String> {
-    let onedrive_path = get_onedrive_path()?;
+    let onedrive_path = match get_onedrive_path() {
+        Ok(path) => path,
+        Err(e) => return Err(e)
+    };
+    
     let data_dir = std::path::Path::new(&onedrive_path).join("WalnutBook_Data");
-    std::fs::create_dir_all(&data_dir).map_err(|e| format!("Failed to create WalnutBook_Data dir: {}", e))?;
-    Ok(data_dir)
+    
+    match std::fs::create_dir_all(&data_dir) {
+        Ok(_) => Ok(data_dir),
+        Err(e) => Err(format!("Failed to create WalnutBook_Data dir: {} (path: {:?})", e, data_dir))
+    }
 }
 
 #[tauri::command]
@@ -485,10 +490,17 @@ pub fn get_onedrive_backups_dir() -> Result<std::path::PathBuf, String> {
 
 #[tauri::command]
 pub fn get_onedrive_attachments_dir() -> Result<std::path::PathBuf, String> {
-    let data_dir = get_onedrive_data_dir()?;
+    let data_dir = match get_onedrive_data_dir() {
+        Ok(dir) => dir,
+        Err(e) => return Err(e)
+    };
+    
     let attachments_dir = data_dir.join("Attachments");
-    std::fs::create_dir_all(&attachments_dir).map_err(|e| format!("Failed to create Attachments dir: {}", e))?;
-    Ok(attachments_dir)
+    
+    match std::fs::create_dir_all(&attachments_dir) {
+        Ok(_) => Ok(attachments_dir),
+        Err(e) => Err(format!("Failed to create Attachments dir: {} (path: {:?})", e, attachments_dir))
+    }
 }
 
 #[tauri::command]
@@ -499,4 +511,34 @@ pub fn reset_database(app: AppHandle) -> Result<(), String> {
     // Re-initialize database schema and defaults
     init_db(&app)?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn test_onedrive_path() -> Result<String, String> {
+    let home = match home_dir() {
+        Ok(home_path) => home_path,
+        Err(e) => return Err(format!("Home directory error: {}", e))
+    };
+    
+    let onedrive_path = match get_onedrive_path() {
+        Ok(path) => path,
+        Err(e) => return Err(format!("OneDrive path error: {}", e))
+    };
+    
+    let data_dir = match get_onedrive_data_dir() {
+        Ok(dir) => dir,
+        Err(e) => return Err(format!("WalnutBook_Data directory error: {}", e))
+    };
+    
+    let attachments_dir = match get_onedrive_attachments_dir() {
+        Ok(dir) => dir,
+        Err(e) => return Err(format!("Attachments directory error: {}", e))
+    };
+    
+    let result = format!(
+        "SUCCESS:\nHome: {}\nOneDrive: {}\nWalnutBook_Data: {:?}\nAttachments: {:?}",
+        home, onedrive_path, data_dir, attachments_dir
+    );
+    
+    Ok(result)
 } 

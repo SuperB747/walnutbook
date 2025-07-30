@@ -277,7 +277,7 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
                 e.to_string()
             })?;
         } else {
-            println!("[DEBUG] No to_account_id found, skipping arrival transaction");
+            // No to_account_id found, skipping arrival transaction
         }
         
         tx.commit().map_err(|e| e.to_string())?;
@@ -398,7 +398,7 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
             if let Some(other_id) = other_transaction {
                 tx.execute("DELETE FROM transactions WHERE id = ?1", params![other_id]).map_err(|e| e.to_string())?;
             } else {
-                println!("[DEBUG] Deleted single legacy transfer: {}", id);
+                // Deleted single legacy transfer
             }
         }
         
@@ -636,6 +636,17 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
         .and_then(|ext| ext.to_str())
         .unwrap_or("pdf");
     
+    // 파일명에서 사용할 수 없는 문자들을 안전한 문자로 변환하는 함수
+    fn sanitize_filename(filename: &str) -> String {
+        filename
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' || c == '.' { c } else { '_' })
+            .collect::<String>()
+            .trim()
+            .replace("  ", " ")
+            .replace(" ", "_")
+    }
+
     let new_file_name = if let Some(id) = transaction_id {
         // 기존 트랜잭션: Transaction 정보 가져오기
         let transaction = get_transaction_by_id(app.clone(), id)?;
@@ -649,8 +660,8 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
                 chrono::Utc::now().format("%Y%m%d").to_string()
             };
             
-            // Description 생성 (payee 사용)
-            let description = txn.payee.trim();
+            // Description 생성 (payee 사용) - 파일명 안전화
+            let description = sanitize_filename(&txn.payee.trim());
             
             // 새 파일명 생성: YYYYMMDD-Description.확장자
             format!("{}-{}.{}", formatted_date, description, extension)
@@ -672,8 +683,8 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
             chrono::Utc::now().format("%Y%m%d").to_string()
         };
         
-        // Description 생성 (payee 사용)
-        let description = payee.trim();
+        // Description 생성 (payee 사용) - 파일명 안전화
+        let description = sanitize_filename(&payee.trim());
         
         // 새 파일명 생성: YYYYMMDD-Description.확장자
         format!("{}-{}.{}", formatted_date, description, extension)
@@ -688,14 +699,10 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
         // 기존 트랜잭션: DB에서 정보 가져오기
         let transaction = get_transaction_by_id(app.clone(), id)?;
         if let Some(txn) = transaction {
-            println!("[DEBUG] Transaction ID: {}, Type: {}, Account ID: {}, To Account ID: {:?}", 
-                id, txn.transaction_type, txn.account_id, txn.to_account_id);
-            
             // Transfer 거래인 경우 도착 계좌(to_account_id)를 사용, 그렇지 않으면 출발 계좌(account_id) 사용
             let target_account_id = if txn.transaction_type == "Transfer" {
                 // Transfer 거래의 경우 도착 계좌(to_account_id)를 우선적으로 사용
                 if let Some(to_id) = txn.to_account_id {
-                    println!("[DEBUG] Transfer transaction, using to_account_id: {}", to_id);
                     to_id
                 } else {
                     // 같은 transfer_id를 가진 다른 트랜잭션에서 도착 계좌 찾기
@@ -703,7 +710,6 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
                     let conn = Connection::open(path).map_err(|e| e.to_string())?;
                     
                     if let Some(transfer_id) = txn.transfer_id {
-                        println!("[DEBUG] Looking for arrival account in transfer_id: {}", transfer_id);
                         // Transfer 거래에서 양수 금액(도착 거래)을 가진 거래의 account_id를 찾기
                         let mut stmt = conn.prepare(
                             "SELECT account_id FROM transactions WHERE transfer_id = ? AND amount > 0 LIMIT 1"
@@ -712,25 +718,19 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
                         let mut rows = stmt.query(params![transfer_id]).map_err(|e| e.to_string())?;
                         if let Some(row) = rows.next().map_err(|e| e.to_string())? {
                             let arrival_account_id: i64 = row.get(0).map_err(|e| e.to_string())?;
-                            println!("[DEBUG] Found arrival account_id: {}", arrival_account_id);
                             arrival_account_id
                         } else {
-                            println!("[DEBUG] No arrival transaction found, using current account_id: {}", txn.account_id);
                             txn.account_id
                         }
                     } else {
-                        println!("[DEBUG] No transfer_id, using account_id: {}", txn.account_id);
                         txn.account_id
                     }
                 }
             } else {
-                println!("[DEBUG] Non-transfer transaction, using account_id: {}", txn.account_id);
                 txn.account_id
             };
             
-            println!("[DEBUG] Final target_account_id: {}", target_account_id);
             let account_name = get_account_name_by_id(app.clone(), target_account_id)?;
-            println!("[DEBUG] Account name: {}", account_name);
             // 특수문자 제거 및 안전한 폴더명 생성
             let safe_account_name = account_name
                 .chars()
@@ -739,7 +739,6 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
                 .trim()
                 .replace("  ", " ")
                 .replace(" ", "_");
-            println!("[DEBUG] Safe account name: {}", safe_account_name);
             safe_account_name
         } else {
             "Unknown".to_string()
@@ -750,26 +749,18 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
         let account_id = data.get("account_id").and_then(|v| v.as_i64()).unwrap_or(0);
         let to_account_id = data.get("to_account_id").and_then(|v| v.as_i64());
         
-        println!("[DEBUG] New transaction - Type: {}, Account ID: {}, To Account ID: {:?}", 
-            transaction_type, account_id, to_account_id);
-        
         // Transfer 거래인 경우 도착 계좌(to_account_id)를 사용, 그렇지 않으면 출발 계좌(account_id) 사용
         let target_account_id = if transaction_type == "Transfer" {
             if let Some(to_id) = to_account_id {
-                println!("[DEBUG] New Transfer transaction, using to_account_id: {}", to_id);
                 to_id
             } else {
-                println!("[DEBUG] New Transfer transaction, no to_account_id, using account_id: {}", account_id);
                 account_id
             }
         } else {
-            println!("[DEBUG] New non-transfer transaction, using account_id: {}", account_id);
             account_id
         };
         
-        println!("[DEBUG] Final target_account_id: {}", target_account_id);
         let account_name = get_account_name_by_id(app.clone(), target_account_id)?;
-        println!("[DEBUG] Account name: {}", account_name);
         // 특수문자 제거 및 안전한 폴더명 생성
         let safe_account_name = account_name
             .chars()
@@ -778,7 +769,6 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
             .trim()
             .replace("  ", " ")
             .replace(" ", "_");
-        println!("[DEBUG] Safe account name: {}", safe_account_name);
         safe_account_name
     } else {
         "Unknown".to_string()
@@ -786,18 +776,28 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
     
     // Account 서브폴더 경로 생성
     let account_dir = attachments_dir.join(&account_subfolder);
-    println!("[DEBUG] Creating directory: {:?}", account_dir);
-    std::fs::create_dir_all(&account_dir).map_err(|e| format!("서브폴더 생성 실패: {}", e))?;
+    
+    match std::fs::create_dir_all(&account_dir) {
+        Ok(_) => (),
+        Err(e) => {
+            return Err(format!("서브폴더 생성 실패: {} (path: {:?})", e, account_dir));
+        }
+    }
     
     // 파일 저장
     let dest_path = account_dir.join(&new_file_name);
-    println!("[DEBUG] Saving file to: {:?}", dest_path);
+    
     let bytes = STANDARD.decode(&base64).map_err(|e| format!("base64 디코딩 실패: {}", e))?;
-    std::fs::write(&dest_path, bytes).map_err(|e| format!("파일 저장 실패: {}", e))?;
+    
+    match std::fs::write(&dest_path, bytes) {
+        Ok(_) => (),
+        Err(e) => {
+            return Err(format!("파일 저장 실패: {} (path: {:?})", e, dest_path));
+        }
+    }
     
     // 상대 경로 반환: Attachments/AccountName/filename.pdf
     let relative_path = format!("Attachments/{}/{}", account_subfolder, new_file_name);
-    println!("[DEBUG] Returning relative path: {}", relative_path);
     Ok(relative_path)
 }
 

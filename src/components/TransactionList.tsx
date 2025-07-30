@@ -161,7 +161,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
   };
 
   // 필터 초기화
-  const handleClearFilters = () => setFilter({ searchTerm: '', types: [], categories: [], accounts: [], currentMonth: false, currentYear: false, hasAttachment: false });
+  const handleClearFilters = () => {
+    setFilter({ searchTerm: '', types: [], categories: [], accounts: [], currentMonth: false, currentYear: false, hasAttachment: false });
+    setSearchInput('');
+  };
 
   // 기타 유틸
   const getDisplayPayee = (transaction: Transaction) => {

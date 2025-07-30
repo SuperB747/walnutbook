@@ -765,9 +765,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                               transactionData: transactionDataForBackend
                             });
                             setFormData(prev => ({ ...prev, attachment_path: result }));
-                          } catch (err) {
-                            setSnackbar({ open: true, message: 'PDF 첨부 실패: ' + err, severity: 'error' });
-                          }
+                                                                             } catch (err) {
+                          setSnackbar({ open: true, message: 'PDF 첨부 실패: ' + err, severity: 'error' });
+                        }
                         }}
                       />
                     </Button>
@@ -782,9 +782,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                 attachmentPath: formData.attachment_path
                               });
                               setFormData(prev => ({ ...prev, attachment_path: undefined }));
-                            } catch (err) {
-                              setSnackbar({ open: true, message: 'PDF 삭제 실패: ' + err, severity: 'error' });
-                            }
+                                                                                 } catch (err) {
+                          setSnackbar({ open: true, message: 'PDF 삭제 실패: ' + err, severity: 'error' });
+                        }
                           }}
                         >
                           Delete PDF
@@ -793,9 +793,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           variant="text"
                           onClick={async () => {
                             // PDF 미리보기(새 창)
-                            await invoke('open_transaction_attachment', {
-                              attachmentPath: formData.attachment_path
-                            });
+                            try {
+                              await invoke('open_transaction_attachment', {
+                                attachmentPath: formData.attachment_path
+                              });
+                                                                                 } catch (err) {
+                          setSnackbar({ open: true, message: 'PDF 미리보기 실패: ' + err, severity: 'error' });
+                        }
                           }}
                         >
                           View PDF

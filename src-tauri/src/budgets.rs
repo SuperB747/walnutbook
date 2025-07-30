@@ -81,7 +81,7 @@ pub fn delete_budget(app: AppHandle, id: i64, current_month: String) -> Result<V
     }
     
     // Get budget info for logging
-    let budget_info: Result<(i64, String), _> = conn.query_row(
+    let _budget_info: Result<(i64, String), _> = conn.query_row(
         "SELECT category_id, month FROM budgets WHERE id = ?1",
         params![id],
         |row| Ok((row.get(0)?, row.get(1)?)),
@@ -98,10 +98,7 @@ pub fn delete_budget(app: AppHandle, id: i64, current_month: String) -> Result<V
         return Err(format!("Failed to delete budget with id {}", id));
     }
     
-    // Log successful deletion
-    if let Ok((category_id, month)) = budget_info {
-        println!("Successfully deleted budget: id={}, category_id={}, month={}", id, category_id, month);
-    }
+    // Budget successfully deleted
     
     get_budgets(app, current_month)
 } 

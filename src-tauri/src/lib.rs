@@ -17,7 +17,7 @@ use tauri::Manager;
 pub use models::{Account, Transaction, Category, Budget, AccountImportSettings, RecurringItem};
 
 // Re-export utility functions
-pub use utils::{init_db, home_dir, get_onedrive_path, reset_database};
+pub use utils::{init_db, home_dir, get_onedrive_path, reset_database, test_onedrive_path};
 
 // Re-export account functions
 pub use accounts::{get_accounts, create_account, update_account, delete_account};
@@ -131,6 +131,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             home_dir,
             get_onedrive_path,
             reset_database,
+            test_onedrive_path,
             reminders::get_reminders,
             reminders::add_reminder,
             reminders::update_reminder,
