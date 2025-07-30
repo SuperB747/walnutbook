@@ -52,8 +52,5 @@
       "open": true,
       "save": true
     }
-  },
-  "updater": {
-    "active": false
   }
 }
