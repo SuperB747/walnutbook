@@ -325,7 +325,7 @@ const ReminderPage: React.FC = () => {
     <Container maxWidth="lg">
       <Box sx={{ display: 'flex', gap: 3, py: 4 }}>
         {/* 좌측: 리스트 */}
-        <Paper sx={{ minWidth: 400, maxWidth: 520, flex: '0 0 440px', p: 2, bgcolor: '#fafbfc', borderRadius: 3, boxShadow: 2 }}>
+        <Paper sx={{ minWidth: 400, maxWidth: 520, flex: '0 0 440px', p: 2, borderRadius: 3, boxShadow: 2 }}>
           <Typography variant="h6" sx={{ mb: 2 }}>Reminders</Typography>
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()} sx={{ mb: 2, width: '100%' }}>
             Add Reminder
@@ -345,7 +345,7 @@ const ReminderPage: React.FC = () => {
                     <Typography
                       variant="body2"
                       sx={{
-                        color: getDueInDays(reminder.next_payment_date).includes('Overdue') ? '#d32f2f' : '#1976d2',
+                        color: getDueInDays(reminder.next_payment_date).includes('Overdue') ? 'error.main' : 'primary.main',
                         fontWeight: 500,
                         ml: 'auto',
                         textAlign: 'right',
@@ -364,14 +364,14 @@ const ReminderPage: React.FC = () => {
                       color="default"
                       onClick={e => { e.stopPropagation(); handleOpenDialog(reminder); }}
                       sx={{
-                        color: '#1976d2',
+                        color: 'primary.main',
                         background: 'transparent',
                         transition: 'background 0.2s',
                         '&:hover': {
-                          background: 'rgba(25, 118, 210, 0.08)',
-                          color: '#1976d2'
+                          background: 'action.hover',
+                          color: 'primary.main'
                         },
-                        '& svg': { color: '#1976d2 !important' }
+                        '& svg': { color: 'primary.main !important' }
                       }}
                     >
                       <EditIcon fontSize="small" />
@@ -383,14 +383,14 @@ const ReminderPage: React.FC = () => {
                       color="default"
                       onClick={e => { e.stopPropagation(); handleDelete(reminder.id); }}
                       sx={{
-                        color: '#d32f2f',
+                        color: 'error.main',
                         background: 'transparent',
                         transition: 'background 0.2s',
                         '&:hover': {
-                          background: 'rgba(211, 47, 47, 0.08)',
-                          color: '#d32f2f'
+                          background: 'action.hover',
+                          color: 'error.main'
                         },
-                        '& svg': { color: '#d32f2f !important' }
+                        '& svg': { color: 'error.main !important' }
                       }}
                     >
                       <DeleteIcon fontSize="small" />
@@ -427,12 +427,12 @@ const ReminderPage: React.FC = () => {
                        textTransform: 'none',
                        fontWeight: 600,
                        fontSize: '0.875rem',
-                       borderColor: '#4caf50',
-                       color: '#4caf50',
+                       borderColor: 'success.main',
+                       color: 'success.main',
                        '&:hover': {
-                         borderColor: '#388e3c',
-                         color: '#388e3c',
-                         bgcolor: 'rgba(76, 175, 80, 0.04)'
+                         borderColor: 'success.dark',
+                         color: 'success.dark',
+                         bgcolor: 'success.light'
                        }
                      }}
                    >
@@ -442,7 +442,7 @@ const ReminderPage: React.FC = () => {
                 <Typography variant="subtitle1" sx={{ mt: 1, fontWeight: 500 }}>
                   Statement Date: {selectedReminder.statement_date}
                 </Typography>
-                <Typography variant="body2" sx={{ mt: 1, color: statementBalance !== null ? (statementBalance < 0 ? '#d32f2f' : '#1976d2') : '#888', fontWeight: 600 }}>
+                <Typography variant="body2" sx={{ mt: 1, color: statementBalance !== null ? (statementBalance < 0 ? 'error.main' : 'primary.main') : 'text.secondary', fontWeight: 600 }}>
                   Statement Balance: {(() => {
                     return statementBalance !== null ? `${statementBalance < 0 ? '-' : ''}$${Math.abs(statementBalance).toFixed(2)}` : '--';
                   })()}
@@ -457,21 +457,30 @@ const ReminderPage: React.FC = () => {
                 <List dense>
                   {paymentHistory.length === 0 && <ListItem><ListItemText primary="No payment history." /></ListItem>}
                   {paymentHistory.map(h => (
-                    <ListItem key={h.id} sx={{ bgcolor: h.is_paid ? '#e0ffe0' : '#ffe0e0', borderRadius: 1, mb: 0.5, display: 'flex', alignItems: 'center', gap: 2, py: 0.5 }}
+                    <ListItem key={h.id} sx={{ 
+                      bgcolor: h.is_paid ? 'success.light' : 'error.light',
+                      color: h.is_paid ? 'success.contrastText' : 'error.contrastText',
+                      borderRadius: 1, 
+                      mb: 0.5, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 2, 
+                      py: 0.5 
+                    }}
                       secondaryAction={
                         <IconButton
                           edge="end"
                           aria-label="delete"
                           onClick={() => handleDeletePaymentHistory(h.id)}
                           sx={{
-                            color: '#d32f2f',
+                            color: 'error.main',
                             background: 'transparent',
                             transition: 'background 0.2s',
                             '&:hover': {
-                              background: 'rgba(211, 47, 47, 0.08)',
-                              color: '#d32f2f'
+                              background: 'action.hover',
+                              color: 'error.main'
                             },
-                            '& svg': { color: '#d32f2f !important' }
+                            '& svg': { color: 'error.main !important' }
                           }}
                         >
                           <DeleteIcon />
@@ -484,7 +493,7 @@ const ReminderPage: React.FC = () => {
                             <Typography variant="body2" sx={{ minWidth: 120, fontWeight: 500 }}>
                               Statement Date: {h.statement_date || h.paid_date}
                             </Typography>
-                            <Typography variant="body2" sx={{ color: h.is_paid ? '#388e3c' : '#d32f2f', fontWeight: 700, minWidth: 40 }}>
+                            <Typography variant="body2" sx={{ color: h.is_paid ? 'success.main' : 'error.main', fontWeight: 700, minWidth: 40 }}>
                               {h.is_paid ? 'PAID' : 'UNPAID'}
                             </Typography>
                             {/* Note inline edit */}

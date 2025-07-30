@@ -177,7 +177,6 @@ const getTheme = (mode: 'light' | 'dark') =>
       MuiPaper: {
         styleOverrides: {
           root: {
-            backgroundColor: mode === 'light' ? '#fff' : '#1e1e1e',
             borderRadius: 16,
             boxShadow: mode === 'light'
               ? '0 4px 20px rgba(35, 64, 117, 0.12)'

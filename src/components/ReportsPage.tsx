@@ -491,7 +491,7 @@ const ReportsPage: React.FC = () => {
   );
   const monthlyCategoryData = filteredMonthlyCategoryRaw.map(item => item.amount);
   const monthlyCategoryColors = filteredMonthlyCategoryRaw.map(
-    item => categoryIdToColor.get(item.id) || '#E0E0E0'
+                    item => categoryIdToColor.get(item.id) || theme.palette.grey[300]
   );
   // Custom legend for Doughnut chart
   const legendCount = monthlyCategoryLabels.length;
@@ -500,6 +500,13 @@ const ReportsPage: React.FC = () => {
   const leftColors = monthlyCategoryColors.slice(0, legendMid);
   const rightLabels = monthlyCategoryLabels.slice(legendMid);
   const rightColors = monthlyCategoryColors.slice(legendMid);
+  
+
+  
+
+  
+
+  
   const doughnutRef = useRef<any>(null);
   const handleLegendHover = (label: string) => {
     const chart = doughnutRef.current;
@@ -717,12 +724,12 @@ const ReportsPage: React.FC = () => {
       {
         label: 'Income',
         data: monthlyAggregates.map(m => m.income),
-        backgroundColor: theme.palette.primary.main
+        backgroundColor: '#B6C9A9'
       },
       {
         label: 'Expense',
         data: monthlyAggregates.map(m => Math.abs(m.expense)),
-        backgroundColor: theme.palette.error.main
+        backgroundColor: '#FF9AA2'
       }
     ]
   };
@@ -784,7 +791,7 @@ const ReportsPage: React.FC = () => {
     item => categories.find(c => c.id === item.id)?.name || ''
   );
   const yearlyCategoryData = filteredYearlyCategoryRaw.map(item => item.amount);
-  const yearlyCategoryColors = yearlyCategoryRaw.map(i => categoryIdToColor.get(i.id) || '#E0E0E0');
+  const yearlyCategoryColors = yearlyCategoryRaw.map(i => categoryIdToColor.get(i.id) || theme.palette.grey[300]);
   const yearlyDoughnutRef = useRef<any>(null);
   // Prepare yearly doughnut data and legend
   const yearlyDoughnutData = useMemo(() => ({
@@ -1210,13 +1217,14 @@ const ReportsPage: React.FC = () => {
               color: 'text.primary',
             },
             '&.Mui-selected': {
-              backgroundColor: '#1976d2',
-              color: 'white',
+              backgroundColor: 'primary.main',
+              color: 'primary.contrastText',
               boxShadow: '0 2px 12px rgba(35, 64, 117, 0.10)',
               zIndex: 1,
             },
           },
-          borderBottom: '2px solid #1976d2',
+          borderBottom: '2px solid',
+          borderBottomColor: 'primary.main',
         }}
       >
         <Tab label="Monthly" />
@@ -1279,15 +1287,27 @@ const ReportsPage: React.FC = () => {
                 width: '100%',
                 overflow: 'hidden'
               }}>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 30%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <Paper sx={{ 
+                  p: 2, 
+                  minHeight: 360, 
+                  flex: '1 1 30%', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  minWidth: 0, 
+                  bgcolor: theme => theme.palette.background.paper,
+                  backgroundColor: theme => theme.palette.background.paper,
+                  '& .MuiPaper-root': {
+                    backgroundColor: theme => theme.palette.background.paper
+                  }
+                }}>
                   <Typography variant="h6" gutterBottom>Income vs Expense</Typography>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 2 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
-                      Income: {safeFormatCurrency(actualMonthlySummary.income)}
-                    </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
-                                              Expense: {safeFormatCurrency(actualMonthlySummary.expense)}
-                    </Typography>
+                                         <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: 'success.main', fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                       Income: {safeFormatCurrency(actualMonthlySummary.income)}
+                     </Typography>
+                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: 'error.main', fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                       Expense: {safeFormatCurrency(actualMonthlySummary.expense)}
+                     </Typography>
                                           <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (actualMonthlySummary.income + actualMonthlySummary.expense) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
                         Net: {safeFormatCurrency(actualMonthlySummary.income + actualMonthlySummary.expense)}
                     </Typography>
@@ -1298,7 +1318,7 @@ const ReportsPage: React.FC = () => {
                         labels: ['Income', 'Expense'],
                         datasets: [{
                           data: [actualMonthlySummary.income, Math.abs(actualMonthlySummary.expense)],
-                          backgroundColor: [theme.palette.primary.main, theme.palette.error.main]
+                          backgroundColor: ['#B6C9A9', '#FF9AA2']
                         }]
                       }}
                       options={{
@@ -1317,7 +1337,17 @@ const ReportsPage: React.FC = () => {
                     />
                   </Box>
                 </Paper>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 40%', minWidth: 0 }}>
+                <Paper sx={{ 
+                  p: 2, 
+                  minHeight: 360, 
+                  flex: '1 1 40%', 
+                  minWidth: 0, 
+                  bgcolor: theme => theme.palette.background.paper,
+                  backgroundColor: theme => theme.palette.background.paper,
+                  '& .MuiPaper-root': {
+                    backgroundColor: theme => theme.palette.background.paper
+                  }
+                }}>
                   <Typography variant="h6" gutterBottom>Category Breakdown</Typography>
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'center' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mr: 2 }}>
@@ -1382,7 +1412,19 @@ const ReportsPage: React.FC = () => {
                     </Box>
                   </Box>
                 </Paper>
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 30%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <Paper sx={{ 
+                  p: 2, 
+                  minHeight: 360, 
+                  flex: '1 1 30%', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  minWidth: 0, 
+                  bgcolor: theme => theme.palette.background.paper,
+                  backgroundColor: theme => theme.palette.background.paper,
+                  '& .MuiPaper-root': {
+                    backgroundColor: theme => theme.palette.background.paper
+                  }
+                }}>
                   <Typography variant="h6" gutterBottom>Yearly Summary</Typography>
                   <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
                     <Bar
@@ -1415,7 +1457,17 @@ const ReportsPage: React.FC = () => {
               </Box>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 2 }}>
+              <Paper sx={{ 
+                p: 2, 
+                bgcolor: theme => theme.palette.background.paper,
+                backgroundColor: theme => theme.palette.background.paper,
+                '& .MuiPaper-root': {
+                  backgroundColor: theme => theme.palette.background.paper
+                },
+                '&': {
+                  backgroundColor: theme => theme.palette.background.paper + ' !important'
+                }
+              }}>
                 <Typography variant="h6" gutterBottom>Category Details</Typography>
                 <TableContainer sx={{ width: '100%' }}>
                   <Table
@@ -1595,7 +1647,7 @@ const ReportsPage: React.FC = () => {
                                     {displayNote && (
                                       <Typography component="span" sx={(theme) => ({
                                         fontSize: '0.68rem',
-                                        color: theme.palette.mode === 'light' ? '#0288d1' : '#FFA500',
+                                        color: theme.palette.mode === 'light' ? 'primary.main' : 'warning.main',
                                         fontWeight: 500,
                                       })}>
                                         {' '}[{displayNote}]
@@ -1614,7 +1666,18 @@ const ReportsPage: React.FC = () => {
                  </Paper>
                  </Popper>
                </Paper>
-               <Paper sx={{ p: 2, mt: 2 }}>
+               <Paper sx={{ 
+                 p: 2, 
+                 mt: 2, 
+                 bgcolor: theme => theme.palette.background.paper,
+                 backgroundColor: theme => theme.palette.background.paper,
+                 '& .MuiPaper-root': {
+                   backgroundColor: theme => theme.palette.background.paper
+                 },
+                 '&': {
+                   backgroundColor: theme => theme.palette.background.paper + ' !important'
+                 }
+               }}>
                  <Typography variant="h6" gutterBottom>Budget Alerts</Typography>
                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1, mt: -1 }}>
                    Overusage: Amount spent over budget for each category.
@@ -1639,17 +1702,32 @@ const ReportsPage: React.FC = () => {
                  )}
                </Paper>
              </Grid>
-             <Grid item xs={12} md={6}>
-               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                 <Paper sx={{ p: 2 }}>
+             <Grid item xs={12} md={6} sx={{ backgroundColor: theme => theme.palette.background.paper }}>
+               <Box sx={{ 
+                 display: 'flex', 
+                 flexDirection: 'column', 
+                 gap: 2,
+                 backgroundColor: theme => theme.palette.background.paper
+               }}>
+                 <Paper sx={{ 
+                   p: 2, 
+                   bgcolor: theme => theme.palette.background.paper,
+                   backgroundColor: theme => theme.palette.background.paper,
+                   '& .MuiPaper-root': {
+                     backgroundColor: theme => theme.palette.background.paper
+                   },
+                   '&': {
+                     backgroundColor: theme => theme.palette.background.paper + ' !important'
+                   }
+                 }}>
                    <Typography variant="h6" gutterBottom>Monthly Progress</Typography>
                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                      {/* Current Net Amount */}
                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                         Current Net: <span style={{ color: (actualMonthlySummary.income + actualMonthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f' }}>
+                         Current Net: <Box component="span" sx={{ color: (actualMonthlySummary.income + actualMonthlySummary.expense) >= 0 ? 'success.main' : 'error.main' }}>
                            {safeFormatCurrency(actualMonthlySummary.income + actualMonthlySummary.expense)}
-                         </span>
+                         </Box>
                        </Typography>
                        <Typography variant="body2" color="text.secondary">
                          {(() => {
@@ -1679,9 +1757,9 @@ const ReportsPage: React.FC = () => {
                      {monthlyRecurringAmount !== 0 && (
                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                          <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                           Recurring Total: <span style={{ color: monthlyRecurringAmount >= 0 ? '#388e3c' : '#d32f2f' }}>
+                           Recurring Total: <Box component="span" sx={{ color: monthlyRecurringAmount >= 0 ? 'success.main' : 'error.main' }}>
                              {monthlyRecurringAmount >= 0 ? '+' : ''}{safeFormatCurrency(monthlyRecurringAmount)}
-                           </span>
+                           </Box>
                          </Typography>
                        </Box>
                      )}
@@ -1689,9 +1767,9 @@ const ReportsPage: React.FC = () => {
                      {/* Predicted Net Amount */}
                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                         Predicted Net: <span style={{ color: (predictedMonthlySummary.income + predictedMonthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f' }}>
+                         Predicted Net: <Box component="span" sx={{ color: (predictedMonthlySummary.income + predictedMonthlySummary.expense) >= 0 ? 'success.main' : 'error.main' }}>
                            {safeFormatCurrency(predictedMonthlySummary.income + predictedMonthlySummary.expense)}
-                         </span>
+                         </Box>
                        </Typography>
                        <Typography variant="body2" color="text.secondary">
                          Including recurring items
@@ -1706,7 +1784,7 @@ const ReportsPage: React.FC = () => {
                          <Typography variant="subtitle2" color="success.main" sx={{ fontWeight: 'bold', mb: 1 }}>
                            Recurring Income
                          </Typography>
-                         <List dense sx={{ bgcolor: 'grey.50', borderRadius: 1 }}>
+                         <List dense sx={{ bgcolor: theme => theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[100], borderRadius: 1 }}>
                            {recurringIncomeItems.map((item) => (
                              <ListItem key={item.occurrenceId} dense sx={{ py: 0.5 }}>
                                <ListItemIcon sx={{ minWidth: 36 }}>
@@ -1724,7 +1802,7 @@ const ReportsPage: React.FC = () => {
                                    }}
                                    sx={{ 
                                      cursor: 'pointer',
-                                     '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                                     '&:hover': { backgroundColor: theme.palette.action.hover },
                                      '& .MuiSvgIcon-root': { fontSize: 20 },
                                      zIndex: 1,
                                      position: 'relative'
@@ -1771,7 +1849,7 @@ const ReportsPage: React.FC = () => {
                          <Typography variant="subtitle2" color="error.main" sx={{ fontWeight: 'bold', mb: 1 }}>
                            Recurring Expenses
                          </Typography>
-                         <List dense sx={{ bgcolor: 'grey.50', borderRadius: 1 }}>
+                         <List dense sx={{ bgcolor: theme => theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[100], borderRadius: 1 }}>
                            {recurringExpenseItems.map((item) => (
                              <ListItem key={item.occurrenceId} dense sx={{ py: 0.5 }}>
                                <ListItemIcon sx={{ minWidth: 36 }}>
@@ -1789,7 +1867,7 @@ const ReportsPage: React.FC = () => {
                                    }}
                                    sx={{ 
                                      cursor: 'pointer',
-                                     '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                                     '&:hover': { backgroundColor: theme.palette.action.hover },
                                      '& .MuiSvgIcon-root': { fontSize: 20 },
                                      zIndex: 1,
                                      position: 'relative'
@@ -1845,7 +1923,7 @@ const ReportsPage: React.FC = () => {
                        <Box sx={{ 
                          width: '100%', 
                          height: 20, 
-                         bgcolor: 'grey.200', 
+                         bgcolor: theme => theme.palette.mode === 'dark' ? theme.palette.grey[700] : theme.palette.grey[300], 
                          borderRadius: 1,
                          position: 'relative',
                          overflow: 'hidden'
@@ -1876,7 +1954,7 @@ const ReportsPage: React.FC = () => {
                              return Math.min(progress, 100);
                            })()}%`,
                            height: '100%',
-                           bgcolor: (predictedMonthlySummary.income + predictedMonthlySummary.expense) >= 0 ? '#388e3c' : '#d32f2f',
+                           bgcolor: (predictedMonthlySummary.income + predictedMonthlySummary.expense) >= 0 ? theme.palette.success.main : theme.palette.error.main,
                            borderRadius: 1,
                            transition: 'width 0.3s ease'
                          }} />
@@ -1978,15 +2056,27 @@ const ReportsPage: React.FC = () => {
                 overflow: 'hidden'
               }}>
                 {/* Income vs Expense */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 30%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <Paper sx={{ 
+                  p: 2, 
+                  minHeight: 360, 
+                  flex: '1 1 30%', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  minWidth: 0, 
+                  bgcolor: theme => theme.palette.background.paper,
+                  backgroundColor: theme => theme.palette.background.paper,
+                  '& .MuiPaper-root': {
+                    backgroundColor: theme => theme.palette.background.paper
+                  }
+                }}>
                   <Typography variant="h6" gutterBottom>Income vs Expense</Typography>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, mb: 2 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.success.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
-                      Income: {safeFormatCurrency(yearlySummary.income)}
-                    </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
-                      Expense: {safeFormatCurrency(yearlySummary.expense)}
-                    </Typography>
+                                         <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: 'success.main', fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                       Income: {safeFormatCurrency(yearlySummary.income)}
+                     </Typography>
+                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: 'error.main', fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                       Expense: {safeFormatCurrency(yearlySummary.expense)}
+                     </Typography>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: (yearlySummary.income + yearlySummary.expense) >= 0 ? theme.palette.primary.main : theme.palette.error.main, fontSize: '1rem', whiteSpace: 'nowrap' }}>
                       Net: {safeFormatCurrency(yearlySummary.income + yearlySummary.expense)}
                     </Typography>
@@ -1997,7 +2087,7 @@ const ReportsPage: React.FC = () => {
                         labels: ['Income', 'Expense'],
                         datasets: [{
                           data: [yearlySummary.income, Math.abs(yearlySummary.expense)],
-                          backgroundColor: [theme.palette.primary.main, theme.palette.error.main]
+                          backgroundColor: ['#B6C9A9', '#FF9AA2']
                         }]
                       }}
                       options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: true } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } }}
@@ -2006,7 +2096,17 @@ const ReportsPage: React.FC = () => {
                   </Box>
                 </Paper>
                 {/* Category Breakdown */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 40%', minWidth: 0 }}>
+                <Paper sx={{ 
+                  p: 2, 
+                  minHeight: 360, 
+                  flex: '1 1 40%', 
+                  minWidth: 0, 
+                  bgcolor: theme => theme.palette.background.paper,
+                  backgroundColor: theme => theme.palette.background.paper,
+                  '& .MuiPaper-root': {
+                    backgroundColor: theme => theme.palette.background.paper
+                  }
+                }}>
                   <Typography variant="h6" gutterBottom>Category Breakdown</Typography>
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'center' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mr: 2 }}>
@@ -2072,7 +2172,19 @@ const ReportsPage: React.FC = () => {
                   </Box>
                 </Paper>
                 {/* Monthly Trends */}
-                <Paper sx={{ p: 2, minHeight: 360, flex: '1 1 30%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <Paper sx={{ 
+                  p: 2, 
+                  minHeight: 360, 
+                  flex: '1 1 30%', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  minWidth: 0, 
+                  bgcolor: theme => theme.palette.background.paper,
+                  backgroundColor: theme => theme.palette.background.paper,
+                  '& .MuiPaper-root': {
+                    backgroundColor: theme => theme.palette.background.paper
+                  }
+                }}>
                   <Typography variant="h6" gutterBottom>Yearly Summary</Typography>
                   <Box sx={{ flex: 1, overflow: 'hidden', '& canvas': { touchAction: 'none !important', userSelect: 'none' } }}>
                     <Bar
@@ -2098,7 +2210,14 @@ const ReportsPage: React.FC = () => {
             </Grid>
             {/* Yearly Category Monthly Breakdown Table */}
             <Grid item xs={12}>
-              <Paper sx={{ p: 2 }}>
+              <Paper sx={{ 
+                p: 2, 
+                bgcolor: theme => theme.palette.background.paper,
+                backgroundColor: theme => theme.palette.background.paper,
+                '& .MuiPaper-root': {
+                  backgroundColor: theme => theme.palette.background.paper
+                }
+              }}>
                 <Typography variant="h6" gutterBottom>Category Monthly Breakdown</Typography>
                 <TableContainer>
                   <Table
@@ -2436,7 +2555,7 @@ const ReportsPage: React.FC = () => {
                                     {displayNote && (
                                       <Typography component="span" sx={(theme) => ({
                                         fontSize: '0.68rem',
-                                        color: theme.palette.mode === 'light' ? '#0288d1' : '#FFA500',
+                                        color: theme.palette.mode === 'light' ? 'primary.main' : 'warning.main',
                                         fontWeight: 500,
                                       })}>
                                         {' '}[{displayNote}]
@@ -2531,7 +2650,14 @@ const ReportsPage: React.FC = () => {
             
             {/* Account Balance Changes */}
             <Grid item xs={12}>
-              <Paper sx={{ p: 2 }}>
+              <Paper sx={{ 
+                p: 2, 
+                bgcolor: theme => theme.palette.background.paper,
+                backgroundColor: theme => theme.palette.background.paper,
+                '& .MuiPaper-root': {
+                  backgroundColor: theme => theme.palette.background.paper
+                }
+              }}>
                 <Typography variant="h6" gutterBottom>Account Balances (as of 1st of each month)</Typography>
                 <Box sx={{ height: 300, width: '100%', mb: 2 }}>
                   <Line
