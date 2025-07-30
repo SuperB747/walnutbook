@@ -39,8 +39,9 @@ import ImportExportDialog from './components/ImportExportDialog';
 import BackupRestoreDialog from './components/BackupRestoreDialog';
 import ReportsPage from './components/ReportsPage';
 import ReminderPage from './components/ReminderPage';
+import NotificationPanel from './components/NotificationPanel';
 
-import { Account, Transaction, Category } from './db';
+import { Account, Transaction, Category, RecurringItem, Reminder } from './db';
 import logo from './logo.png';
 
 // Create a theme based on light or dark mode
@@ -390,6 +391,8 @@ export const App: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [recurringItems, setRecurringItems] = useState<RecurringItem[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
 
   // Function to find OneDrive path and create backup folder
   const findOneDrivePath = async (): Promise<string> => {
@@ -450,14 +453,18 @@ export const App: React.FC = () => {
   // Load data for dialogs
   const loadDialogData = async () => {
     try {
-      const [accountsData, transactionsData, categoriesData] = await Promise.all([
+      const [accountsData, transactionsData, categoriesData, recurringData, remindersData] = await Promise.all([
         invoke<Account[]>('get_accounts'),
         invoke<Transaction[]>('get_transactions'),
-        invoke<Category[]>('get_categories_full')
+        invoke<Category[]>('get_categories_full'),
+        invoke<RecurringItem[]>('get_recurring_items'),
+        invoke<Reminder[]>('get_reminders')
       ]);
-      setAccounts(accountsData);
-      setTransactions(transactionsData);
-      setCategories(categoriesData);
+              setAccounts(accountsData);
+        setTransactions(transactionsData);
+        setCategories(categoriesData);
+        setRecurringItems(recurringData);
+        setReminders(remindersData);
     } catch (error) {
       console.error('Failed to load dialog data:', error);
     }
@@ -471,6 +478,23 @@ export const App: React.FC = () => {
       loadDialogData();
     }
   }, [categoryDialogOpen, bulkEditDialogOpen, importExportDialogOpen]);
+
+  // Load data on app start
+  useEffect(() => {
+    loadDialogData();
+  }, []);
+
+  // Listen for reminders updates
+  useEffect(() => {
+    const handleRemindersUpdated = () => {
+      loadDialogData();
+    };
+
+    window.addEventListener('remindersUpdated', handleRemindersUpdated);
+    return () => {
+      window.removeEventListener('remindersUpdated', handleRemindersUpdated);
+    };
+  }, []);
 
   const [splash, setSplash] = useState(true);
 
@@ -903,7 +927,10 @@ export const App: React.FC = () => {
                }}
              />
              
-
+                           {/* Notification Panel for Payment Reminders */}
+              <NotificationPanel 
+                reminders={reminders}
+              />
 
           </Box>
       </ThemeProvider>

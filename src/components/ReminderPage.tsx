@@ -10,6 +10,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { format } from 'date-fns';
 
 function getNextMonthDate(current: string, day: number): string {
   const date = new Date(current);
@@ -24,7 +25,9 @@ function getNextMonthDate(current: string, day: number): string {
 // Due in XX days 계산 함수
 function getDueInDays(nextDate: string): string {
   const today = new Date();
-  const due = new Date(nextDate);
+  // Parse the date using local date parsing to avoid timezone issues
+  const [year, month, day] = nextDate.split('-').map(Number);
+  const due = new Date(year, month - 1, day); // month is 0-indexed
   const diff = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   if (isNaN(diff)) return '';
   if (diff === 0) return 'Due today';
@@ -69,6 +72,8 @@ const ReminderPage: React.FC = () => {
   const loadReminders = async () => {
     const data = await invoke<Reminder[]>('get_reminders');
     setReminders(Array.isArray(data) ? data : []);
+    // Dispatch event to notify other components
+    window.dispatchEvent(new Event('remindersUpdated'));
   };
   const loadAccounts = async () => {
     const data = await invoke<Account[]>('get_accounts');
@@ -448,7 +453,11 @@ const ReminderPage: React.FC = () => {
                   })()}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
-                  Next Due Date: {selectedReminder.next_payment_date}
+                  Next Due Date: {(() => {
+                    const [year, month, day] = selectedReminder.next_payment_date.split('-').map(Number);
+                    const dueDate = new Date(year, month - 1, day);
+                    return format(dueDate, 'MMM dd, yyyy');
+                  })()}
                 </Typography>
               </Box>
               <Divider sx={{ my: 2 }} />
