@@ -156,18 +156,37 @@ const BudgetsPage: React.FC = () => {
     // Get the set of category IDs that have budgets
     const budgetCategoryIds = new Set(budgets.map(b => b.category_id));
     
-    // Only sum expenses from categories that have budgets
-    return Math.abs(
-      transactions
-        .filter(t => 
-          t.type === 'Expense' && 
-          t.date.startsWith(selectedMonth) &&
-          t.category_id !== undefined &&
-          budgetCategoryIds.has(t.category_id)
-        )
-        .reduce((sum, t) => sum + t.amount, 0)
-    );
-  }, [transactions, selectedMonth, budgets]);
+    // Filter transactions for the selected month
+    const monthTransactions = transactions.filter(t => t.date.startsWith(selectedMonth));
+    
+    // Create category map for efficient lookups
+    const categoryMap = new Map<number, Category>();
+    categories.forEach(c => categoryMap.set(c.id, c));
+    
+    // Calculate total raw expenses (only from categories that have budgets)
+    const totalRawExpenses = monthTransactions
+      .filter(t => 
+        t.type === 'Expense' && 
+        t.category_id !== undefined &&
+        budgetCategoryIds.has(t.category_id)
+      )
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    // Calculate total reimbursed (only for categories that have budgets)
+    const totalReimbursed = monthTransactions
+      .filter(t => t.type === 'Income' && t.category_id != null)
+      .reduce((sum, t) => {
+        const cat = categoryMap.get(t.category_id!);
+        if (cat?.is_reimbursement && cat.reimbursement_target_category_id && budgetCategoryIds.has(cat.reimbursement_target_category_id)) {
+          return sum + t.amount;
+        }
+        return sum;
+      }, 0);
+    
+    // Net Expense: totalRawExpenses + totalReimbursed (same logic as TransactionSummary)
+    // Since totalRawExpenses is negative and totalReimbursed is positive, this gives us the net expense
+    return Math.abs(totalRawExpenses + totalReimbursed);
+  }, [transactions, selectedMonth, budgets, categories]);
   const remainingBudget = totalBudget - totalSpent;
   // Handle near-zero remaining amounts as exactly zero
   const normalizedRemainingBudget = Math.abs(remainingBudget) < 0.005 ? 0 : remainingBudget;
