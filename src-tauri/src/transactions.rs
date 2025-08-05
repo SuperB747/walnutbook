@@ -640,11 +640,15 @@ pub fn save_transaction_attachment(app: AppHandle, file_name: String, base64: St
     fn sanitize_filename(filename: &str) -> String {
         filename
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' || c == '.' { c } else { '_' })
+            .map(|c| {
+                match c {
+                    '/' | '\\' => ' ', // 윈도우/맥에서 파일명에 사용할 수 없는 문자만 공백으로 변환
+                    _ => c // 나머지는 그대로 유지
+                }
+            })
             .collect::<String>()
             .trim()
-            .replace("  ", " ")
-            .replace(" ", "_")
+            .replace("  ", " ") // 연속된 공백을 하나로 변환
     }
 
     let new_file_name = if let Some(id) = transaction_id {
