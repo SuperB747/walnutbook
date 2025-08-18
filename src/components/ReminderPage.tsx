@@ -124,9 +124,9 @@ const ReminderPage: React.FC = () => {
     
     // Statement Balance 계산: 이전 statement_date부터 현재 statement_date까지
     let start_date = '1970-01-01';
-    let end_date = selectedReminder.statement_date
-      ? dayjs(selectedReminder.statement_date).add(1, 'day').format('YYYY-MM-DD')
-      : dayjs(today).add(1, 'day').format('YYYY-MM-DD');
+         let end_date = selectedReminder.statement_date
+       ? selectedReminder.statement_date
+       : today;
     
     // 가장 최근 payment history의 statement_date를 시작점으로 사용
     if (sortedHistory.length > 0) {
@@ -447,11 +447,36 @@ const ReminderPage: React.FC = () => {
                 <Typography variant="subtitle1" sx={{ mt: 1, fontWeight: 500 }}>
                   Statement Date: {selectedReminder.statement_date}
                 </Typography>
-                <Typography variant="body2" sx={{ mt: 1, color: statementBalance !== null ? (statementBalance < 0 ? 'error.main' : 'primary.main') : 'text.secondary', fontWeight: 600 }}>
-                  Statement Balance: {(() => {
-                    return statementBalance !== null ? `${statementBalance < 0 ? '-' : ''}$${Math.abs(statementBalance).toFixed(2)}` : '--';
-                  })()}
-                </Typography>
+                                 <Typography variant="body2" sx={{ mt: 1, color: statementBalance !== null ? (statementBalance < 0 ? 'error.main' : 'primary.main') : 'text.secondary', fontWeight: 600 }}>
+                   Statement Balance: {(() => {
+                     return statementBalance !== null ? `${statementBalance < 0 ? '-' : ''}$${Math.abs(statementBalance).toFixed(2)}` : '--';
+                   })()}
+                 </Typography>
+                 {/* 날짜 범위 정보 추가 */}
+                 <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary', fontSize: '0.8rem' }}>
+                   {(() => {
+                     if (!selectedReminder) return '';
+                     
+                     const sortedHistory = [...paymentHistory]
+                       .map(h => ({ ...h, _date: h.statement_date || h.paid_date }))
+                       .filter(h => h._date)
+                       .sort((a, b) => (a._date || '').localeCompare(b._date || ''));
+                     
+                     let start_date = '1970-01-01';
+                                           let end_date = selectedReminder.statement_date
+                        ? selectedReminder.statement_date
+                        : dayjs().format('YYYY-MM-DD');
+                     
+                     if (sortedHistory.length > 0) {
+                       const lastStatementDate = sortedHistory[sortedHistory.length - 1]._date;
+                       if (lastStatementDate) {
+                         start_date = dayjs(lastStatementDate).add(1, 'day').format('YYYY-MM-DD');
+                       }
+                     }
+                     
+                     return `From ${start_date} To ${end_date}`;
+                   })()}
+                 </Typography>
                 <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
                   Next Due Date: {(() => {
                     const [year, month, day] = selectedReminder.next_payment_date.split('-').map(Number);
