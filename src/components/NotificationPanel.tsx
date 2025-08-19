@@ -62,12 +62,12 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ reminders }) => {
 
   useEffect(() => {
     const processReminders = async () => {
-      console.log('NotificationPanel: reminders received:', reminders);
+
       const today = new Date();
       const filteredReminders: ReminderItem[] = [];
 
       reminders.forEach(item => {
-        console.log('Checking reminder:', item.account_name, 'next_payment_date:', item.next_payment_date);
+
         
         // Parse the next payment date - use local date parsing to avoid timezone issues
         const [year, month, day] = item.next_payment_date.split('-').map(Number);
@@ -75,7 +75,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ reminders }) => {
         // Use the same calculation method as ReminderPage for consistency
         const daysUntilDue = Math.ceil((nextOccurrence.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         
-        console.log('Reminder:', item.account_name, 'due date:', nextOccurrence.toLocaleDateString(), 'days until due:', daysUntilDue);
+        
         
         // Show reminders for items due in 7 days or less, or overdue
         if (daysUntilDue <= 7) {
@@ -98,7 +98,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ reminders }) => {
         }
       });
 
-      console.log('Filtered reminders:', filteredReminders);
+
 
       // Sort by urgency (overdue first, then by days until due)
       filteredReminders.sort((a, b) => {

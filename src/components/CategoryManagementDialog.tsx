@@ -308,7 +308,7 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
           onClick={async () => {
             try {
               const result = await invoke<string>('test_onedrive_path');
-              console.log('OneDrive Path Test Result:', result);
+      
               alert('OneDrive path test completed. Check console for details.');
             } catch (error) {
               console.error('OneDrive Path Test Error:', error);

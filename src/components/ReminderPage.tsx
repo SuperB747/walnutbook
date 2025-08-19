@@ -90,65 +90,67 @@ const ReminderPage: React.FC = () => {
     }
   }, [reminders]);
 
-  // payment history 불러오기
+    // payment history 불러오기 및 Statement Balance 계산
   useEffect(() => {
-    if (!selectedReminder) return;
+    if (!selectedReminder) {
+      setPaymentHistory([]);
+      setStatementBalance(null);
+      return;
+    }
+    
+    // Clear note edits when reminder changes
+    setNoteEdits({});
+    
+    // payment history와 statement balance를 함께 처리
     invoke<ReminderPaymentHistory[]>('get_reminder_payment_history', {
       reminder_id: selectedReminder.id,
       reminderId: selectedReminder.id
     })
       .then(history => {
         setPaymentHistory(history);
+        
+        // Statement Balance 계산
+        const today = dayjs().format('YYYY-MM-DD');
+        const sortedHistory = [...history]
+          .map(h => ({ ...h, _date: h.statement_date || h.paid_date }))
+          .filter(h => h._date)
+          .sort((a, b) => (a._date || '').localeCompare(b._date || ''));
+        
+        // Statement Balance 계산: 이전 statement_date 다음날부터 현재 statement_date까지
+        let start_date = '1970-01-01'; // 기본값
+        let end_date = selectedReminder.statement_date
+          ? selectedReminder.statement_date
+          : today;
+        
+        // 가장 최근 payment history의 statement_date를 시작점으로 사용
+        if (sortedHistory.length > 0) {
+          const lastStatementDate = sortedHistory[sortedHistory.length - 1]._date;
+          if (lastStatementDate) {
+            start_date = dayjs(lastStatementDate).add(1, 'day').format('YYYY-MM-DD');
+          }
+        }
+        
+
+        
+        invoke<number>('get_statement_balance', {
+          accountId: selectedReminder.account_id,
+          startDate: start_date,
+          endDate: end_date
+        })
+          .then(result => {
+            setStatementBalance(result);
+          })
+          .catch(e => {
+            console.error('Statement Balance calculation error:', e);
+            setStatementBalance(null);
+          });
       })
       .catch(error => {
         console.error('Failed to load payment history:', error);
         setPaymentHistory([]);
-      });
-    
-    // Clear note edits when reminder changes
-    setNoteEdits({});
-  }, [selectedReminder]);
-
-  // Statement Balance 구간 계산 및 API 호출
-  useEffect(() => {
-    if (!selectedReminder) {
-      setStatementBalance(null);
-      return;
-    }
-    const today = dayjs().format('YYYY-MM-DD');
-    // paymentHistory에서 statement_date 없으면 paid_date 사용
-    const sortedHistory = [...paymentHistory]
-      .map(h => ({ ...h, _date: h.statement_date || h.paid_date }))
-      .filter(h => h._date)
-      .sort((a, b) => (a._date || '').localeCompare(b._date || ''));
-    
-    // Statement Balance 계산: 이전 statement_date부터 현재 statement_date까지
-    let start_date = '1970-01-01';
-         let end_date = selectedReminder.statement_date
-       ? selectedReminder.statement_date
-       : today;
-    
-    // 가장 최근 payment history의 statement_date를 시작점으로 사용
-    if (sortedHistory.length > 0) {
-      const lastStatementDate = sortedHistory[sortedHistory.length - 1]._date;
-      if (lastStatementDate) {
-        start_date = dayjs(lastStatementDate).add(1, 'day').format('YYYY-MM-DD');
-      }
-    }
-    // 디버깅용 로그 추가
-    invoke<number>('get_statement_balance', {
-      accountId: selectedReminder.account_id,
-      startDate: start_date,
-      endDate: end_date
-    })
-      .then(result => {
-        setStatementBalance(result);
-      })
-      .catch(e => {
-        console.error('get_statement_balance error', e);
         setStatementBalance(null);
       });
-  }, [selectedReminder, paymentHistory]);
+  }, [selectedReminder]);
 
   const handleOpenDialog = (reminder?: Reminder) => {
     if (reminder) {
@@ -452,31 +454,33 @@ const ReminderPage: React.FC = () => {
                      return statementBalance !== null ? `${statementBalance < 0 ? '-' : ''}$${Math.abs(statementBalance).toFixed(2)}` : '--';
                    })()}
                  </Typography>
-                 {/* 날짜 범위 정보 추가 */}
-                 <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary', fontSize: '0.8rem' }}>
-                   {(() => {
-                     if (!selectedReminder) return '';
-                     
-                     const sortedHistory = [...paymentHistory]
-                       .map(h => ({ ...h, _date: h.statement_date || h.paid_date }))
-                       .filter(h => h._date)
-                       .sort((a, b) => (a._date || '').localeCompare(b._date || ''));
-                     
-                     let start_date = '1970-01-01';
-                                           let end_date = selectedReminder.statement_date
-                        ? selectedReminder.statement_date
-                        : dayjs().format('YYYY-MM-DD');
-                     
-                     if (sortedHistory.length > 0) {
-                       const lastStatementDate = sortedHistory[sortedHistory.length - 1]._date;
-                       if (lastStatementDate) {
-                         start_date = dayjs(lastStatementDate).add(1, 'day').format('YYYY-MM-DD');
+
+                                   {/* 날짜 범위 정보 추가 */}
+                  <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary', fontSize: '0.8rem' }}>
+                    {(() => {
+                      if (!selectedReminder) return '';
+                      
+                      const sortedHistory = [...paymentHistory]
+                        .map(h => ({ ...h, _date: h.statement_date || h.paid_date }))
+                        .filter(h => h._date)
+                        .sort((a, b) => (a._date || '').localeCompare(b._date || ''));
+                      
+                                                                    let start_date = '1970-01-01'; // 기본값
+                       let end_date = selectedReminder.statement_date
+                         ? selectedReminder.statement_date
+                         : dayjs().format('YYYY-MM-DD');
+                       
+                       // 가장 최근 payment history의 statement_date를 시작점으로 사용
+                       if (sortedHistory.length > 0) {
+                         const lastStatementDate = sortedHistory[sortedHistory.length - 1]._date;
+                         if (lastStatementDate) {
+                           start_date = dayjs(lastStatementDate).add(1, 'day').format('YYYY-MM-DD');
+                         }
                        }
-                     }
-                     
-                     return `From ${start_date} To ${end_date}`;
-                   })()}
-                 </Typography>
+                       
+                       return `From ${start_date} To ${end_date}`;
+                    })()}
+                  </Typography>
                 <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
                   Next Due Date: {(() => {
                     const [year, month, day] = selectedReminder.next_payment_date.split('-').map(Number);

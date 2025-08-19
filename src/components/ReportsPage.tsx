@@ -334,20 +334,19 @@ const ReportsPage: React.FC = () => {
 
   const handleRecurringItemCheck = async (occurrenceId: string, checked: boolean) => {
     try {
-      console.log('handleRecurringItemCheck called:', { occurrenceId, checked });
+
       
       // Find the item by occurrenceId
       const item = monthlyRecurringItems.find(item => item.occurrenceId === occurrenceId);
       if (!item) {
         console.error('Item not found for occurrenceId:', occurrenceId);
-        console.log('Available items:', monthlyRecurringItems.map(i => ({ id: i.id, occurrenceId: i.occurrenceId, name: i.name })));
         setSnackbarMessage('Item not found');
         setSnackbarSeverity('error');
         setSnackbarOpen(true);
         return;
       }
 
-      console.log('Found item:', item);
+      
 
       // Update check status in database first
       await invoke('update_recurring_check', {
@@ -365,7 +364,7 @@ const ReportsPage: React.FC = () => {
       }
       setCheckedRecurringItems(newChecked);
       
-      console.log('Updated checked items:', Array.from(newChecked));
+      
       
       // Dispatch custom event to notify other components about the change
       window.dispatchEvent(new CustomEvent('recurringCheckChanged', {
@@ -1792,12 +1791,12 @@ const ReportsPage: React.FC = () => {
                                    size="small"
                                    checked={checkedRecurringItems.has(item.occurrenceId)}
                                    onChange={(e) => {
-                                     console.log('Income Checkbox onChange:', { occurrenceId: item.occurrenceId, checked: e.target.checked });
+                             
                                      e.stopPropagation();
                                      handleRecurringItemCheck(item.occurrenceId, e.target.checked);
                                    }}
                                    onClick={(e) => {
-                                     console.log('Income Checkbox onClick:', { occurrenceId: item.occurrenceId });
+                             
                                      e.stopPropagation();
                                    }}
                                    sx={{ 
@@ -1857,12 +1856,12 @@ const ReportsPage: React.FC = () => {
                                    size="small"
                                    checked={checkedRecurringItems.has(item.occurrenceId)}
                                    onChange={(e) => {
-                                     console.log('Expense Checkbox onChange:', { occurrenceId: item.occurrenceId, checked: e.target.checked });
+                             
                                      e.stopPropagation();
                                      handleRecurringItemCheck(item.occurrenceId, e.target.checked);
                                    }}
                                    onClick={(e) => {
-                                     console.log('Expense Checkbox onClick:', { occurrenceId: item.occurrenceId });
+                             
                                      e.stopPropagation();
                                    }}
                                    sx={{ 
@@ -2273,15 +2272,7 @@ const ReportsPage: React.FC = () => {
                             const isNewExpense = showArrow && prevAmount === 0; // 이전 월에 지출이 없었던 경우
                             const isSame = showArrow && prevAmount > 0 && currentAmount === prevAmount;
                             
-                            // 디버깅용 로그 (나중에 제거)
-                            if (currentAmount > 0 && prevAmount > 0) {
-                              console.log(`${row.category.name} ${monthIndex + 1}월:`, {
-                                current: currentAmount,
-                                prev: prevAmount,
-                                isIncrease,
-                                isDecrease
-                              });
-                            }
+
                             
                             return (
                               <TableCell 

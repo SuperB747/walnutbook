@@ -224,9 +224,99 @@ pub fn update_reminder_payment_history_note(app: AppHandle, id: i64, note: Strin
 pub fn get_statement_balance(app: AppHandle, accountId: i64, startDate: String, endDate: String) -> Result<f64, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare(
-        "SELECT SUM(amount) FROM transactions WHERE account_id = ?1 AND date >= ?2 AND date < ?3 AND type != 'Transfer'"
-    ).map_err(|e| e.to_string())?;
+    
+
+    
+         // Statement Balance 계산: Transfer가 아닌 모든 트랜잭션 포함 (Reimbursement 카테고리 포함)
+     let mut stmt = conn.prepare(
+         "SELECT SUM(t.amount) 
+          FROM transactions t 
+          WHERE t.account_id = ?1 
+          AND t.date >= ?2 
+          AND t.date <= ?3 
+          AND t.type != 'Transfer'"
+     ).map_err(|e| e.to_string())?;
+    
     let sum: f64 = stmt.query_row(params![accountId, startDate, endDate], |row| row.get(0)).unwrap_or(0.0);
+    
+         // 디버깅: Reimbursement 카테고리 트랜잭션도 확인
+     let mut reimbursement_stmt = conn.prepare(
+         "SELECT SUM(t.amount), COUNT(*) 
+          FROM transactions t 
+          LEFT JOIN categories c ON t.category_id = c.id 
+          WHERE t.account_id = ?1 
+          AND t.date >= ?2 
+          AND t.date <= ?3 
+          AND t.type != 'Transfer' 
+          AND c.is_reimbursement = 1"
+     ).map_err(|e| e.to_string())?;
+    
+    let _reimbursement_result: (f64, i64) = reimbursement_stmt.query_row(
+        params![accountId, startDate, endDate], 
+        |row| Ok((row.get(0)?, row.get(1)?))
+    ).unwrap_or((0.0, 0));
+    
+         // 디버깅: 해당 기간의 모든 트랜잭션 세부 정보 출력
+     let mut detail_stmt = conn.prepare(
+         "SELECT t.date, t.type, t.amount, c.name as category_name, c.is_reimbursement
+          FROM transactions t 
+          LEFT JOIN categories c ON t.category_id = c.id 
+          WHERE t.account_id = ?1 
+          AND t.date >= ?2 
+          AND t.date <= ?3 
+          AND t.type != 'Transfer'
+          ORDER BY t.date DESC"
+     ).map_err(|e| e.to_string())?;
+     
+     let _rows = detail_stmt.query_map(params![accountId, startDate, endDate], |row| {
+         Ok((
+             row.get::<_, String>(0)?,
+             row.get::<_, String>(1)?,
+             row.get::<_, Option<String>>(3)?,
+             row.get::<_, Option<bool>>(4)?
+         ))
+     }).map_err(|e| e.to_string())?;
+     
+
+     
+     // 트랜잭션 목록을 다시 조회 (count()로 인해 iterator가 소비됨)
+     let mut detail_stmt2 = conn.prepare(
+         "SELECT t.date, t.type, t.amount, c.name as category_name, c.is_reimbursement
+          FROM transactions t 
+          LEFT JOIN categories c ON t.category_id = c.id 
+          WHERE t.account_id = ?1 
+          AND t.date >= ?2 
+          AND t.date <= ?3 
+          AND t.type != 'Transfer'
+          ORDER BY t.date DESC"
+     ).map_err(|e| e.to_string())?;
+     
+     let rows2 = detail_stmt2.query_map(params![accountId, startDate, endDate], |row| {
+         Ok((
+             row.get::<_, String>(0)?,
+             row.get::<_, String>(1)?,
+             row.get::<_, f64>(2)?,
+             row.get::<_, Option<String>>(3)?,
+             row.get::<_, Option<bool>>(4)?
+         ))
+     }).map_err(|e| e.to_string())?;
+     
+     let mut _total_amount = 0.0;
+     let mut _transaction_count = 0;
+     
+     for row in rows2 {
+         if let Ok((_date, _tx_type, amount, category_name, is_reimbursement)) = row {
+             let _category_info = category_name.unwrap_or_else(|| "Unknown".to_string());
+             let _reimbursement_flag = is_reimbursement.unwrap_or(false);
+             
+             _total_amount += amount;
+             _transaction_count += 1;
+             
+
+         }
+     }
+    
+
+    
     Ok(sum)
 } 

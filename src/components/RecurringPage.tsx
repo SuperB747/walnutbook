@@ -268,7 +268,7 @@ const RecurringPage: React.FC = () => {
   // Listen for recurring check changes from Reports page
   useEffect(() => {
     const handleRecurringCheckChanged = (event: CustomEvent) => {
-      console.log('Recurring check changed:', event.detail);
+      
       loadCheckedItems();
     };
 
@@ -301,12 +301,11 @@ const RecurringPage: React.FC = () => {
 
   const handleEditItem = (item: RecurringItem) => {
     try {
-      console.log('handleEditItem called with item:', item);
-      console.log('item.day_of_month:', item.day_of_month, 'type:', typeof item.day_of_month);
+      
       
       setSelectedItem(item);
       const parsedDays = parseDayOfMonth(item.day_of_month);
-      console.log('parsedDays:', parsedDays, 'type:', typeof parsedDays, 'isArray:', Array.isArray(parsedDays));
+      
       
       // Ensure parsedDays is an array
       const safeParsedDays = Array.isArray(parsedDays) ? parsedDays : [1];
@@ -377,18 +376,7 @@ const RecurringPage: React.FC = () => {
 
   const handleSaveItem = async () => {
     try {
-      // Debug form validation
-      console.log('Form validation check:', {
-        name: formData.name,
-        amount: formData.amount,
-        category_id: formData.category_id,
-        account_id: formData.account_id,
-        nameValid: !!formData.name,
-        amountValid: Math.abs(formData.amount) > 0,
-        categoryValid: !!formData.category_id,
-        accountValid: !!formData.account_id,
-        allValid: !!(formData.name && Math.abs(formData.amount) > 0 && formData.category_id && formData.account_id)
-      });
+
 
       // 보정: interval 방식일 때 day_of_month는 [1]로 설정, monthly_date일 때는 배열을 JSON으로 저장
       const safeDayOfMonth = repeatType === 'interval' ? '[1]' : JSON.stringify(formData.day_of_month);
@@ -398,21 +386,7 @@ const RecurringPage: React.FC = () => {
       const safeIntervalValue = intervalValue || 1;
       const safeStartDate = startDate && startDate !== '' ? startDate : null;
 
-      console.log('Sending data to backend:', {
-        name: formData.name,
-        amount: formData.amount,
-        type: formData.type,
-        category_id: formData.category_id,
-        account_id: formData.account_id,
-        day_of_month: safeDayOfMonth,
-        day_of_month_original: formData.day_of_month,
-        is_active: formData.is_active,
-        notes: formData.notes,
-        repeat_type: safeRepeatType,
-        start_date: safeStartDate,
-        interval_value: safeIntervalValue,
-        interval_unit: safeIntervalUnit,
-      });
+
 
       if (selectedItem) {
         await invoke('update_recurring_item', {
@@ -445,9 +419,7 @@ const RecurringPage: React.FC = () => {
           intervalValue: safeIntervalValue,
           intervalUnit: safeIntervalUnit,
         };
-        console.log('Invoking add_recurring_item with data:', invokeData);
-        console.log('Data keys:', Object.keys(invokeData));
-        console.log('itemType value:', invokeData.itemType);
+
         await invoke('add_recurring_item', invokeData);
       }
       await loadData();
@@ -459,16 +431,6 @@ const RecurringPage: React.FC = () => {
       });
     } catch (error) {
       console.error('Failed to add/update recurring item:', error);
-      console.error('Error details:', {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      console.error('Selected item:', selectedItem);
-      console.error('Form data:', formData);
-      console.error('Repeat type:', repeatType);
-      console.error('Start date:', startDate);
-      console.error('Interval value:', intervalValue);
-      console.error('Interval unit:', intervalUnit);
       setSnackbar({ 
         open: true, 
         message: `Failed to ${selectedItem ? 'update' : 'add'} recurring item.`, 
@@ -667,7 +629,7 @@ const RecurringPage: React.FC = () => {
                     <IconButton 
                       size="small" 
                       onClick={() => {
-                        console.log('Edit button clicked for item:', item);
+                    
                         handleEditItem(item);
                       }}
                     >
