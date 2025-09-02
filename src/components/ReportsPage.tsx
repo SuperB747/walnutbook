@@ -1255,7 +1255,7 @@ const ReportsPage: React.FC = () => {
             size="small"
             onChange={e => handleMonthSelect(year, e.target.value as string)}
             sx={{
-              width: 120,
+              width: 150,
               '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
               '&:hover .MuiOutlinedInput-notchedOutline': { border: 'none' },
               '&.Mui-focused .MuiOutlinedInput-notchedOutline': { border: 'none' },

@@ -253,11 +253,11 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ reminders }) => {
         .filter(h => h._date)
         .sort((a, b) => (a._date || '').localeCompare(b._date || ''));
       
-      // Statement Balance 계산: 이전 statement_date부터 현재 statement_date까지
-      let start_date = '1970-01-01';
+      // Statement Balance 계산: Reminders 페이지와 동일한 로직 사용
+      let start_date = '1970-01-01'; // 기본값
       let end_date = statementDate 
-        ? dayjs(statementDate).add(1, 'day').format('YYYY-MM-DD')
-        : dayjs(today).add(1, 'day').format('YYYY-MM-DD');
+        ? statementDate
+        : today;
       
       // 가장 최근 payment history의 statement_date를 시작점으로 사용
       if (sortedHistory.length > 0) {

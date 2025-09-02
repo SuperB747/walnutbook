@@ -81,6 +81,9 @@ const TransactionsPage: React.FC = () => {
     currentMonth: false,
     currentYear: false,
     hasAttachment: false,
+    selectedIds: [] as number[],
+    fromDate: null as Date | null,
+    toDate: null as Date | null,
   });
 
   // 1. Add searchInput state:
@@ -135,6 +138,8 @@ const TransactionsPage: React.FC = () => {
         message,
         severity: 'success',
       });
+      // Select the imported transactions
+      setFilter(prev => ({ ...prev, selectedIds: importedIds }));
       setImportedDuplicateCount(0);
       setImportedIds([]);
     }
@@ -266,6 +271,8 @@ const TransactionsPage: React.FC = () => {
         if (transferIdsToRemove.size > 0) filtered = filtered.filter(t => !transferIdsToRemove.has(t.id));
         return filtered;
       });
+      // Clear selected transactions after successful deletion
+      setFilter(prev => ({ ...prev, selectedIds: [] }));
       window.dispatchEvent(new Event('transactionsUpdated'));
       
       if (failedDeletions.length > 0) {
@@ -361,6 +368,7 @@ const TransactionsPage: React.FC = () => {
   const handleMonthChange = (month: string) => {
     setSelectedMonth(month);
     localStorage.setItem('walnutbook_selected_month', month);
+    // Summary에서 달이 변경되어도 Current Month 필터는 자동으로 활성화하지 않음
   };
 
   const filteredByMonth = selectedMonth ? transactions.filter((t) => t.date && t.date.startsWith(selectedMonth)) : transactions;
@@ -372,7 +380,9 @@ const TransactionsPage: React.FC = () => {
     filter.accounts.length > 0 ||
     filter.hasAttachment ||
     filter.currentMonth ||
-    filter.currentYear;
+    filter.currentYear ||
+    filter.fromDate !== null ||
+    filter.toDate !== null;
 
   if (loading) {
     return (
@@ -418,6 +428,7 @@ const TransactionsPage: React.FC = () => {
         setFilter={setFilter}
         searchInput={searchInput}
         setSearchInput={setSearchInput}
+        selectedMonth={selectedMonth}
         onEdit={(transaction) => {
           setSelectedTransaction(transaction);
           setFormOpen(true);
@@ -446,7 +457,7 @@ const TransactionsPage: React.FC = () => {
         }}
         onDescriptionChange={handleDescriptionChange}
         onNotesChange={handleNotesChange}
-        initialSelectedIds={importedIds}
+        initialSelectedIds={filter.selectedIds}
         importedIds={importedIds}
         onAddTransaction={() => setFormOpen(true)}
         onBulkDelete={handleBulkDelete}

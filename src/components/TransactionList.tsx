@@ -28,6 +28,7 @@ export interface TransactionListProps {
   setFilter: React.Dispatch<React.SetStateAction<any>>;
   searchInput: string;
   setSearchInput: React.Dispatch<React.SetStateAction<string>>;
+  selectedMonth?: string;
 }
 
 const getAccountName = (accounts: Account[], accountId: number): string => {
@@ -52,6 +53,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   setFilter,
   searchInput,
   setSearchInput,
+  selectedMonth,
 }) => {
   // Handle imported transactions
   useEffect(() => {
@@ -74,7 +76,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   // 필터링된 거래 내역
   const filteredTransactions = useMemo(() => {
     return transactions.filter(transaction => {
-      const { searchTerm, types, categories: catFilter, accounts: accFilter, hasAttachment, currentMonth, currentYear } = filter;
+      const { searchTerm, types, categories: catFilter, accounts: accFilter, hasAttachment, currentMonth, currentYear, fromDate, toDate } = filter;
       const searchMatch = (() => {
         if (searchTerm === '') return true;
         // 금액 숫자만 입력된 경우: 금액(절대값)에 해당 숫자가 포함되는지 확인
@@ -102,14 +104,25 @@ const TransactionList: React.FC<TransactionListProps> = ({
       // 날짜 필터
       const dateMatch = true; // 기본적으로 모든 거래 포함
       if (currentMonth) {
-        const transactionDate = new Date(transaction.date);
-        const isCurrentMonth = transactionDate.getMonth() === new Date().getMonth() && transactionDate.getFullYear() === new Date().getFullYear();
-        if (!isCurrentMonth) return false;
+        // Summary에서 선택된 달과 연동
+        if (selectedMonth) {
+          if (!transaction.date || !transaction.date.startsWith(selectedMonth)) return false;
+        } else {
+          const transactionDate = new Date(transaction.date);
+          const isCurrentMonth = transactionDate.getMonth() === new Date().getMonth() && transactionDate.getFullYear() === new Date().getFullYear();
+          if (!isCurrentMonth) return false;
+        }
       }
       if (currentYear) {
         const transactionDate = new Date(transaction.date);
         const isCurrentYear = transactionDate.getFullYear() === new Date().getFullYear();
         if (!isCurrentYear) return false;
+      }
+      // From/To 날짜 필터
+      if (fromDate || toDate) {
+        const transactionDate = new Date(transaction.date);
+        if (fromDate && transactionDate < fromDate) return false;
+        if (toDate && transactionDate > toDate) return false;
       }
       return searchMatch && typeMatch && categoryMatch && accountMatch && attachmentMatch && dateMatch;
     });
@@ -128,7 +141,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
       filter.accounts.length > 0 ||
       filter.hasAttachment ||
       filter.currentMonth ||
-      filter.currentYear;
+      filter.currentYear ||
+      filter.fromDate !== null ||
+      filter.toDate !== null;
   }, [filter]);
 
   // 삭제 핸들러 통합
@@ -146,9 +161,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
         await onDelete(confirmDialog.targetId);
       } else if (confirmDialog.type === 'bulk') {
         if (onBulkDelete) {
-          await onBulkDelete(initialSelectedIds); // Use initialSelectedIds from props
+          await onBulkDelete(filter.selectedIds); // Use filter.selectedIds
         } else {
-          for (const id of initialSelectedIds) await onDelete(id); // Use initialSelectedIds from props
+          for (const id of filter.selectedIds) await onDelete(id); // Use filter.selectedIds
         }
         // setSelectedIds([]); // This state is now managed by the parent
       }
@@ -162,7 +177,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
   // 필터 초기화
   const handleClearFilters = () => {
-    setFilter({ searchTerm: '', types: [], categories: [], accounts: [], currentMonth: false, currentYear: false, hasAttachment: false });
+    setFilter({ searchTerm: '', types: [], categories: [], accounts: [], currentMonth: false, currentYear: false, hasAttachment: false, selectedIds: [], fromDate: null, toDate: null });
     setSearchInput('');
   };
 
@@ -222,23 +237,60 @@ const TransactionList: React.FC<TransactionListProps> = ({
   return (
     <>
       <Box sx={{ mb: 1, p: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, minHeight: 56 }}>
-        <TextField label="Search" size="small" value={searchInput} onChange={e => setSearchInput(e.target.value)} sx={{ minWidth: 120, flex: 1 }} />
+        <TextField label="Search" size="small" value={searchInput} onChange={e => {
+          setSearchInput(e.target.value);
+          // Search가 활성화되면 Current Month 자동 활성화, 비워지면 비활성화
+          if (e.target.value.trim() !== '') {
+            setFilter((f: typeof filter) => ({ ...f, currentMonth: true, currentYear: false }));
+          } else {
+            setFilter((f: typeof filter) => ({ ...f, currentMonth: false, currentYear: false }));
+          }
+        }} sx={{ minWidth: 120, flex: 1 }} />
         <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel>Account</InputLabel>
-          <Select multiple value={filter.accounts} onChange={e => setFilter((f: typeof filter) => ({ ...f, accounts: typeof e.target.value === 'string' ? e.target.value.split(',').map(Number) : e.target.value }))} input={<OutlinedInput label="Account" />} renderValue={selected => <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, pr: 2 }}>{selected.map((value: number) => <Chip key={value} label={getAccountName(accounts, value)} size="small" />)}</Box>} MenuProps={{ MenuListProps: { dense: true } }}>{accounts.map(account => (<MenuItem key={account.id} value={account.id} dense><Checkbox checked={filter.accounts.indexOf(account.id) > -1} /><ListItemText primary={account.name} /></MenuItem>))}</Select>
+          <Select multiple value={filter.accounts} onChange={e => {
+            const newAccounts = typeof e.target.value === 'string' ? e.target.value.split(',').map(Number) : e.target.value;
+            setFilter((f: typeof filter) => ({ 
+              ...f, 
+              accounts: newAccounts,
+              currentMonth: newAccounts.length > 0 ? true : false,
+              currentYear: false
+            }));
+          }} input={<OutlinedInput label="Account" />} renderValue={selected => <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, pr: 2 }}>{selected.map((value: number) => <Chip key={value} label={getAccountName(accounts, value)} size="small" />)}</Box>} MenuProps={{ MenuListProps: { dense: true } }}>{accounts.map(account => (<MenuItem key={account.id} value={account.id} dense><Checkbox checked={filter.accounts.indexOf(account.id) > -1} /><ListItemText primary={account.name} /></MenuItem>))}</Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 100 }}>
           <InputLabel>Type</InputLabel>
-          <Select multiple value={filter.types} onChange={e => setFilter((f: typeof filter) => ({ ...f, types: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value }))} input={<OutlinedInput label="Type" />} renderValue={selected => <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{selected.map((value: string) => <Chip key={value} label={value} size="small" />)}</Box>} MenuProps={{ MenuListProps: { dense: true } }}>{['income', 'expense', 'transfer', 'adjust'].map(type => (<MenuItem key={type} value={type} dense><Checkbox checked={filter.types.indexOf(type) > -1} size="small" /><ListItemText primary={type.charAt(0).toUpperCase() + type.slice(1)} /></MenuItem>))}</Select>
+          <Select multiple value={filter.types} onChange={e => {
+            const newTypes = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
+            setFilter((f: typeof filter) => ({ 
+              ...f, 
+              types: newTypes,
+              currentMonth: newTypes.length > 0 ? true : false,
+              currentYear: false
+            }));
+          }} input={<OutlinedInput label="Type" />} renderValue={selected => <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{selected.map((value: string) => <Chip key={value} label={value} size="small" />)}</Box>} MenuProps={{ MenuListProps: { dense: true } }}>{['income', 'expense', 'transfer', 'adjust'].map(type => (<MenuItem key={type} value={type} dense><Checkbox checked={filter.types.indexOf(type) > -1} size="small" /><ListItemText primary={type.charAt(0).toUpperCase() + type.slice(1)} /></MenuItem>))}</Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel>Category</InputLabel>
-          <Select multiple value={filter.categories} onChange={e => setFilter((f: typeof filter) => ({ ...f, categories: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value }))} input={<OutlinedInput label="Category" />} renderValue={selected => <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, pr: 2 }}>{selected.map((value: string) => <Chip key={value} label={value} size="small" />)}</Box>} MenuProps={{ MenuListProps: { dense: true } }}>{uniqueCategories.sort().map(category => (<MenuItem key={category} value={category} dense><Checkbox checked={filter.categories.indexOf(category) > -1} size="small" /><ListItemText primary={category} /></MenuItem>))}</Select>
+          <Select multiple value={filter.categories} onChange={e => {
+            const newCategories = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
+            setFilter((f: typeof filter) => ({ 
+              ...f, 
+              categories: newCategories,
+              currentMonth: newCategories.length > 0 ? true : false,
+              currentYear: false
+            }));
+          }} input={<OutlinedInput label="Category" />} renderValue={selected => <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, pr: 2 }}>{selected.map((value: string) => <Chip key={value} label={value} size="small" />)}</Box>} MenuProps={{ MenuListProps: { dense: true } }}>{uniqueCategories.sort().map(category => (<MenuItem key={category} value={category} dense><Checkbox checked={filter.categories.indexOf(category) > -1} size="small" /><ListItemText primary={category} /></MenuItem>))}</Select>
         </FormControl>
         <Button
           variant={filter.hasAttachment ? "contained" : "outlined"}
           size="small"
-          onClick={() => setFilter((f: typeof filter) => ({ ...f, hasAttachment: !f.hasAttachment }))}
+          onClick={() => setFilter((f: typeof filter) => ({ 
+            ...f, 
+            hasAttachment: !f.hasAttachment,
+            currentMonth: !f.hasAttachment ? true : false,
+            currentYear: false
+          }))}
           sx={{
             minWidth: 120,
             height: 40,
@@ -260,6 +312,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
         <Button
           variant={filter.currentMonth ? "contained" : "outlined"}
           size="small"
+          disabled={filter.fromDate !== null || filter.toDate !== null}
           onClick={() => setFilter((f: typeof filter) => ({ 
   ...f, 
   currentMonth: !f.currentMonth,
@@ -287,6 +340,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
         <Button
           variant={filter.currentYear ? "contained" : "outlined"}
           size="small"
+          disabled={filter.fromDate !== null || filter.toDate !== null}
           onClick={() => setFilter((f: typeof filter) => ({ 
   ...f, 
   currentYear: !f.currentYear,
@@ -311,6 +365,66 @@ const TransactionList: React.FC<TransactionListProps> = ({
         >
           Current Year
         </Button>
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+          <DatePicker
+            label="From Date"
+            value={filter.fromDate}
+            onChange={(newValue) => setFilter((f: typeof filter) => ({ 
+              ...f, 
+              fromDate: newValue,
+              currentMonth: false,
+              currentYear: false
+            }))}
+            slotProps={{
+              textField: {
+                size: 'small',
+                sx: { 
+                  minWidth: 120, 
+                  height: 40,
+                  '& .MuiInputAdornment-root': {
+                    '& .MuiIconButton-root': {
+                      backgroundColor: 'transparent',
+                      color: 'rgba(0, 0, 0, 0.54)',
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                        color: 'rgba(0, 0, 0, 0.87)',
+                      }
+                    }
+                  }
+                }
+              }
+            }}
+          />
+          <DatePicker
+            label="To Date"
+            value={filter.toDate}
+            onChange={(newValue) => setFilter((f: typeof filter) => ({ 
+              ...f, 
+              toDate: newValue,
+              currentMonth: false,
+              currentYear: false
+            }))}
+            slotProps={{
+              textField: {
+                size: 'small',
+                sx: { 
+                  minWidth: 120, 
+                  height: 40,
+                  '& .MuiInputAdornment-root': {
+                    '& .MuiIconButton-root': {
+                      backgroundColor: 'transparent',
+                      color: 'rgba(0, 0, 0, 0.54)',
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                        color: 'rgba(0, 0, 0, 0.87)',
+                      }
+                    }
+                  }
+                }
+              }
+            }}
+          />
+        </LocalizationProvider>
         <Button
           variant="outlined"
           size="small"
@@ -321,7 +435,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
         </Button>
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, p: 0.5 }}>
-        <Button variant="outlined" disabled={initialSelectedIds.length === 0 || isDeleting} onClick={e => openDeleteDialog('bulk')}>
+        <Button variant="outlined" disabled={filter.selectedIds.length === 0 || isDeleting} onClick={e => openDeleteDialog('bulk')}>
           {isDeleting ? 'Deleting...' : 'Delete Selected'}
         </Button>
         {/* Show filtered sum only if a filter is active, styled like Min Amount input and next to Add Transaction */}
@@ -386,7 +500,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox" sx={{ width: 50, minWidth: 50 }}>
-                <Checkbox indeterminate={initialSelectedIds.length > 0 && initialSelectedIds.length < filteredTransactions.length} checked={filteredTransactions.length > 0 && initialSelectedIds.length === filteredTransactions.length} onChange={e => { if (e.target.checked) setFilter((f: typeof filter) => ({ ...f, selectedIds: filteredTransactions.map(t => t.id) })); else setFilter((f: typeof filter) => ({ ...f, selectedIds: [] })); }} />
+                <Checkbox indeterminate={filter.selectedIds.length > 0 && filter.selectedIds.length < filteredTransactions.length} checked={filteredTransactions.length > 0 && filter.selectedIds.length === filteredTransactions.length} onChange={e => { if (e.target.checked) setFilter((f: typeof filter) => ({ ...f, selectedIds: filteredTransactions.map(t => t.id) })); else setFilter((f: typeof filter) => ({ ...f, selectedIds: [] })); }} />
               </TableCell>
               <TableCell align="left" sx={{ width: 90, minWidth: 90, whiteSpace: 'nowrap' }}>Date</TableCell>
               <TableCell align="left" sx={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}>Account</TableCell>
@@ -422,7 +536,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                 >
                   <TableCell padding="checkbox" sx={{ width: 50, minWidth: 50 }}>
                     <Checkbox 
-                      checked={initialSelectedIds.includes(transaction.id)} 
+                      checked={filter.selectedIds.includes(transaction.id)} 
                       onChange={e => { 
                         const id = transaction.id; 
                         setFilter((f: typeof filter) => ({ ...f, selectedIds: e.target.checked ? [...f.selectedIds, id] : f.selectedIds.filter((i: number) => i !== id) })); 
@@ -565,8 +679,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
         onClose={() => setConfirmDialog({ open: false, type: null })}
         PaperProps={{ sx: { minWidth: 260 } }}
       >
-        <DialogTitle sx={{ fontWeight: 600, pb: 1 }}>{confirmDialog.type === 'single' ? 'Delete Transaction' : `Delete ${initialSelectedIds.length} Transactions`}</DialogTitle>
-        <DialogContent sx={{ pb: 1 }}><Typography>{confirmDialog.type === 'single' ? 'Are you sure you want to delete this transaction?' : `Are you sure you want to delete the selected ${initialSelectedIds.length} transactions?`}</Typography></DialogContent>
+        <DialogTitle sx={{ fontWeight: 600, pb: 1 }}>{confirmDialog.type === 'single' ? 'Delete Transaction' : `Delete ${filter.selectedIds.length} Transactions`}</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}><Typography>{confirmDialog.type === 'single' ? 'Are you sure you want to delete this transaction?' : `Are you sure you want to delete the selected ${filter.selectedIds.length} transactions?`}</Typography></DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmDialog({ open: false, type: null })} color="inherit" disabled={isDeleting}>Cancel</Button>
           <Button onClick={handleConfirm} color="error" variant="contained" disabled={isDeleting}>{isDeleting ? 'Deleting...' : 'Delete'}</Button>
