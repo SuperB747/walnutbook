@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   Container, Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Select, MenuItem, FormControl, InputLabel, Checkbox, IconButton, List, ListItem, ListItemText, ListItemSecondaryAction, Snackbar, Alert, Divider, Paper
+  TextField, Select, MenuItem, FormControl, InputLabel, Checkbox, IconButton, List, ListItem, ListItemText, ListItemSecondaryAction, Snackbar, Alert, Divider, Paper, useTheme
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
@@ -36,6 +36,9 @@ function getDueInDays(nextDate: string): string {
 }
 
 const ReminderPage: React.FC = () => {
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
+  
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -322,6 +325,45 @@ const ReminderPage: React.FC = () => {
     }
   };
 
+  // Dark Mode에 맞는 지브리 스타일 색상 정의
+  const getButtonColors = (isPaid: boolean) => {
+    if (isDarkMode) {
+      return {
+        bgcolor: isPaid ? '#4A5D23' : '#8B5A2B',
+        color: isPaid ? '#B8D4A3' : '#E6B89C',
+        hoverBgcolor: isPaid ? '#5A6D33' : '#9B6A3B',
+        hoverColor: isPaid ? '#C8E4B3' : '#F6C8AC'
+      };
+    } else {
+      return {
+        bgcolor: isPaid ? '#B6C9A9' : '#E6B89C',
+        color: isPaid ? '#2D5016' : '#8B4513',
+        hoverBgcolor: isPaid ? '#A3C6C4' : '#F7C59F',
+        hoverColor: isPaid ? '#1A3009' : '#654321'
+      };
+    }
+  };
+
+  const getPaidButtonColors = () => {
+    if (isDarkMode) {
+      return {
+        borderColor: '#4A5D23',
+        color: '#B8D4A3',
+        hoverBorderColor: '#5A6D33',
+        hoverColor: '#C8E4B3',
+        hoverBgcolor: '#3A4D13'
+      };
+    } else {
+      return {
+        borderColor: '#B6C9A9',
+        color: '#2D5016',
+        hoverBorderColor: '#A3C6C4',
+        hoverColor: '#1A3009',
+        hoverBgcolor: '#E2F0CB'
+      };
+    }
+  };
+
   // 미완료 → 완료 순, 날짜 오름차순, 체크 시 아래로
   // Due date 오름차순(가까운 순)으로만 정렬
   const sortedReminders = [...reminders].sort((a, b) => {
@@ -434,12 +476,12 @@ const ReminderPage: React.FC = () => {
                        textTransform: 'none',
                        fontWeight: 600,
                        fontSize: '0.875rem',
-                       borderColor: 'success.main',
-                       color: 'success.main',
+                       borderColor: getPaidButtonColors().borderColor,
+                       color: getPaidButtonColors().color,
                        '&:hover': {
-                         borderColor: 'success.dark',
-                         color: 'success.dark',
-                         bgcolor: 'success.light'
+                         borderColor: getPaidButtonColors().hoverBorderColor,
+                         color: getPaidButtonColors().hoverColor,
+                         bgcolor: getPaidButtonColors().hoverBgcolor
                        }
                      }}
                    >
@@ -494,10 +536,12 @@ const ReminderPage: React.FC = () => {
                 <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>Recent Payment History (6 months)</Typography>
                 <List dense>
                   {paymentHistory.length === 0 && <ListItem><ListItemText primary="No payment history." /></ListItem>}
-                  {paymentHistory.map(h => (
+                  {paymentHistory.map(h => {
+                    const colors = getButtonColors(h.is_paid);
+                    return (
                     <ListItem key={h.id} sx={{ 
-                      bgcolor: h.is_paid ? 'success.dark' : 'error.dark',
-                      color: h.is_paid ? 'success.light' : 'error.light',
+                      bgcolor: colors.bgcolor,
+                      color: colors.color,
                       borderRadius: 1, 
                       mb: 0.5, 
                       display: 'flex', 
@@ -505,7 +549,8 @@ const ReminderPage: React.FC = () => {
                       gap: 2, 
                       py: 0.5,
                       '&:hover': {
-                        bgcolor: h.is_paid ? 'success.main' : 'error.main',
+                        bgcolor: colors.hoverBgcolor,
+                        color: colors.hoverColor,
                       }
                     }}
                       secondaryAction={
@@ -534,7 +579,7 @@ const ReminderPage: React.FC = () => {
                             <Typography variant="body2" sx={{ minWidth: 120, fontWeight: 500 }}>
                               Statement Date: {h.statement_date || h.paid_date}
                             </Typography>
-                            <Typography variant="body2" sx={{ color: h.is_paid ? 'success.light' : 'error.light', fontWeight: 700, minWidth: 40 }}>
+                            <Typography variant="body2" sx={{ color: colors.color, fontWeight: 700, minWidth: 40 }}>
                               {h.is_paid ? 'PAID' : 'UNPAID'}
                             </Typography>
                             {/* Note inline edit */}
@@ -551,7 +596,8 @@ const ReminderPage: React.FC = () => {
                         }
                       />
                     </ListItem>
-                  ))}
+                    );
+                  })}
                 </List>
               </Box>
             </>
