@@ -60,13 +60,19 @@ pub use accounts::{
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let context = tauri::generate_context!();
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                std::process::exit(0);
+            }
+        })
         .setup(|app| {
-            // Initialize SQLite database schema
+            // Initialize SQLite database schema first
             utils::init_db(&app.handle()).map_err(|e| e.to_string())?;
             // Create and manage database connection
             let db_path = utils::get_db_path(&app.handle());
             let conn = Connection::open(&db_path).expect("Failed to open DB");
             app.manage(Mutex::new(conn));
+            
             // Enable logging plugin in development
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -75,10 +81,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .build(),
                 )?;
             }
-            // Only show main window
+            
+            // Show main window immediately after setup
             let main_window = app.get_webview_window("main").unwrap();
             main_window.show().unwrap();
             main_window.set_focus().unwrap();
+            main_window.unminimize().unwrap();
+            
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -129,7 +129,6 @@ const rendererConfig = {
     new CopyPlugin({
       patterns: [
         { from: 'src/index.html', to: '.' },
-        { from: 'src/splash.html', to: '.' },
         { from: 'src/sql-wasm.wasm', to: '.' },
       ],
     }),

@@ -19,8 +19,17 @@
         "height": 800,
         "resizable": true,
         "fullscreen": false,
-        "maximized": true,
-        "visible": true
+        "maximized": false,
+        "visible": true,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": false,
+        "transparent": false,
+        "shadow": true,
+        "center": true,
+        "minWidth": 800,
+        "minHeight": 600,
+        "focus": true
       }
     ],
     "security": {

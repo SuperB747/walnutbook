@@ -496,14 +496,17 @@ const ReminderPage: React.FC = () => {
                   {paymentHistory.length === 0 && <ListItem><ListItemText primary="No payment history." /></ListItem>}
                   {paymentHistory.map(h => (
                     <ListItem key={h.id} sx={{ 
-                      bgcolor: h.is_paid ? 'success.light' : 'error.light',
-                      color: h.is_paid ? 'success.contrastText' : 'error.contrastText',
+                      bgcolor: h.is_paid ? 'success.dark' : 'error.dark',
+                      color: h.is_paid ? 'success.light' : 'error.light',
                       borderRadius: 1, 
                       mb: 0.5, 
                       display: 'flex', 
                       alignItems: 'center', 
                       gap: 2, 
-                      py: 0.5 
+                      py: 0.5,
+                      '&:hover': {
+                        bgcolor: h.is_paid ? 'success.main' : 'error.main',
+                      }
                     }}
                       secondaryAction={
                         <IconButton
@@ -531,7 +534,7 @@ const ReminderPage: React.FC = () => {
                             <Typography variant="body2" sx={{ minWidth: 120, fontWeight: 500 }}>
                               Statement Date: {h.statement_date || h.paid_date}
                             </Typography>
-                            <Typography variant="body2" sx={{ color: h.is_paid ? 'success.main' : 'error.main', fontWeight: 700, minWidth: 40 }}>
+                            <Typography variant="body2" sx={{ color: h.is_paid ? 'success.light' : 'error.light', fontWeight: 700, minWidth: 40 }}>
                               {h.is_paid ? 'PAID' : 'UNPAID'}
                             </Typography>
                             {/* Note inline edit */}

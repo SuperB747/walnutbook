@@ -496,63 +496,25 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  const [splash, setSplash] = useState(true);
+  // 앱 초기 로딩 상태 관리 - 즉시 앱 표시
+  const [isAppReady, setIsAppReady] = useState(true);
 
   useEffect(() => {
-    // TODO: 실제 앱 준비 완료 시점에 setSplash(false) 호출
-    const timer = setTimeout(() => setSplash(false), 2000); // 2초 후 splash 제거 (예시)
-    return () => clearTimeout(timer);
+    // 백그라운드에서 데이터 로드
+    const initializeApp = async () => {
+      try {
+        await loadDialogData();
+      } catch (error) {
+        console.error('App initialization failed:', error);
+      }
+    };
+
+    initializeApp();
   }, []);
-
-  // pre-splash 제거 (index.html)
-  useEffect(() => {
-    if (!splash) {
-      const preSplash = document.getElementById('pre-splash');
-      if (preSplash) preSplash.style.opacity = '0';
-      setTimeout(() => {
-        if (preSplash && preSplash.parentNode) preSplash.parentNode.removeChild(preSplash);
-      }, 500); // fade-out 후 제거
-    }
-  }, [splash]);
 
   return (
     <>
-      {splash && (
-        <div style={{
-          position: 'fixed', zIndex: 9999, top: 0, left: 0, width: '100vw', height: '100vh',
-          background: 'rgba(255,255,255,0.35)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'opacity 0.5s',
-          opacity: splash ? 1 : 0,
-          pointerEvents: splash ? 'auto' : 'none',
-        }}>
-          <div style={{
-            minWidth: 220,
-            minHeight: 180,
-            padding: '32px 28px 24px 28px',
-            borderRadius: 24,
-            background: 'rgba(255,255,255,0.85)',
-            boxShadow: '0 8px 32px 0 rgba(31,38,135,0.18)',
-            textAlign: 'center',
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-          }}>
-            <div style={{
-              width: 64, height: 64, borderRadius: 16,
-              background: 'linear-gradient(135deg, #fff 60%, #e0e7ff 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 18, fontWeight: 900, fontSize: 32, color: '#667eea',
-              boxShadow: '0 2px 8px #667eea33',
-            }}>WB</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: '#667eea', marginBottom: 6 }}>WalnutBook</div>
-            <div style={{ fontSize: 14, color: '#888', marginBottom: 18 }}>Personal Finance Manager</div>
-            <div style={{ width: 32, height: 32, border: '3px solid #e0e7ff', borderTop: '3px solid #667eea', borderRadius: '50%', animation: 'spin 1.1s linear infinite', margin: '0 auto 8px' }} />
-            <div style={{ color: '#667eea', fontSize: 14, fontWeight: 600 }}>Loading...</div>
-          </div>
-        </div>
-      )}
-      {/* 실제 앱 내용 */}
+      {/* 실제 앱 내용 - 즉시 표시 */}
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
@@ -938,9 +900,6 @@ export const App: React.FC = () => {
   );
 };
 
-// CSS 애니메이션 추가 (전역)
-const style = document.createElement('style');
-style.innerHTML = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
-document.head.appendChild(style);
+// CSS 애니메이션 제거됨
 
 export default App;

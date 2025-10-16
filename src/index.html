@@ -23,41 +23,6 @@
 </head>
 <body>
   <div id="App"></div>
-  <div id="pre-splash" style="
-    position: fixed; z-index: 9999; top: 0; left: 0; width: 100vw; height: 100vh;
-    background: rgba(255,255,255,0.35);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    display: flex; align-items: center; justify-content: center;
-    font-family: 'Inter', 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
-  ">
-    <div style="
-      min-width: 220px; min-height: 180px; padding: 32px 28px 24px 28px;
-      border-radius: 24px; background: rgba(255,255,255,0.85);
-      box-shadow: 0 8px 32px 0 rgba(31,38,135,0.18);
-      text-align: center; display: flex; flex-direction: column; align-items: center;
-      font-family: 'Inter', 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
-    ">
-      <div style="
-        width: 64px; height: 64px; border-radius: 16px;
-        background: linear-gradient(135deg, #fff 60%, #e0e7ff 100%);
-        display: flex; align-items: center; justify-content: center;
-        margin-bottom: 18px; font-weight: 900; font-size: 32px; color: #667eea;
-        box-shadow: 0 2px 8px #667eea33;
-        font-family: 'Inter', 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
-      ">WB</div>
-      <div style="font-size: 24px; font-weight: 800; color: #667eea; margin-bottom: 6px; font-family: 'Inter', 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;">WalnutBook</div>
-      <div style="font-size: 14px; color: #888; margin-bottom: 18px; font-family: 'Inter', 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;">Personal Finance Manager</div>
-      <div style="width: 32px; height: 32px; border: 3px solid #e0e7ff; border-top: 3px solid #667eea; border-radius: 50%; animation: spin 1.1s linear infinite; margin: 0 auto 8px;"></div>
-      <div style="color: #667eea; font-size: 14px; font-weight: 600; font-family: 'Inter', 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;">Loading...</div>
-    </div>
-  </div>
-  <script>
-    // Spin animation
-    const style = document.createElement('style');
-    style.innerHTML = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
-    document.head.appendChild(style);
-  </script>
   <script src="renderer.js"></script>
 </body>
 </html>
