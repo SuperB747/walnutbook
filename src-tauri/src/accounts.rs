@@ -2,6 +2,7 @@ use rusqlite::{params, Connection};
 use tauri::AppHandle;
 use crate::models::Account;
 use crate::utils::get_db_path;
+use crate::trigger_data_change_sync;
 
 #[derive(serde::Serialize)]
 pub struct AccountImportSettings {
@@ -89,7 +90,7 @@ pub fn get_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
 }
 
 #[tauri::command]
-pub fn create_account(app: AppHandle, name: String, account_type: String, balance: Option<f64>, description: Option<String>) -> Result<Vec<Account>, String> {
+pub async fn create_account(app: AppHandle, name: String, account_type: String, balance: Option<f64>, description: Option<String>) -> Result<Vec<Account>, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     
@@ -100,11 +101,14 @@ pub fn create_account(app: AppHandle, name: String, account_type: String, balanc
     )
     .map_err(|e| e.to_string())?;
     
+    // Trigger sync after data change
+    trigger_data_change_sync(&app).await;
+    
     get_accounts(app)
 }
 
 #[tauri::command]
-pub fn update_account(app: AppHandle, account: Account) -> Result<Vec<Account>, String> {
+pub async fn update_account(app: AppHandle, account: Account) -> Result<Vec<Account>, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     
@@ -114,11 +118,14 @@ pub fn update_account(app: AppHandle, account: Account) -> Result<Vec<Account>, 
     )
     .map_err(|e| e.to_string())?;
     
+    // Trigger sync after data change
+    trigger_data_change_sync(&app).await;
+    
     get_accounts(app)
 }
 
 #[tauri::command]
-pub fn delete_account(app: AppHandle, id: i64) -> Result<Vec<Account>, String> {
+pub async fn delete_account(app: AppHandle, id: i64) -> Result<Vec<Account>, String> {
     let path = get_db_path(&app);
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     
@@ -127,6 +134,9 @@ pub fn delete_account(app: AppHandle, id: i64) -> Result<Vec<Account>, String> {
         params![id],
     )
     .map_err(|e| e.to_string())?;
+    
+    // Trigger sync after data change
+    trigger_data_change_sync(&app).await;
     
     get_accounts(app)
 }

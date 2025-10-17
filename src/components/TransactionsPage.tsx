@@ -22,7 +22,6 @@ import {
 } from '@mui/icons-material';
 import TransactionList from './TransactionList';
 import TransactionForm from './TransactionForm';
-import BulkTransactionEdit from './BulkTransactionEdit';
 import TransactionSummary from './TransactionSummary';
 import ImportExportDialog from './ImportExportDialog';
 
@@ -44,7 +43,6 @@ const TransactionsPage: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [formOpen, setFormOpen] = useState(false);
-  const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | undefined>();
   const [importExportOpen, setImportExportOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
@@ -294,19 +292,6 @@ const TransactionsPage: React.FC = () => {
     }
   };
 
-  const handleBulkEdit = async (updates: { field: string; value: any; transactionIds: number[] }): Promise<void> => {
-    try {
-      const updatedTransactions = await invoke<Transaction[]>('bulk_update_transactions', { updates });
-      setTransactions(prev => {
-        const updatedIds = new Set(updatedTransactions.map(t => t.id));
-        return prev.map(t => updatedIds.has(t.id) ? updatedTransactions.find(ut => ut.id === t.id) || t : t);
-      });
-      setBulkEditOpen(false);
-      setSnackbar({ open: true, message: 'Transactions updated successfully', severity: 'success' });
-    } catch {
-      setSnackbar({ open: true, message: 'Failed to update transactions', severity: 'error' });
-    }
-  };
 
   const handleImport = async (importTxs: Partial<Transaction>[]): Promise<{ imported: Transaction[]; imported_count: number; duplicate_count: number; }> => {
     try {
@@ -401,9 +386,6 @@ const TransactionsPage: React.FC = () => {
         <MenuItem onClick={() => { setCategoriesOpen(true); closeActionsMenu(); }}>
           Manage Categories
         </MenuItem>
-        <MenuItem onClick={() => { setBulkEditOpen(true); closeActionsMenu(); }}>
-          Bulk Edit
-        </MenuItem>
         <MenuItem onClick={() => { setImportExportOpen(true); closeActionsMenu(); }}>
           Import/Export
         </MenuItem>
@@ -475,14 +457,6 @@ const TransactionsPage: React.FC = () => {
         onSave={handleTransactionSave}
       />
 
-      <BulkTransactionEdit
-        open={bulkEditOpen}
-        transactions={transactions}
-        accounts={accounts}
-        categories={categories}
-        onClose={() => setBulkEditOpen(false)}
-        onSave={handleBulkEdit}
-      />
 
       <ImportExportDialog
         open={importExportOpen}

@@ -441,28 +441,88 @@ pub fn get_onedrive_path() -> Result<String, String> {
         Err(e) => return Err(e)
     };
     
-    if cfg!(target_os = "macos") {
+    // Platform-specific OneDrive path detection
+    if cfg!(target_os = "windows") {
+        // Windows: Check multiple possible locations
+        let windows_paths = [
+            format!("{}\\OneDrive", home),
+            format!("{}\\OneDrive - 개인", home),
+            format!("{}\\OneDrive - Personal", home),
+        ];
+        
+        for path in windows_paths.iter() {
+            if std::path::Path::new(path).exists() {
+                return Ok(path.clone());
+            }
+        }
+        
+        // Check registry for OneDrive path (Windows specific)
+        if let Ok(registry_path) = get_onedrive_path_from_registry() {
+            return Ok(registry_path);
+        }
+        
+        return Err("OneDrive 폴더를 찾을 수 없습니다.".to_string());
+    } else if cfg!(target_os = "macos") {
+        // macOS: Check multiple possible locations
         let mac_paths = [
             format!("{}/OneDrive", home),
             format!("{}/Library/CloudStorage/OneDrive-개인", home),
             format!("{}/Library/CloudStorage/OneDrive", home),
+            format!("{}/Library/CloudStorage/OneDrive-Personal", home),
         ];
+        
         for path in mac_paths.iter() {
             if std::path::Path::new(path).exists() {
                 return Ok(path.clone());
             }
         }
+        
+        return Err("OneDrive 폴더를 찾을 수 없습니다.".to_string());
+    } else if cfg!(target_os = "linux") {
+        // Linux: Check common locations
+        let linux_paths = [
+            format!("{}/OneDrive", home),
+            format!("{}/OneDrive - 개인", home),
+            format!("{}/OneDrive - Personal", home),
+            format!("{}/.local/share/OneDrive", home),
+        ];
+        
+        for path in linux_paths.iter() {
+            if std::path::Path::new(path).exists() {
+                return Ok(path.clone());
+            }
+        }
+        
+        return Err("OneDrive 폴더를 찾을 수 없습니다.".to_string());
+    } else {
+        // Fallback for other platforms
+        let fallback_path = format!("{}/OneDrive", home);
+        if std::path::Path::new(&fallback_path).exists() {
+            return Ok(fallback_path);
+        }
+        
         return Err("OneDrive 폴더를 찾을 수 없습니다.".to_string());
     }
+}
+
+#[cfg(all(target_os = "windows", feature = "windows-registry"))]
+fn get_onedrive_path_from_registry() -> Result<String, String> {
+    use winreg::enums::*;
+    use winreg::RegKey;
     
-    // Windows 등 기존 로직 유지
-    let onedrive_path = if cfg!(target_os = "windows") {
-        format!("{}\\OneDrive", home)
-    } else {
-        format!("{}/OneDrive", home)
-    };
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let onedrive_key = hkcu.open_subkey("Software\\Microsoft\\OneDrive")
+        .map_err(|_| "OneDrive registry key not found".to_string())?;
     
-    Ok(onedrive_path)
+    let user_folder = onedrive_key.get_value("UserFolder")
+        .map_err(|_| "OneDrive UserFolder not found".to_string())?;
+    
+    Ok(user_folder)
+}
+
+#[cfg(not(all(target_os = "windows", feature = "windows-registry")))]
+fn get_onedrive_path_from_registry() -> Result<String, String> {
+    Err("Registry access not available on this platform".to_string())
 }
 
 #[tauri::command]
@@ -514,31 +574,47 @@ pub fn reset_database(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn test_onedrive_path() -> Result<String, String> {
-    let home = match home_dir() {
-        Ok(home_path) => home_path,
-        Err(e) => return Err(format!("Home directory error: {}", e))
-    };
+pub fn get_database_info(app: AppHandle) -> Result<DatabaseInfo, String> {
+    let db_path = get_db_path(&app);
     
-    let onedrive_path = match get_onedrive_path() {
-        Ok(path) => path,
-        Err(e) => return Err(format!("OneDrive path error: {}", e))
-    };
+    // Get file metadata
+    let metadata = std::fs::metadata(&db_path)
+        .map_err(|e| format!("Failed to get database metadata: {}", e))?;
     
-    let data_dir = match get_onedrive_data_dir() {
-        Ok(dir) => dir,
-        Err(e) => return Err(format!("WalnutBook_Data directory error: {}", e))
-    };
+    let modified_time = metadata.modified()
+        .map_err(|e| format!("Failed to get modified time: {}", e))?
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("Failed to convert time: {}", e))?
+        .as_secs();
     
-    let attachments_dir = match get_onedrive_attachments_dir() {
-        Ok(dir) => dir,
-        Err(e) => return Err(format!("Attachments directory error: {}", e))
-    };
+    // Get record counts
+    let conn = Connection::open(&db_path)
+        .map_err(|e| format!("Failed to open database: {}", e))?;
     
-    let result = format!(
-        "SUCCESS:\nHome: {}\nOneDrive: {}\nWalnutBook_Data: {:?}\nAttachments: {:?}",
-        home, onedrive_path, data_dir, attachments_dir
-    );
+    let account_count: i64 = conn.query_row("SELECT COUNT(*) FROM accounts", [], |row| row.get(0))
+        .unwrap_or(0);
     
-    Ok(result)
-} 
+    let transaction_count: i64 = conn.query_row("SELECT COUNT(*) FROM transactions", [], |row| row.get(0))
+        .unwrap_or(0);
+    
+    let category_count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |row| row.get(0))
+        .unwrap_or(0);
+    
+    let budget_count: i64 = conn.query_row("SELECT COUNT(*) FROM budgets", [], |row| row.get(0))
+        .unwrap_or(0);
+    
+    let total_records = account_count + transaction_count + category_count + budget_count;
+    
+    Ok(DatabaseInfo {
+        last_modified: modified_time,
+        file_size: metadata.len(),
+        record_count: total_records as u64,
+    })
+}
+
+#[derive(serde::Serialize)]
+pub struct DatabaseInfo {
+    pub last_modified: u64,
+    pub file_size: u64,
+    pub record_count: u64,
+}

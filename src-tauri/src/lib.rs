@@ -7,17 +7,20 @@ mod budgets;
 mod recurring;
 mod backup;
 mod reminders;
+mod sync;
 
 
 use std::sync::Mutex;
 use rusqlite::Connection;
 use tauri::Manager;
+use std::sync::Arc;
+use tokio::sync::Mutex as TokioMutex;
 
 // Re-export specific types and functions from models
 pub use models::{Account, Transaction, Category, Budget, AccountImportSettings, RecurringItem};
 
 // Re-export utility functions
-pub use utils::{init_db, home_dir, get_onedrive_path, reset_database, test_onedrive_path};
+pub use utils::{init_db, home_dir, get_onedrive_path, reset_database, get_database_info, DatabaseInfo};
 
 // Re-export account functions
 pub use accounts::{get_accounts, create_account, update_account, delete_account};
@@ -25,7 +28,7 @@ pub use accounts::{get_accounts, create_account, update_account, delete_account}
 // Re-export transaction functions
 pub use transactions::{
     get_transactions, create_transaction, update_transaction, delete_transaction,
-    bulk_update_transactions, import_transactions, save_transaction_attachment, delete_transaction_attachment, open_transaction_attachment,
+    import_transactions, save_transaction_attachment, delete_transaction_attachment, open_transaction_attachment,
     get_transaction_by_id, get_account_name_by_id, create_temp_transaction, delete_temp_transaction, update_temp_transaction_to_permanent
 };
 
@@ -50,6 +53,13 @@ pub use backup::{
     manual_backup_to_onedrive, get_backup_history, delete_backup_from_history, restore_backup_from_history, BackupInfo
 };
 
+// Re-export sync functions
+pub use sync::{
+    get_sync_status, get_sync_config, update_sync_config, manual_sync, 
+    load_from_onedrive, start_auto_sync, stop_auto_sync, SyncManager, SyncStatus, SyncConfig,
+    trigger_data_change_sync
+};
+
 // Re-export settings functions
 pub use accounts::{
     get_account_import_settings, update_account_import_settings,
@@ -58,13 +68,12 @@ pub use accounts::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    // Suppress WebView2 error messages
+    std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-logging --disable-gpu-logging --log-level=3");
+    std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", "");
+    
     let context = tauri::generate_context!();
     tauri::Builder::default()
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                std::process::exit(0);
-            }
-        })
         .setup(|app| {
             // Initialize SQLite database schema first
             utils::init_db(&app.handle()).map_err(|e| e.to_string())?;
@@ -72,6 +81,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             let db_path = utils::get_db_path(&app.handle());
             let conn = Connection::open(&db_path).expect("Failed to open DB");
             app.manage(Mutex::new(conn));
+            
+            // Initialize sync manager with lazy initialization
+            let sync_manager = Arc::new(TokioMutex::new(SyncManager::new(app.handle().clone())));
+            app.manage(sync_manager.clone());
             
             // Enable logging plugin in development
             if cfg!(debug_assertions) {
@@ -99,7 +112,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             create_transaction,
             update_transaction,
             delete_transaction,
-            bulk_update_transactions,
             import_transactions,
             save_transaction_attachment,
             delete_transaction_attachment,
@@ -140,7 +152,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             home_dir,
             get_onedrive_path,
             reset_database,
-            test_onedrive_path,
+            get_database_info,
             reminders::get_reminders,
             reminders::add_reminder,
             reminders::update_reminder,
@@ -154,6 +166,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             reminders::get_statement_balance,
             reminders::add_note_to_reminder,
             reminders::delete_note_from_reminder,
+            get_sync_status,
+            get_sync_config,
+            update_sync_config,
+            manual_sync,
+            load_from_onedrive,
+            start_auto_sync,
+            stop_auto_sync,
 
         ])
         .run(context)

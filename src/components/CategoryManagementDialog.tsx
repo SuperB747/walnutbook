@@ -304,22 +304,6 @@ const CategoryManagementDialog: React.FC<CategoryManagementDialogProps> = ({ ope
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button
-          onClick={async () => {
-            try {
-              const result = await invoke<string>('test_onedrive_path');
-      
-              alert('OneDrive path test completed. Check console for details.');
-            } catch (error) {
-              console.error('OneDrive Path Test Error:', error);
-              alert('OneDrive path test failed: ' + error);
-            }
-          }}
-          color="info"
-          variant="outlined"
-        >
-          Test OneDrive Path
-        </Button>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
 

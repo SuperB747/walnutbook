@@ -1,11 +1,11 @@
 use chrono::Utc;
 use rusqlite::{params, Connection};
-use serde_json::Value;
 use std::collections::HashSet;
 use tauri::AppHandle;
 use serde::Serialize;
 use open;
 use crate::utils::{get_db_path, get_onedrive_attachments_dir};
+use crate::trigger_data_change_sync;
 
 use crate::models::Transaction;
 
@@ -63,7 +63,7 @@ pub fn get_transactions(app: AppHandle) -> Result<Vec<Transaction>, String> {
 }
 
 #[tauri::command]
-pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Vec<Transaction>, String> {
+pub async fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Vec<Transaction>, String> {
     let path = get_db_path(&app);
     let mut conn = Connection::open(&path).map_err(|e| e.to_string())?;
     
@@ -167,12 +167,15 @@ pub fn create_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
             ],
         ).map_err(|e| e.to_string())?;
     }
+    
+    // Trigger sync after data change
+    trigger_data_change_sync(&app).await;
 
     get_transactions(app)
 }
 
 #[tauri::command]
-pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Vec<Transaction>, String> {
+pub async fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Vec<Transaction>, String> {
     let path = get_db_path(&app);
     let mut conn = Connection::open(&path).map_err(|e| e.to_string())?;
     
@@ -304,11 +307,14 @@ pub fn update_transaction(app: AppHandle, transaction: Transaction) -> Result<Ve
         ).map_err(|e| e.to_string())?;
     }
     
+    // Trigger sync after data change
+    trigger_data_change_sync(&app).await;
+    
     get_transactions(app)
 }
 
 #[tauri::command]
-pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, String> {
+pub async fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, String> {
     let path = get_db_path(&app);
     let mut conn = Connection::open(&path).map_err(|e| e.to_string())?;
     
@@ -421,6 +427,9 @@ pub fn delete_transaction(app: AppHandle, id: i64) -> Result<Vec<Transaction>, S
         conn.execute("DELETE FROM transactions WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     }
     
+    // Trigger sync after data change
+    trigger_data_change_sync(&app).await;
+    
     get_transactions(app)
 }
 
@@ -531,40 +540,6 @@ pub fn import_transactions(app: AppHandle, transactions: Vec<Transaction>) -> Re
     })
 }
 
-#[tauri::command]
-pub fn bulk_update_transactions(app: AppHandle, updates: Vec<(i64, Value)>) -> Result<Vec<Transaction>, String> {
-    for (id, changes) in updates {
-        // Fetch existing transaction
-        let path = get_db_path(&app);
-        let conn = Connection::open(&path).map_err(|e| e.to_string())?;
-        let existing: Transaction = conn.query_row(
-            "SELECT id, date, account_id, type, category_id, amount, payee, notes, transfer_id, to_account_id, created_at, attachment_path FROM transactions WHERE id = ?1",
-            params![id],
-            |row| Ok(Transaction {
-                id: row.get(0)?, date: row.get(1)?, account_id: row.get(2)?,
-                transaction_type: row.get(3)?, category_id: row.get(4)?, amount: row.get(5)?,
-                payee: row.get(6)?, notes: row.get(7)?, transfer_id: row.get(8)?,
-                to_account_id: row.get(9).ok(),
-                created_at: row.get(10)?,
-                attachment_path: row.get(11).ok(),
-            }),
-        ).map_err(|e| e.to_string())?;
-        
-        // Merge changes
-        let mut updated = existing.clone();
-        if let Some(v) = changes.get("date").and_then(|v| v.as_str()) { updated.date = v.to_string(); }
-        if let Some(v) = changes.get("account_id").and_then(|v| v.as_i64()) { updated.account_id = v; }
-        if let Some(v) = changes.get("type").and_then(|v| v.as_str()) { updated.transaction_type = v.to_string(); }
-        if let Some(v) = changes.get("category_id").and_then(|v| v.as_i64()) { updated.category_id = Some(v); }
-        if let Some(v) = changes.get("amount").and_then(|v| v.as_f64()) { updated.amount = v; }
-        if let Some(v) = changes.get("payee").and_then(|v| v.as_str()) { updated.payee = v.to_string(); }
-        if let Some(v) = changes.get("notes").and_then(|v| v.as_str()) { updated.notes = Some(v.to_string()); }
-        
-        // Apply update
-        update_transaction(app.clone(), updated)?;
-    }
-    get_transactions(app)
-} 
 
 #[tauri::command]
 pub fn get_transaction_by_id(app: AppHandle, id: i64) -> Result<Option<Transaction>, String> {

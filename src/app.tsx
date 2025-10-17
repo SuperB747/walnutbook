@@ -34,12 +34,12 @@ import TransactionsPage from './components/TransactionsPage';
 import BudgetsPage from './components/BudgetsPage';
 import RecurringPage from './components/RecurringPage';
 import CategoryManagementDialog from './components/CategoryManagementDialog';
-import BulkTransactionEdit from './components/BulkTransactionEdit';
 import ImportExportDialog from './components/ImportExportDialog';
 import BackupRestoreDialog from './components/BackupRestoreDialog';
 import ReportsPage from './components/ReportsPage';
 import ReminderPage from './components/ReminderPage';
 import NotificationPanel from './components/NotificationPanel';
+import SyncStatusHeader from './components/SyncStatusHeader';
 
 import { Account, Transaction, Category, RecurringItem, Reminder } from './db';
 import logo from './logo.png';
@@ -381,7 +381,6 @@ export const App: React.FC = () => {
   
   // Dialog states
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
-  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
   const [importExportDialogOpen, setImportExportDialogOpen] = useState(false);
   const [backupRestoreDialogOpen, setBackupRestoreDialogOpen] = useState(false);
 
@@ -474,10 +473,10 @@ export const App: React.FC = () => {
 
   // Load data when dialogs open
   useEffect(() => {
-    if (categoryDialogOpen || bulkEditDialogOpen || importExportDialogOpen) {
+    if (categoryDialogOpen || importExportDialogOpen) {
       loadDialogData();
     }
-  }, [categoryDialogOpen, bulkEditDialogOpen, importExportDialogOpen]);
+  }, [categoryDialogOpen, importExportDialogOpen]);
 
   // Load data on app start
   useEffect(() => {
@@ -563,8 +562,9 @@ export const App: React.FC = () => {
                   ml: 'auto',
                   position: 'static',
                 }}>
-                  {/* Dark Mode 토글 - 위쪽 */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                  {/* Dark Mode 토글과 동기화 상태 - 위쪽 */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 2 }}>
+                    <SyncStatusHeader onSnackbar={(message, severity) => setSnackbar({ open: true, message, severity })} />
                     <FormControlLabel
                       control={<Switch checked={mode === 'dark'} onChange={() => setMode(mode === 'light' ? 'dark' : 'light')} color="default" />} 
                       label="Dark Mode" 
@@ -694,12 +694,6 @@ export const App: React.FC = () => {
               </MenuItem>
               <MenuItem onClick={() => {
                 closeToolsMenu();
-                setBulkEditDialogOpen(true);
-              }}>
-                Bulk Edit Transactions
-              </MenuItem>
-              <MenuItem onClick={() => {
-                closeToolsMenu();
                 setImportExportDialogOpen(true);
               }}>
                 Import/Export
@@ -771,31 +765,6 @@ export const App: React.FC = () => {
               open={categoryDialogOpen}
               onClose={() => setCategoryDialogOpen(false)}
               onChange={loadDialogData}
-            />
-            
-            <BulkTransactionEdit
-              open={bulkEditDialogOpen}
-              onClose={() => setBulkEditDialogOpen(false)}
-              onSave={async (updates) => {
-                try {
-                  await invoke('bulk_update_transactions', updates);
-                  await loadDialogData();
-                  setSnackbar({
-                    open: true,
-                    message: `Updated ${updates.transactionIds.length} transaction(s)`,
-                    severity: 'success',
-                  });
-                } catch (error) {
-                  setSnackbar({
-                    open: true,
-                    message: 'Failed to update transactions: ' + String(error),
-                    severity: 'error',
-                  });
-                }
-              }}
-              transactions={transactions}
-              accounts={accounts}
-              categories={categories}
             />
             
             <ImportExportDialog
