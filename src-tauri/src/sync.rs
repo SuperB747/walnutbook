@@ -106,14 +106,15 @@ impl SyncManager {
             status.is_enabled = config.auto_sync_enabled && onedrive_available;
         }
 
-        // Try to load latest data from OneDrive on startup
+        // Try to load latest data from OneDrive on startup (only if local DB is empty or older)
         if onedrive_available && config.auto_sync_enabled {
             match self.load_from_onedrive().await {
                 Ok(_) => {
                     // Successfully loaded latest data from OneDrive
                 }
-                Err(_e) => {
+                Err(e) => {
                     // Failed to load from OneDrive on startup - don't fail initialization
+                    eprintln!("Failed to load from OneDrive on startup: {}", e);
                 }
             }
         }
@@ -277,14 +278,56 @@ impl SyncManager {
     }
 
     pub async fn manual_sync(&self) -> Result<(), String> {
-        Self::perform_sync(&self.app).await
+        // Set sync in progress
+        {
+            let mut status = self.status.lock().await;
+            status.sync_in_progress = true;
+        }
+        
+        // Perform sync
+        let result = Self::perform_sync(&self.app).await;
+        
+        // Update status based on result
+        {
+            let mut status = self.status.lock().await;
+            match &result {
+                Ok(_) => {
+                    status.last_sync = Some(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs().to_string());
+                    status.error_message = None;
+                    status.error_type = None;
+                    status.retry_count = 0;
+                    status.last_error_time = None;
+                }
+                Err(e) => {
+                    status.error_message = Some(e.clone());
+                    status.error_type = Some("sync_failed".to_string());
+                    status.retry_count += 1;
+                    status.last_error_time = Some(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs().to_string());
+                }
+            }
+            status.sync_in_progress = false;
+        }
+        
+        result
     }
 
     async fn perform_sync(app: &AppHandle) -> Result<(), String> {
         // Get database path
         let db_path = get_db_path(app);
         
-        // Try OneDrive first
+        // First, try to load latest data from OneDrive (if it's newer)
+        match Self::load_from_onedrive_static(&db_path).await {
+            Ok(_) => {
+                // Successfully loaded newer data from OneDrive, now sync it back
+            }
+            Err(e) => {
+                if !e.contains("No sync data found") && !e.contains("Local database is newer") {
+                    eprintln!("Failed to load from OneDrive during sync: {}", e);
+                }
+            }
+        }
+        
+        // Now sync current data to OneDrive
         match Self::try_onedrive_sync(&db_path).await {
             Ok(_) => return Ok(()),
             Err(onedrive_error) => {
@@ -365,7 +408,7 @@ impl SyncManager {
         Ok(())
     }
 
-    pub async fn load_from_onedrive(&self) -> Result<(), String> {
+    async fn load_from_onedrive_static(db_path: &std::path::Path) -> Result<(), String> {
         // Get OneDrive data directory
         let onedrive_data_dir = get_onedrive_data_dir()
             .map_err(|e| format!("OneDrive not available: {}", e))?;
@@ -380,29 +423,42 @@ impl SyncManager {
         }
 
         // Read metadata
-        let _metadata_json = fs::read_to_string(&metadata_path)
+        let metadata_json = fs::read_to_string(&metadata_path)
             .map_err(|e| format!("Failed to read metadata: {}", e))?;
         
-        let _metadata: SyncMetadata = serde_json::from_str(&_metadata_json)
+        let metadata: SyncMetadata = serde_json::from_str(&metadata_json)
             .map_err(|e| format!("Failed to parse metadata: {}", e))?;
 
-        // Get local database path
-        let local_db_path = get_db_path(&self.app);
+        // Get local database path and check its modification time
+        let local_metadata = fs::metadata(db_path)
+            .map_err(|e| format!("Failed to get local database metadata: {}", e))?;
+        
+        let local_modified = local_metadata.modified()
+            .map_err(|e| format!("Failed to get local modification time: {}", e))?
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| format!("Failed to convert local time: {}", e))?
+            .as_secs();
+
+        // Compare timestamps - only load from OneDrive if it's newer
+        if metadata.last_modified <= local_modified {
+            // Local database is newer or same age, don't overwrite
+            return Err("Local database is newer or same age".to_string());
+        }
 
         // Create backup of local database
         let backup_path = format!("{}.backup_{}", 
-            local_db_path.to_string_lossy(), 
+            db_path.to_string_lossy(), 
             SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
         );
-        fs::copy(&local_db_path, &backup_path)
+        fs::copy(db_path, &backup_path)
             .map_err(|e| format!("Failed to backup local database: {}", e))?;
 
         // Copy OneDrive database to local
-        fs::copy(&sync_db_path, &local_db_path)
+        fs::copy(&sync_db_path, db_path)
             .map_err(|e| format!("Failed to copy OneDrive database: {}", e))?;
 
         // Verify the copied database
-        let conn = Connection::open(&local_db_path)
+        let conn = Connection::open(db_path)
             .map_err(|e| format!("Failed to open copied database: {}", e))?;
 
         // Check if required tables exist
@@ -410,7 +466,7 @@ impl SyncManager {
         for table in tables.iter() {
             if let Err(_) = conn.prepare(&format!("SELECT 1 FROM {} LIMIT 1", table)) {
                 // Restore from backup if verification fails
-                let _ = fs::copy(&backup_path, &local_db_path);
+                let _ = fs::copy(&backup_path, db_path);
                 return Err(format!("OneDrive database is missing {} table", table));
             }
         }
@@ -420,6 +476,11 @@ impl SyncManager {
             .map_err(|e| format!("Failed to remove backup: {}", e))?;
 
         Ok(())
+    }
+
+    pub async fn load_from_onedrive(&self) -> Result<(), String> {
+        let db_path = get_db_path(&self.app);
+        Self::load_from_onedrive_static(&db_path).await
     }
 
     pub async fn get_status(&mut self) -> SyncStatus {
@@ -451,7 +512,7 @@ impl SyncManager {
             status.is_enabled = config.auto_sync_enabled && onedrive_available;
         }
 
-        // Try to load latest data from OneDrive on startup
+        // Try to load latest data from OneDrive on startup (only if local DB is empty or older)
         if onedrive_available && config.auto_sync_enabled {
             match self.load_from_onedrive().await {
                 Ok(_) => {
@@ -465,12 +526,14 @@ impl SyncManager {
                             Ok(_) => {
                                 // Initial sync completed successfully
                             }
-                            Err(_sync_err) => {
+                            Err(sync_err) => {
                                 // Failed to perform initial sync
+                                eprintln!("Failed to perform initial sync: {}", sync_err);
                             }
                         }
                     } else {
                         // Failed to load from OneDrive on startup
+                        eprintln!("Failed to load from OneDrive on startup: {}", e);
                     }
                 }
             }

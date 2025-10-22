@@ -82,9 +82,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             let conn = Connection::open(&db_path).expect("Failed to open DB");
             app.manage(Mutex::new(conn));
             
-            // Initialize sync manager with lazy initialization
+            // Initialize sync manager with proper initialization
             let sync_manager = Arc::new(TokioMutex::new(SyncManager::new(app.handle().clone())));
             app.manage(sync_manager.clone());
+            
+            // Initialize sync manager asynchronously
+            let sync_manager_clone = sync_manager.clone();
+            tauri::async_runtime::spawn(async move {
+                let mut sync_manager = sync_manager_clone.lock().await;
+                if let Err(e) = sync_manager.initialize().await {
+                    eprintln!("Failed to initialize sync manager: {}", e);
+                }
+            });
             
             // Enable logging plugin in development
             if cfg!(debug_assertions) {
