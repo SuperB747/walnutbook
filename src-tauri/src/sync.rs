@@ -321,8 +321,29 @@ impl SyncManager {
         // Get database path
         let db_path = get_db_path(app);
         
-        // For manual sync, only upload local data to OneDrive
-        // Don't load from OneDrive to avoid overwriting user's current work
+        // For manual sync, check if OneDrive has newer data first
+        // If OneDrive is newer, load it first, then sync
+        // This ensures we don't overwrite newer OneDrive data with old local data
+        let onedrive_has_newer = match Self::should_load_from_onedrive(&db_path).await {
+            Ok(true) => true,
+            _ => false,
+        };
+        
+        if onedrive_has_newer {
+            // OneDrive has newer data, load it first
+            match Self::load_from_onedrive_static(&db_path).await {
+                Ok(_) => {
+                    eprintln!("Loaded newer data from OneDrive before manual sync");
+                }
+                Err(e) => {
+                    // Log but continue - we'll still sync local data
+                    eprintln!("Warning: Failed to load newer OneDrive data before manual sync: {}", e);
+                }
+            }
+        }
+        
+        // Now upload local data to OneDrive
+        // Don't load from OneDrive again to avoid overwriting user's current work
         match Self::try_onedrive_sync(&db_path).await {
             Ok(_) => return Ok(()),
             Err(onedrive_error) => {
@@ -337,6 +358,64 @@ impl SyncManager {
                 }
             }
         }
+    }
+    
+    async fn should_load_from_onedrive(db_path: &std::path::Path) -> Result<bool, String> {
+        // Check if OneDrive sync exists
+        let onedrive_data_dir = get_onedrive_data_dir()
+            .map_err(|e| format!("OneDrive not available: {}", e))?;
+
+        let sync_dir = onedrive_data_dir.join("sync");
+        let sync_db_path = sync_dir.join("walnutbook_sync.db");
+        let metadata_path = sync_dir.join("sync_metadata.json");
+
+        if !sync_db_path.exists() || !metadata_path.exists() {
+            return Ok(false);
+        }
+
+        // Read metadata
+        let metadata_json = fs::read_to_string(&metadata_path)
+            .map_err(|e| format!("Failed to read metadata: {}", e))?;
+        
+        let metadata: SyncMetadata = serde_json::from_str(&metadata_json)
+            .map_err(|e| format!("Failed to parse metadata: {}", e))?;
+
+        // Get OneDrive file's actual modification time
+        let onedrive_file_metadata = fs::metadata(&sync_db_path)
+            .map_err(|e| format!("Failed to get OneDrive file metadata: {}", e))?;
+        
+        let onedrive_file_modified = onedrive_file_metadata.modified()
+            .map_err(|e| format!("Failed to get OneDrive file modification time: {}", e))?
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| format!("Failed to convert OneDrive file time: {}", e))?
+            .as_secs();
+
+        // Use the newer of metadata timestamp and actual file modification time
+        #[cfg(target_os = "windows")]
+        let onedrive_modified = {
+            if metadata.last_modified > onedrive_file_modified + 2 {
+                metadata.last_modified
+            } else if onedrive_file_modified > metadata.last_modified + 2 {
+                onedrive_file_modified
+            } else {
+                std::cmp::max(metadata.last_modified, onedrive_file_modified)
+            }
+        };
+        #[cfg(not(target_os = "windows"))]
+        let onedrive_modified = std::cmp::max(metadata.last_modified, onedrive_file_modified);
+
+        // Get local database modification time
+        let local_metadata = fs::metadata(db_path)
+            .map_err(|e| format!("Failed to get local database metadata: {}", e))?;
+        
+        let local_modified = local_metadata.modified()
+            .map_err(|e| format!("Failed to get local modification time: {}", e))?
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| format!("Failed to convert local time: {}", e))?
+            .as_secs();
+
+        // Check if OneDrive is newer
+        Ok(onedrive_modified > local_modified)
     }
 
     async fn perform_sync(app: &AppHandle) -> Result<(), String> {
@@ -437,10 +516,27 @@ impl SyncManager {
             .map_err(|e| format!("Failed to copy database to OneDrive: {}", e))?;
 
         // Update OneDrive file's modification time to match local or current time
-        // This ensures consistent timestamp comparison on Mac
-        if let Ok(file) = std::fs::File::open(&sync_db_path) {
-            let modified_time = SystemTime::UNIX_EPOCH + Duration::from_secs(timestamp_to_use);
-            let _ = file.set_modified(modified_time);
+        // This ensures consistent timestamp comparison on Mac and Windows
+        // On Windows, OneDrive file modification times can be unreliable, so we rely more on metadata
+        // Try to set it, but don't fail if it doesn't work - metadata is the source of truth
+        let modified_time = SystemTime::UNIX_EPOCH + Duration::from_secs(timestamp_to_use);
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, try to open with write access to set modification time
+            if let Ok(file) = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&sync_db_path)
+            {
+                // On Windows, this might fail silently due to OneDrive sync behavior
+                // That's okay - we rely on metadata timestamp anyway
+                let _ = file.set_modified(modified_time);
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            if let Ok(file) = std::fs::File::open(&sync_db_path) {
+                let _ = file.set_modified(modified_time);
+            }
         }
 
         // Create metadata file with the timestamp
@@ -562,6 +658,24 @@ impl SyncManager {
             .as_secs();
 
         // Use the newer of metadata timestamp and actual file modification time
+        // On Windows, OneDrive file modification times can be unreliable due to sync delays,
+        // so we prioritize metadata timestamp which is more reliable
+        #[cfg(target_os = "windows")]
+        let onedrive_modified = {
+            // On Windows, trust metadata more than file modification time
+            // Use metadata if it's significantly different, otherwise use the max
+            if metadata.last_modified > onedrive_file_modified + 2 {
+                // Metadata is significantly newer, use it
+                metadata.last_modified
+            } else if onedrive_file_modified > metadata.last_modified + 2 {
+                // File time is significantly newer, use it
+                onedrive_file_modified
+            } else {
+                // They're close, use the max (likely same update)
+                std::cmp::max(metadata.last_modified, onedrive_file_modified)
+            }
+        };
+        #[cfg(not(target_os = "windows"))]
         let onedrive_modified = std::cmp::max(metadata.last_modified, onedrive_file_modified);
 
         // Get local database path and check its modification time
@@ -616,12 +730,26 @@ impl SyncManager {
             .map_err(|e| format!("Failed to copy OneDrive database: {}", e))?;
 
         // Update the local file's modification time to match OneDrive timestamp
-        // This ensures consistent timestamp comparison on Mac
-        if let Ok(file) = std::fs::File::open(db_path) {
-            let modified_time = SystemTime::UNIX_EPOCH + Duration::from_secs(onedrive_modified);
-            if let Err(_) = file.set_modified(modified_time) {
-                // If setting modification time fails, just continue - it's not critical
-                eprintln!("Warning: Failed to update local file modification time");
+        // This ensures consistent timestamp comparison on Mac and Windows
+        let modified_time = SystemTime::UNIX_EPOCH + Duration::from_secs(onedrive_modified);
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, try to open with write access to set modification time
+            if let Ok(file) = std::fs::OpenOptions::new()
+                .write(true)
+                .open(db_path)
+            {
+                if let Err(e) = file.set_modified(modified_time) {
+                    eprintln!("Warning: Failed to update local file modification time: {:?}", e);
+                }
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            if let Ok(file) = std::fs::File::open(db_path) {
+                if let Err(e) = file.set_modified(modified_time) {
+                    eprintln!("Warning: Failed to update local file modification time: {:?}", e);
+                }
             }
         }
 
