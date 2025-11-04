@@ -1,5 +1,6 @@
 use rusqlite::Connection;
 use std::fs;
+use std::time::SystemTime;
 use tauri::AppHandle;
 use chrono::Local;
 
@@ -184,6 +185,25 @@ pub fn restore_database(app: AppHandle, file_path: String) -> Result<(), String>
                 }
             }
             
+            // Update the restored database file's modification time to current time
+            // This ensures that restored database is recognized as the latest version
+            let now = SystemTime::now();
+            #[cfg(target_os = "windows")]
+            {
+                if let Ok(file) = std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(&db_path)
+                {
+                    let _ = file.set_modified(now);
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                if let Ok(file) = std::fs::File::open(&db_path) {
+                    let _ = file.set_modified(now);
+                }
+            }
+            
             // Delete backup if verification succeeds
             fs::remove_file(backup_path).map_err(|e| e.to_string())?;
             Ok(())
@@ -231,6 +251,24 @@ pub fn import_database(app: AppHandle, data: Vec<u8>) -> Result<(), String> {
         if let Err(_) = conn.prepare(&format!("SELECT 1 FROM {} LIMIT 1", table)) {
             let _ = fs::copy(&backup_path, &db_path);
             return Err(format!("Imported database is missing {} table", table));
+        }
+    }
+    
+    // Update the imported database file's modification time to current time
+    let now = SystemTime::now();
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(file) = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&db_path)
+        {
+            let _ = file.set_modified(now);
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(file) = std::fs::File::open(&db_path) {
+            let _ = file.set_modified(now);
         }
     }
     
@@ -283,6 +321,25 @@ fn restore_database_from_path(app: AppHandle, file_path: String) -> Result<(), S
                     // Restore from backup if verification fails
                     let _ = fs::copy(&backup_path, &db_path);
                     return Err(format!("Restored database is missing {} table", table));
+                }
+            }
+            
+            // Update the restored database file's modification time to current time
+            // This ensures that restored database is recognized as the latest version
+            let now = SystemTime::now();
+            #[cfg(target_os = "windows")]
+            {
+                if let Ok(file) = std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(&db_path)
+                {
+                    let _ = file.set_modified(now);
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                if let Ok(file) = std::fs::File::open(&db_path) {
+                    let _ = file.set_modified(now);
                 }
             }
             

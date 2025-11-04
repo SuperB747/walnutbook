@@ -321,29 +321,10 @@ impl SyncManager {
         // Get database path
         let db_path = get_db_path(app);
         
-        // For manual sync, check if OneDrive has newer data first
-        // If OneDrive is newer, load it first, then sync
-        // This ensures we don't overwrite newer OneDrive data with old local data
-        let onedrive_has_newer = match Self::should_load_from_onedrive(&db_path).await {
-            Ok(true) => true,
-            _ => false,
-        };
-        
-        if onedrive_has_newer {
-            // OneDrive has newer data, load it first
-            match Self::load_from_onedrive_static(&db_path).await {
-                Ok(_) => {
-                    eprintln!("Loaded newer data from OneDrive before manual sync");
-                }
-                Err(e) => {
-                    // Log but continue - we'll still sync local data
-                    eprintln!("Warning: Failed to load newer OneDrive data before manual sync: {}", e);
-                }
-            }
-        }
-        
-        // Now upload local data to OneDrive
-        // Don't load from OneDrive again to avoid overwriting user's current work
+        // For manual sync, always upload local data to OneDrive
+        // The user explicitly requested sync, so we trust their local database
+        // Don't check if OneDrive is newer - just upload local data
+        // This prevents overwriting user's restored/current work with old OneDrive data
         match Self::try_onedrive_sync(&db_path).await {
             Ok(_) => return Ok(()),
             Err(onedrive_error) => {
@@ -360,6 +341,7 @@ impl SyncManager {
         }
     }
     
+    #[allow(dead_code)]
     async fn should_load_from_onedrive(db_path: &std::path::Path) -> Result<bool, String> {
         // Check if OneDrive sync exists
         let onedrive_data_dir = get_onedrive_data_dir()
@@ -688,11 +670,43 @@ impl SyncManager {
             .map_err(|e| format!("Failed to convert local time: {}", e))?
             .as_secs();
 
-        // Also compare transaction counts as a fallback
+        // Compare timestamps and transaction counts
+        // On Windows, also check if local DB is suspiciously old (might be from restore with wrong timestamp)
         let should_load_from_onedrive = if onedrive_modified > local_modified {
             true
         } else if onedrive_modified < local_modified {
-            false
+            // Local is newer, but check if the difference is suspiciously large
+            // If local is much newer than OneDrive metadata, it might be a restored database
+            // In that case, compare by transaction count to be safe
+            #[cfg(target_os = "windows")]
+            {
+                // On Windows, if local is significantly newer (more than 1 day), compare by content
+                let diff = local_modified as i64 - onedrive_modified as i64;
+                if diff > 86400 {
+                    // Local is more than 1 day newer, compare by transaction count
+                    let onedrive_conn = Connection::open(&sync_db_path)
+                        .map_err(|e| format!("Failed to open OneDrive database: {}", e))?;
+                    let local_conn = Connection::open(db_path)
+                        .map_err(|e| format!("Failed to open local database: {}", e))?;
+                    
+                    let onedrive_count: i64 = onedrive_conn
+                        .query_row("SELECT COUNT(*) FROM transactions", [], |row| row.get(0))
+                        .unwrap_or(0);
+                    
+                    let local_count: i64 = local_conn
+                        .query_row("SELECT COUNT(*) FROM transactions", [], |row| row.get(0))
+                        .unwrap_or(0);
+                    
+                    // If OneDrive has more transactions, it might be newer despite timestamp
+                    onedrive_count > local_count
+                } else {
+                    false
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                false
+            }
         } else {
             // Timestamps are equal, compare by transaction count
             let onedrive_conn = Connection::open(&sync_db_path)
