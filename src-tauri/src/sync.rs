@@ -106,15 +106,20 @@ impl SyncManager {
             status.is_enabled = config.auto_sync_enabled && onedrive_available;
         }
 
-        // Try to load latest data from OneDrive on startup (only if local DB is empty or older)
-        if onedrive_available && config.auto_sync_enabled {
+        // Try to load latest data from OneDrive on startup (if OneDrive has newer data)
+        // This is done regardless of auto_sync_enabled to ensure we always start with the latest data
+        if onedrive_available {
             match self.load_from_onedrive().await {
                 Ok(_) => {
                     // Successfully loaded latest data from OneDrive
+                    eprintln!("Loaded latest data from OneDrive on startup");
                 }
                 Err(e) => {
                     // Failed to load from OneDrive on startup - don't fail initialization
-                    eprintln!("Failed to load from OneDrive on startup: {}", e);
+                    // This is normal if local database is newer or if there's no sync data
+                    if !e.contains("No sync data found") && !e.contains("Local database is newer") {
+                        eprintln!("Failed to load from OneDrive on startup: {}", e);
+                    }
                 }
             }
         }
@@ -284,8 +289,9 @@ impl SyncManager {
             status.sync_in_progress = true;
         }
         
-        // Perform sync
-        let result = Self::perform_sync(&self.app).await;
+        // For manual sync, always upload local data to OneDrive (don't load from OneDrive)
+        // This ensures user's current work is not overwritten by older OneDrive data
+        let result = Self::perform_sync_upload_only(&self.app).await;
         
         // Update status based on result
         {
@@ -311,23 +317,12 @@ impl SyncManager {
         result
     }
 
-    async fn perform_sync(app: &AppHandle) -> Result<(), String> {
+    async fn perform_sync_upload_only(app: &AppHandle) -> Result<(), String> {
         // Get database path
         let db_path = get_db_path(app);
         
-        // First, try to load latest data from OneDrive (if it's newer)
-        match Self::load_from_onedrive_static(&db_path).await {
-            Ok(_) => {
-                // Successfully loaded newer data from OneDrive, now sync it back
-            }
-            Err(e) => {
-                if !e.contains("No sync data found") && !e.contains("Local database is newer") {
-                    eprintln!("Failed to load from OneDrive during sync: {}", e);
-                }
-            }
-        }
-        
-        // Now sync current data to OneDrive
+        // For manual sync, only upload local data to OneDrive
+        // Don't load from OneDrive to avoid overwriting user's current work
         match Self::try_onedrive_sync(&db_path).await {
             Ok(_) => return Ok(()),
             Err(onedrive_error) => {
@@ -344,6 +339,74 @@ impl SyncManager {
         }
     }
 
+    async fn perform_sync(app: &AppHandle) -> Result<(), String> {
+        // Get database path
+        let db_path = get_db_path(app);
+        
+        // First, try to load latest data from OneDrive (if it's newer)
+        // Only do this for automatic sync, not manual sync
+        let loaded_from_onedrive = match Self::load_from_onedrive_static(&db_path).await {
+            Ok(_) => {
+                // Successfully loaded newer data from OneDrive
+                true
+            }
+            Err(e) => {
+                if !e.contains("No sync data found") && !e.contains("Local database is newer") {
+                    eprintln!("Failed to load from OneDrive during sync: {}", e);
+                }
+                false
+            }
+        };
+        
+        // Now sync current data to OneDrive
+        // Only sync if:
+        // 1. We just loaded from OneDrive (to ensure consistency)
+        // 2. Or local database is newer than OneDrive
+        if loaded_from_onedrive {
+            // We loaded newer data from OneDrive, now sync it back to maintain consistency
+            match Self::try_onedrive_sync(&db_path).await {
+                Ok(_) => return Ok(()),
+                Err(onedrive_error) => {
+                    // OneDrive sync failed, try local storage fallback
+                    match Self::try_local_sync(&db_path).await {
+                        Ok(_) => {
+                            return Ok(());
+                        }
+                        Err(local_error) => {
+                            return Err(format!("Both OneDrive and local sync failed. OneDrive: {}, Local: {}", onedrive_error, local_error));
+                        }
+                    }
+                }
+            }
+        } else {
+            // Check if local is newer before syncing
+            let should_sync_local = match Self::should_sync_local_to_onedrive(&db_path).await {
+                Ok(should) => should,
+                Err(_) => true, // If check fails, proceed with sync
+            };
+            
+            if should_sync_local {
+                match Self::try_onedrive_sync(&db_path).await {
+                    Ok(_) => return Ok(()),
+                    Err(onedrive_error) => {
+                        // OneDrive sync failed, try local storage fallback
+                        match Self::try_local_sync(&db_path).await {
+                            Ok(_) => {
+                                return Ok(());
+                            }
+                            Err(local_error) => {
+                                return Err(format!("Both OneDrive and local sync failed. OneDrive: {}, Local: {}", onedrive_error, local_error));
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Local is not newer, skip syncing
+                return Ok(());
+            }
+        }
+    }
+
     async fn try_onedrive_sync(db_path: &std::path::Path) -> Result<(), String> {
         // Get OneDrive data directory
         let onedrive_data_dir = get_onedrive_data_dir()
@@ -354,14 +417,35 @@ impl SyncManager {
         fs::create_dir_all(&sync_dir)
             .map_err(|e| format!("Failed to create sync directory: {}", e))?;
 
+        // Get local database modification time to use for metadata
+        let local_metadata = fs::metadata(db_path)
+            .map_err(|e| format!("Failed to get local database metadata: {}", e))?;
+        
+        let local_modified = local_metadata.modified()
+            .map_err(|e| format!("Failed to get local modification time: {}", e))?
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| format!("Failed to convert local time: {}", e))?
+            .as_secs();
+
+        // Use current time or local file time, whichever is newer
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let timestamp_to_use = std::cmp::max(now, local_modified);
+
         // Copy database to OneDrive
         let sync_db_path = sync_dir.join("walnutbook_sync.db");
         fs::copy(db_path, &sync_db_path)
             .map_err(|e| format!("Failed to copy database to OneDrive: {}", e))?;
 
-        // Create metadata file
+        // Update OneDrive file's modification time to match local or current time
+        // This ensures consistent timestamp comparison on Mac
+        if let Ok(file) = std::fs::File::open(&sync_db_path) {
+            let modified_time = SystemTime::UNIX_EPOCH + Duration::from_secs(timestamp_to_use);
+            let _ = file.set_modified(modified_time);
+        }
+
+        // Create metadata file with the timestamp
         let metadata = SyncMetadata {
-            last_modified: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            last_modified: timestamp_to_use,
             file_size: fs::metadata(&sync_db_path).map_err(|e| e.to_string())?.len(),
             version: "1.0".to_string(),
         };
@@ -374,6 +458,44 @@ impl SyncManager {
             .map_err(|e| format!("Failed to write metadata: {}", e))?;
 
         Ok(())
+    }
+
+    async fn should_sync_local_to_onedrive(db_path: &std::path::Path) -> Result<bool, String> {
+        // Check if OneDrive sync exists
+        let onedrive_data_dir = get_onedrive_data_dir()
+            .map_err(|e| format!("OneDrive not available: {}", e))?;
+
+        let sync_dir = onedrive_data_dir.join("sync");
+        let metadata_path = sync_dir.join("sync_metadata.json");
+
+        if !metadata_path.exists() {
+            // No OneDrive sync exists, should sync
+            return Ok(true);
+        }
+
+        // Read OneDrive metadata
+        let metadata_json = fs::read_to_string(&metadata_path)
+            .map_err(|e| format!("Failed to read metadata: {}", e))?;
+        
+        let metadata: SyncMetadata = serde_json::from_str(&metadata_json)
+            .map_err(|e| format!("Failed to parse metadata: {}", e))?;
+
+        // Get local database modification time
+        let local_metadata = fs::metadata(db_path)
+            .map_err(|e| format!("Failed to get local database metadata: {}", e))?;
+        
+        let local_modified = local_metadata.modified()
+            .map_err(|e| format!("Failed to get local modification time: {}", e))?
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| format!("Failed to convert local time: {}", e))?
+            .as_secs();
+
+        // Check if local is newer than OneDrive
+        if local_modified > metadata.last_modified {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     async fn try_local_sync(db_path: &std::path::Path) -> Result<(), String> {
@@ -429,6 +551,19 @@ impl SyncManager {
         let metadata: SyncMetadata = serde_json::from_str(&metadata_json)
             .map_err(|e| format!("Failed to parse metadata: {}", e))?;
 
+        // Get OneDrive file's actual modification time
+        let onedrive_file_metadata = fs::metadata(&sync_db_path)
+            .map_err(|e| format!("Failed to get OneDrive file metadata: {}", e))?;
+        
+        let onedrive_file_modified = onedrive_file_metadata.modified()
+            .map_err(|e| format!("Failed to get OneDrive file modification time: {}", e))?
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| format!("Failed to convert OneDrive file time: {}", e))?
+            .as_secs();
+
+        // Use the newer of metadata timestamp and actual file modification time
+        let onedrive_modified = std::cmp::max(metadata.last_modified, onedrive_file_modified);
+
         // Get local database path and check its modification time
         let local_metadata = fs::metadata(db_path)
             .map_err(|e| format!("Failed to get local database metadata: {}", e))?;
@@ -439,8 +574,31 @@ impl SyncManager {
             .map_err(|e| format!("Failed to convert local time: {}", e))?
             .as_secs();
 
+        // Also compare transaction counts as a fallback
+        let should_load_from_onedrive = if onedrive_modified > local_modified {
+            true
+        } else if onedrive_modified < local_modified {
+            false
+        } else {
+            // Timestamps are equal, compare by transaction count
+            let onedrive_conn = Connection::open(&sync_db_path)
+                .map_err(|e| format!("Failed to open OneDrive database: {}", e))?;
+            let local_conn = Connection::open(db_path)
+                .map_err(|e| format!("Failed to open local database: {}", e))?;
+            
+            let onedrive_count: i64 = onedrive_conn
+                .query_row("SELECT COUNT(*) FROM transactions", [], |row| row.get(0))
+                .unwrap_or(0);
+            
+            let local_count: i64 = local_conn
+                .query_row("SELECT COUNT(*) FROM transactions", [], |row| row.get(0))
+                .unwrap_or(0);
+            
+            onedrive_count > local_count
+        };
+
         // Compare timestamps - only load from OneDrive if it's newer
-        if metadata.last_modified <= local_modified {
+        if !should_load_from_onedrive {
             // Local database is newer or same age, don't overwrite
             return Err("Local database is newer or same age".to_string());
         }
@@ -456,6 +614,16 @@ impl SyncManager {
         // Copy OneDrive database to local
         fs::copy(&sync_db_path, db_path)
             .map_err(|e| format!("Failed to copy OneDrive database: {}", e))?;
+
+        // Update the local file's modification time to match OneDrive timestamp
+        // This ensures consistent timestamp comparison on Mac
+        if let Ok(file) = std::fs::File::open(db_path) {
+            let modified_time = SystemTime::UNIX_EPOCH + Duration::from_secs(onedrive_modified);
+            if let Err(_) = file.set_modified(modified_time) {
+                // If setting modification time fails, just continue - it's not critical
+                eprintln!("Warning: Failed to update local file modification time");
+            }
+        }
 
         // Verify the copied database
         let conn = Connection::open(db_path)
@@ -512,27 +680,33 @@ impl SyncManager {
             status.is_enabled = config.auto_sync_enabled && onedrive_available;
         }
 
-        // Try to load latest data from OneDrive on startup (only if local DB is empty or older)
-        if onedrive_available && config.auto_sync_enabled {
+        // Try to load latest data from OneDrive on startup (if OneDrive has newer data)
+        // This is done regardless of auto_sync_enabled to ensure we always start with the latest data
+        if onedrive_available {
             match self.load_from_onedrive().await {
                 Ok(_) => {
                     // Successfully loaded latest data from OneDrive
+                    eprintln!("Loaded latest data from OneDrive on startup");
                 }
                 Err(e) => {
-                    // Only perform initial sync if it's "no sync data found", otherwise it's a real error
-                    if e.contains("No sync data found") {
+                    // Only perform initial sync if it's "no sync data found" and auto_sync is enabled
+                    if e.contains("No sync data found") && config.auto_sync_enabled {
                         // Perform initial sync to create sync data
                         match self.manual_sync().await {
                             Ok(_) => {
                                 // Initial sync completed successfully
+                                eprintln!("Initial sync completed on startup");
                             }
                             Err(sync_err) => {
                                 // Failed to perform initial sync
                                 eprintln!("Failed to perform initial sync: {}", sync_err);
                             }
                         }
+                    } else if e.contains("Local database is newer") {
+                        // Local database is newer than OneDrive, which is fine - no need to load
+                        eprintln!("Note: Local database is newer than OneDrive on startup");
                     } else {
-                        // Failed to load from OneDrive on startup
+                        // Some other error occurred
                         eprintln!("Failed to load from OneDrive on startup: {}", e);
                     }
                 }
