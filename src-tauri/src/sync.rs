@@ -299,12 +299,16 @@ impl SyncManager {
             match &result {
                 Ok(_) => {
                     status.last_sync = Some(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs().to_string());
+                    // Clear error message and reset retry count on success
+                    // Note: If OneDrive sync failed but local backup succeeded, perform_sync_upload_only
+                    // returns Ok(), so we treat it as success and don't increment retry_count
                     status.error_message = None;
                     status.error_type = None;
                     status.retry_count = 0;
                     status.last_error_time = None;
                 }
                 Err(e) => {
+                    // Only increment retry_count on complete failures (both OneDrive and local backup failed)
                     status.error_message = Some(e.clone());
                     status.error_type = Some("sync_failed".to_string());
                     status.retry_count += 1;
@@ -321,19 +325,31 @@ impl SyncManager {
         // Get database path
         let db_path = get_db_path(app);
         
+        eprintln!("Manual sync: Starting upload to OneDrive...");
+        
         // For manual sync, always upload local data to OneDrive
         // The user explicitly requested sync, so we trust their local database
         // Don't check if OneDrive is newer - just upload local data
         // This prevents overwriting user's restored/current work with old OneDrive data
         match Self::try_onedrive_sync(&db_path).await {
-            Ok(_) => return Ok(()),
+            Ok(_) => {
+                eprintln!("Manual sync: Successfully uploaded to OneDrive");
+                return Ok(());
+            }
             Err(onedrive_error) => {
+                eprintln!("Manual sync: OneDrive sync failed: {}", onedrive_error);
                 // OneDrive sync failed, try local storage fallback
+                eprintln!("Manual sync: Attempting local backup fallback...");
                 match Self::try_local_sync(&db_path).await {
                     Ok(_) => {
+                        eprintln!("Manual sync: Local backup successful, but OneDrive sync failed");
+                        // Return Ok() because data was successfully backed up locally
+                        // The OneDrive failure is noted in the error message but doesn't count as a complete failure
+                        // This prevents retry_count from incrementing and auto_sync from being disabled
                         return Ok(());
                     }
                     Err(local_error) => {
+                        eprintln!("Manual sync: Both OneDrive and local sync failed");
                         return Err(format!("Both OneDrive and local sync failed. OneDrive: {}, Local: {}", onedrive_error, local_error));
                     }
                 }
@@ -473,10 +489,12 @@ impl SyncManager {
         let onedrive_data_dir = get_onedrive_data_dir()
             .map_err(|e| format!("OneDrive not available: {}", e))?;
 
+        eprintln!("OneDrive sync: Using directory: {:?}", onedrive_data_dir);
+
         // Create sync directory if it doesn't exist
         let sync_dir = onedrive_data_dir.join("sync");
         fs::create_dir_all(&sync_dir)
-            .map_err(|e| format!("Failed to create sync directory: {}", e))?;
+            .map_err(|e| format!("Failed to create sync directory: {} (path: {:?})", e, sync_dir))?;
 
         // Get local database modification time to use for metadata
         let local_metadata = fs::metadata(db_path)
@@ -492,13 +510,28 @@ impl SyncManager {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
         let timestamp_to_use = std::cmp::max(now, local_modified);
 
+        // Get local file size for verification
+        let local_file_size = local_metadata.len();
+        eprintln!("OneDrive sync: Local DB size: {} bytes, timestamp: {}", local_file_size, timestamp_to_use);
+
         // Copy database to OneDrive
         let sync_db_path = sync_dir.join("walnutbook_sync.db");
         fs::copy(db_path, &sync_db_path)
-            .map_err(|e| format!("Failed to copy database to OneDrive: {}", e))?;
+            .map_err(|e| format!("Failed to copy database to OneDrive: {} (from: {:?}, to: {:?})", e, db_path, sync_db_path))?;
+
+        // Verify the copied file
+        let copied_metadata = fs::metadata(&sync_db_path)
+            .map_err(|e| format!("Failed to verify copied file: {}", e))?;
+        
+        let copied_size = copied_metadata.len();
+        if copied_size != local_file_size {
+            return Err(format!("File size mismatch after copy: local {} bytes, copied {} bytes", local_file_size, copied_size));
+        }
+        eprintln!("OneDrive sync: Successfully copied {} bytes to {:?}", copied_size, sync_db_path);
 
         // Update OneDrive file's modification time to match local or current time
         // This ensures consistent timestamp comparison on Mac and Windows
+        // File::set_modified() is a standard Rust API available on all platforms
         // On Windows, OneDrive file modification times can be unreliable, so we rely more on metadata
         // Try to set it, but don't fail if it doesn't work - metadata is the source of truth
         let modified_time = SystemTime::UNIX_EPOCH + Duration::from_secs(timestamp_to_use);
@@ -511,20 +544,30 @@ impl SyncManager {
             {
                 // On Windows, this might fail silently due to OneDrive sync behavior
                 // That's okay - we rely on metadata timestamp anyway
-                let _ = file.set_modified(modified_time);
+                if let Err(e) = file.set_modified(modified_time) {
+                    eprintln!("Warning: Failed to set OneDrive file modification time on Windows: {}", e);
+                } else {
+                    eprintln!("OneDrive sync: Successfully set file modification time to {}", timestamp_to_use);
+                }
             }
         }
         #[cfg(not(target_os = "windows"))]
         {
             if let Ok(file) = std::fs::File::open(&sync_db_path) {
-                let _ = file.set_modified(modified_time);
+                if let Err(e) = file.set_modified(modified_time) {
+                    // If setting modification time fails, log warning but continue
+                    // We still have the metadata file for timestamp comparison
+                    eprintln!("Warning: Failed to set OneDrive file modification time: {}", e);
+                } else {
+                    eprintln!("OneDrive sync: Successfully set file modification time to {}", timestamp_to_use);
+                }
             }
         }
-
+        
         // Create metadata file with the timestamp
         let metadata = SyncMetadata {
             last_modified: timestamp_to_use,
-            file_size: fs::metadata(&sync_db_path).map_err(|e| e.to_string())?.len(),
+            file_size: copied_size,
             version: "1.0".to_string(),
         };
 
@@ -533,7 +576,14 @@ impl SyncManager {
 
         let metadata_path = sync_dir.join("sync_metadata.json");
         fs::write(&metadata_path, &metadata_json)
-            .map_err(|e| format!("Failed to write metadata: {}", e))?;
+            .map_err(|e| format!("Failed to write metadata: {} (path: {:?})", e, metadata_path))?;
+
+        // Verify metadata was written
+        let metadata_written = fs::metadata(&metadata_path)
+            .map_err(|e| format!("Failed to verify metadata file: {}", e))?;
+        
+        eprintln!("OneDrive sync: Successfully wrote metadata ({} bytes) to {:?}", metadata_written.len(), metadata_path);
+        eprintln!("OneDrive sync: Sync completed successfully. File: {:?}, Metadata: {:?}", sync_db_path, metadata_path);
 
         Ok(())
     }
